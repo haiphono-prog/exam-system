@@ -1,0 +1,456 @@
+/* ========================================================================= */
+/* 🌌 1. HỆ THỐNG BIẾN GIAO DIỆN SÁNG/TỐI (THEME ENGINE) VÀ NÚT CHUNG        */
+/* ========================================================================= */
+:root {
+    /* CHẾ ĐỘ TỐI (DARK MODE - MẶC ĐỊNH) */
+    --bg-color: #0b071e;
+    --text-color: #e2e8f0;
+    --text-muted: rgba(255, 255, 255, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.15);
+    --btn-border: rgba(255, 255, 255, 0.3);
+    --btn-hover-bg: rgba(255, 255, 255, 0.1);
+    --grad-1: rgba(6, 182, 212, 0.05);
+    --grad-2: rgba(236, 72, 153, 0.05);
+}
+
+[data-theme="light"] {
+    /* CHẾ ĐỘ SÁNG (LIGHT MODE - TƯƠNG PHẢN CAO NHẤT) */
+    --bg-color: #f8fafc;        /* Nền xám khói cực nhạt */
+    --text-color: #0f172a;      /* Chữ xanh đen cực đậm */
+    --text-muted: #475569;
+    --glass-border: rgba(0, 0, 0, 0.2);
+    --btn-border: rgba(0, 0, 0, 0.3);
+    --btn-hover-bg: rgba(0, 0, 0, 0.05);
+    --grad-1: rgba(6, 182, 212, 0.15);
+    --grad-2: rgba(236, 72, 153, 0.15);
+}
+
+html, body {
+    background-color: var(--bg-color) !important;
+    background-image: radial-gradient(circle at 15% 50%, var(--grad-1), transparent 25%), 
+                      radial-gradient(circle at 85% 30%, var(--grad-2), transparent 25%) !important;
+    color: var(--text-color) !important;
+    min-height: 100vh; width: 100vw;
+    font-family: 'Segoe UI Variable Display', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    margin: 0; padding: 0; overflow-x: hidden;
+    transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+/* Đè tương phản tự động cho các class màu cứng của Bootstrap khi ở Light Mode */
+[data-theme="light"] .text-white { color: #0f172a !important; }
+[data-theme="light"] .text-white-50 { color: #475569 !important; }
+[data-theme="light"] .bg-dark { background-color: rgba(0,0,0,0.03) !important; }
+[data-theme="light"] .text-info { color: #0284c7 !important; }
+[data-theme="light"] .text-warning { color: #b45309 !important; }
+[data-theme="light"] .text-success { color: #16a34a !important; }
+
+/* 🌟 ĐÃ FIX: ÉP MÀU CHỮ TRONG PHẦN GIẢI THÍCH VÀ CÁC ĐOẠN TEXT INLINE TRẮNG */
+[data-theme="light"] [style*="color: rgba(255,255,255"],
+[data-theme="light"] [style*="color: #fff"],
+[data-theme="light"] [style*="color: white"],
+[data-theme="light"] div[id^="hint_box_"] div,
+[data-theme="light"] #inline_sf_hint {
+    color: var(--text-color) !important;
+}
+
+/* 🌟 FIX LUÔN MÀU CỦA HASHTAG ĐÁNH DẤU TRONG GIẢI THÍCH ĐỂ KHÔNG BỊ CHÓI MẮT */
+[data-theme="light"] mark {
+    color: #b45309 !important; /* Cam đậm cho dễ đọc trên nền sáng */
+    background: rgba(180, 83, 9, 0.1) !important;
+    border-color: rgba(180, 83, 9, 0.4) !important;
+}
+
+/* 🌟 CLASS CHUẨN CHO CÁC NÚT ĐIỀU HƯỚNG CHUNG (UNIFIED BUTTONS) */
+.btn-unified-exit {
+    background: transparent !important;
+    color: var(--text-color) !important;
+    border: none !important; /* 🌟 XÓA BỎ VIỀN NÚT */
+    padding: 8px 12px; font-weight: bold; font-size: 0.95rem;
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    transition: all 0.2s ease; box-shadow: none !important;
+    cursor: pointer;
+}
+.btn-unified-exit:hover {
+    background: var(--input-bg) !important;
+    border-radius: 12px;
+}
+
+/* Đốm sáng khúc xạ tạo chiều sâu 3D cho thẻ kính */
+body::before, body::after {
+    content: ""; position: fixed; width: 450px; height: 450px;
+    border-radius: 50%; filter: blur(120px); z-index: -1;
+    opacity: 0.45; pointer-events: none; transition: opacity 0.4s;
+}
+body::before { background: #06b6d4; top: -100px; left: -100px; }
+body::after { background: #ec4899; bottom: -100px; right: -100px; }
+[data-theme="light"] body::before, [data-theme="light"] body::after { opacity: 0.2; } /* Giảm chói sáng khi ở Light Mode */
+
+/* Tàng hình thanh cuộn / Làm mỏng thanh cuộn */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 10px; }
+[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.2); }
+* { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
+
+/* ========================================================================= */
+/* 💎 2. GIAO DIỆN PHẲNG CỰC RỘNG - CHUẨN IOS (KHÔNG VIỀN, CHỈ VẠCH NGĂN)     */
+/* ========================================================================= */
+.card, .glass-panel, .admin-dashboard-card, .modal-content, 
+.bg-white, .bg-light, .quiz-card, .glass-login-box, .bg-dark {
+    background: transparent !important; 
+    backdrop-filter: none !important; 
+    -webkit-backdrop-filter: none !important;
+    border: none !important; /* 🌟 BỎ TOÀN BỘ VIỀN KHUNG */
+    box-shadow: none !important; /* 🌟 BỎ BÓNG ĐỔ */
+    color: var(--text-color) !important;
+    border-radius: 0 !important; 
+    transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+/* CHỈ dùng 1 vạch mảnh mờ nhạt ở đáy để phân tách các danh sách (iOS Style) */
+.q-admin-item-card, .list-group-item, .history-item {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 1px solid var(--glass-border) !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding-bottom: 15px !important;
+    margin-bottom: 15px !important;
+}
+
+.text-dark, .text-body { color: var(--text-color) !important; }
+.text-muted, .text-secondary { color: rgba(255, 255, 255, 0.7) !important; }
+h1, h2, h3, h4, h5, h6 { color: #ffffff !important; font-weight: 700; }
+.badge.bg-light { background: transparent !important; border: 1px solid rgba(255,255,255,0.4) !important; color: #fff !important; }
+
+/* ========================================================================= */
+/* 🔘 3. NÚT BẤM VÀ ĐÁP ÁN (PHẲNG HÓA CHUẨN IOS - KHÔNG VIỀN)                */
+/* ========================================================================= */
+.btn, .glass-btn-action, .glass-btn-lesson, .match-btn, .option-btn, .glass-btn-submit, .admin-btn-action {
+    background: var(--input-bg) !important; /* Nền mờ nhẹ để nhận diện nút */
+    color: var(--text-color) !important;
+    border: none !important; /* 🌟 XÓA TOÀN BỘ VIỀN */
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    box-shadow: none !important; /* 🌟 XÓA BÓNG ĐỔ */
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    border-radius: 12px !important;
+    cursor: pointer !important;
+}
+
+.btn:hover, .glass-btn-action:hover, .glass-btn-lesson:hover, .match-btn:hover, .option-btn:hover {
+    background: var(--btn-hover-bg) !important; 
+    transform: scale(1.02); /* Phóng to nhẹ nhàng thay vì đẩy lên */
+}
+.btn:active, .glass-btn-action:active { transform: scale(0.98); }
+
+/* Nút màu được làm phẳng: nền màu nhạt, KHÔNG VIỀN */
+.glass-btn-action.primary, .btn-primary { background: rgba(56, 189, 248, 0.15) !important; border: none !important; color: #0284c7 !important; }
+.btn-danger { background: rgba(239, 68, 68, 0.1) !important; border: none !important; color: #ef4444 !important; }
+.btn-success { background: rgba(34, 197, 94, 0.1) !important; border: none !important; color: #10b981 !important; }
+[data-theme="dark"] .glass-btn-action.primary, [data-theme="dark"] .btn-primary { color: #38bdf8 !important; }
+[data-theme="dark"] .btn-danger { color: #f87171 !important; }
+[data-theme="dark"] .btn-success { color: #4ade80 !important; }
+
+/* Trạng thái chọn Đáp án */
+.option-btn.selected-mock, .match-btn.active, .glass-option-btn.selected {
+    background: rgba(14, 165, 233, 0.2) !important; border: 1px solid #38bdf8 !important; color: var(--text-color) !important;
+}
+.correct, .glass-option-btn.correct { background: rgba(34, 197, 94, 0.25) !important; border: 1px solid #4ade80 !important; color: var(--text-color) !important; }
+.wrong, .glass-option-btn.wrong { background: rgba(239, 68, 68, 0.2) !important; border: 1px solid #f87171 !important; color: var(--text-color) !important; }
+
+/* ========================================================================= */
+/* ⌨️ 4. Ô NHẬP LIỆU PHẲNG (CÓ ĐƯỜNG GẠCH MỜ DƯỚI ĐÁY)                        */
+/* ========================================================================= */
+.form-control, .form-select, input[type="text"], input[type="password"], input[type="number"], textarea, .glass-input-style {
+    background: var(--input-bg) !important; 
+    border: none !important; 
+    border-bottom: 1px solid var(--glass-border) !important; /* 🌟 THÊM ĐƯỜNG GẠCH MỜ PHÂN CÁCH */
+    color: var(--text-color) !important; border-radius: 12px !important;
+    backdrop-filter: none !important; transition: all 0.3s ease !important; max-width: 100% !important; 
+}
+.form-control::placeholder, input::placeholder { color: rgba(255, 255, 255, 0.4) !important; }
+/* Đã loại trừ checkbox và radio để không bị mất dấu tích */
+.form-control:focus, input:not([type="checkbox"]):not([type="radio"]):focus {
+    background: rgba(255, 255, 255, 0.05) !important; border-color: #38bdf8 !important;
+    box-shadow: 0 0 15px rgba(56, 189, 248, 0.3) !important; outline: none !important;
+}
+
+/* Ép màu xanh nổi bật và giữ dấu tích ngay lập tức khi bấm */
+.form-check-input:focus {
+    box-shadow: 0 0 10px rgba(14, 165, 233, 0.5) !important;
+}
+.form-check-input:checked {
+    background-color: #0ea5e9 !important;
+    border-color: #0ea5e9 !important;
+}
+
+.fill-input-dynamic {
+    border: none !important; border-bottom: 2px dashed rgba(56, 189, 248, 0.6) !important;
+    background: transparent !important; color: #38bdf8 !important;
+    text-align: center; font-weight: bold; border-radius: 0 !important;
+    min-width: 80px; padding: 2px 5px !important; height: auto !important;
+}
+.fill-input-dynamic:focus { border-bottom: 2px solid #38bdf8 !important; background: transparent !important; }
+
+.bloom-input {
+    background: transparent !important; border: 1px solid rgba(255,255,255,0.3) !important;
+    color: #fff !important; text-align: center; border-radius: 6px !important;
+}
+
+/* ========================================================================= */
+/* 📱 5. TINH CHỈNH GIAO DIỆN MOBILE & KHUNG LÀM BÀI TRONG SUỐT              */
+/* ========================================================================= */
+@media (hover: none) and (pointer: coarse) {
+    .btn:hover, button:hover, .answer-btn:hover, label:hover, .list-group-item:hover { transform: none !important; box-shadow: none !important; }
+    .btn:active, button:active, .answer-btn:active { transform: scale(0.96) translateY(1px) !important; transition: transform 0.1s !important; }
+}
+.btn:focus:not(:focus-visible), input:focus:not(:focus-visible) { outline: none !important; box-shadow: none !important; transform: none !important; }
+
+.icon-circle { box-shadow: inset 0 2px 4px rgba(255,255,255,0.2); width: 48px !important; height: 48px !important; border-radius: 12px !important; background: transparent !important; border: 1px solid rgba(255, 255, 255, 0.25) !important; }
+.admin-icon-wrapper { width: 55px; height: 55px; background: transparent !important; border: 1px solid rgba(255,255,255,0.3); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; margin: 0 auto 12px auto; }
+
+.custom-modal, .media-modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: transparent !important; /* TRONG SUỐT 100% */; backdrop-filter: blur(10px);
+    display: flex; align-items: center; justify-content: center; z-index: 99999; padding: 15px;
+}
+.video-responsive { position: relative !important; width: 100% !important; height: 230px !important; overflow: hidden !important; border-radius: 12px; background: transparent !important; border: 1px solid rgba(255,255,255,0.2); margin: 8px 0; }
+.video-responsive iframe { position: absolute !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; border: 0 !important; }
+
+.glass-quiz-container {
+    background: transparent !important; border: none !important; border-radius: 0 !important; box-shadow: none !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15) !important; padding: 10px 0 20px 0 !important; margin-bottom: 20px !important; width: 100% !important;
+}
+.glass-quiz-container:last-child { border-bottom: none !important; }
+
+.d-flex > .glass-option-btn, .row > div > .glass-option-btn, .glass-option-btn.text-center { text-align: center !important; }
+
+.glass-timer-box, #prog_text {
+    background: transparent !important; border: 1px solid rgba(239, 68, 68, 0.6) !important; color: #ff4d4d !important;
+    font-weight: 700; padding: 4px 16px !important; border-radius: 50px !important; text-shadow: 0 0 10px rgba(239, 68, 68, 0.5); letter-spacing: 1px;
+}
+
+.flip-card { background-color: transparent; perspective: 1000px; }
+.flip-card-inner { position: relative; width: 100%; height: 100%; transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1); transform-style: preserve-3d; }
+.flip-card.flipped .flip-card-inner { transform: rotateY(180deg); }
+.flip-card-front, .flip-card-back { position: absolute; top: 0; left: 0; width: 100%; height: 100%; backface-visibility: hidden; -webkit-backface-visibility: hidden; background: transparent !important; border: none; box-shadow: none; }
+.flip-card-back { transform: rotateY(180deg); }
+
+.hint-fog-text { filter: blur(6px); opacity: 0.5; transition: all 0.4s ease; user-select: none; }
+.hint-fog-overlay { position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); z-index: 2; transition: opacity 0.3s ease; }
+.hint-fog-container.revealed .hint-fog-text { filter: blur(0); opacity: 1; user-select: auto; }
+.hint-fog-container.revealed .hint-fog-overlay { opacity: 0; pointer-events: none; }
+
+/* Nút Submit Khổng lồ (Đã loại bỏ nền đỏ, chỉ dùng viền đỏ và glow) */
+#submit_btn button { background: transparent !important; border: 1px solid rgba(239,68,68,0.8) !important; color: #ff4d4d !important; backdrop-filter: blur(10px); box-shadow: 0 4px 15px rgba(239,68,68,0.2); transition: all 0.3s ease;}
+#submit_btn button:hover { background: rgba(239,68,68,0.2) !important; color: #fff !important; box-shadow: 0 6px 20px rgba(239,68,68,0.5); }
+
+.admin-dashboard-card .btn, #quiz_area .btn { white-space: normal !important; }
+[id^="map_area_"] { overflow-x: hidden !important; }
+
+/* ========================================================================= */
+/* 🕒 THANH HEADER BÁM ĐỈNH - ĐÃ HỢP NHẤT & TỐI ƯU KHOẢNG CÁCH               */
+/* ========================================================================= */
+.sticky-quiz-header, .sticky-top {
+    position: sticky !important; 
+    top: 0; 
+    z-index: 1050; 
+    width: 100% !important;
+    background: transparent !important;       /* Trong suốt hoàn toàn */
+    backdrop-filter: none !important;         /* Tắt mờ */
+    -webkit-backdrop-filter: none !important;
+    border-bottom: none !important;           /* XÓA ĐƯỜNG KẺ NGANG */
+    padding: 8px 16px !important;             /* Thu gọn padding */
+    margin-bottom: 5px !important;            /* Thu hẹp khoảng cách với nội dung */
+    box-shadow: none !important;              /* Xóa bóng đổ */
+    border-radius: 0 !important;              /* Thẳng cạnh để không bị hở viền */
+}
+/* ========================================================================= */
+/* 🛡️ 7. BỌC THÉP TRẠNG THÁI NÚT ĐÁP ÁN (CHỐNG BỊ TRONG SUỐT ĐÈ LÊN)           */
+/* ========================================================================= */
+
+/* Trạng thái 1: Chọn đúng (Xanh lá) */
+#quiz_area button.correct, 
+#quiz_area button.option-btn.correct, 
+#quiz_area button.glass-option-btn.correct {
+    background-color: rgba(34, 197, 94, 0.4) !important;
+    border: 1px solid #4ade80 !important;
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.5) !important;
+    color: #fff !important;
+}
+
+/* Trạng thái 2: Chọn sai (Đỏ) */
+#quiz_area button.wrong, 
+#quiz_area button.option-btn.wrong, 
+#quiz_area button.glass-option-btn.wrong {
+    background-color: rgba(239, 68, 68, 0.4) !important;
+    border: 1px solid #f87171 !important;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.5) !important;
+    color: #fff !important;
+}
+
+/* Trạng thái 3: Đang chọn - Chế độ thi (Xanh dương neon) */
+#quiz_area button.selected-mock, 
+#quiz_area button.option-btn.selected-mock, 
+#quiz_area button.glass-option-btn.selected-mock,
+#quiz_area button.selected {
+    background-color: rgba(14, 165, 233, 0.4) !important;
+    border: 1px solid #38bdf8 !important;
+    box-shadow: 0 0 20px rgba(56, 189, 248, 0.5) !important;
+    color: #fff !important;
+}
+/* ========================================================================= */
+/* 🛠️ TINH CHỈNH KHOẢNG CÁCH NÚT & XÓA ĐƯỜNG KẺ NGANG                         */
+/* ========================================================================= */
+
+/* 1. Tạo khoảng hở nhẹ (8px) giữa các nút đáp án để dễ bấm, không bị dính chùm */
+#quiz_area .option-btn, 
+#quiz_area .glass-option-btn, 
+#quiz_area .ui1-option-btn, 
+#quiz_area .ui2-option-btn, 
+#quiz_area .ui3-option-btn {
+    margin-bottom: 10px !important; 
+}
+
+/* 2. Tạo đường gạch mờ nhỏ gọn phân tách giữa các câu hỏi */
+#quiz_area hr {
+    display: none !important;
+}
+
+#quiz_area .glass-quiz-container,
+#quiz_area .ui1-glass-container,
+#quiz_area .ui2-clinical-container,
+#quiz_area .ui3-lab-container {
+    border: none !important;
+    border-bottom: 1px solid var(--glass-border) !important; /* 🌟 VẠCH GẠCH MỜ PHÂN CÁCH CÂU HỎI */
+    border-radius: 0 !important; /* Hủy bo góc ở đáy để đường gạch chạy thẳng đẹp mắt */
+    box-shadow: none !important; 
+    padding-bottom: 25px !important; /* Tạo không gian thở trước khi chạm vạch */
+    margin-bottom: 25px !important; /* Đẩy câu tiếp theo ra xa một chút */
+}
+
+/* Ẩn vạch kẻ ở câu hỏi cuối cùng cho đỡ dư thừa */
+#quiz_area .glass-quiz-container:last-child,
+#quiz_area .ui1-glass-container:last-child,
+#quiz_area .ui2-clinical-container:last-child,
+#quiz_area .ui3-lab-container:last-child {
+    border-bottom: none !important;
+}
+/* Khung bám đỉnh, trong suốt, luôn nổi */
+.header-fixed-wrapper {
+    position: fixed !important;
+    top: 0; left: 0; width: 100% !important;
+    z-index: 1050;
+    background: rgba(11, 7, 30, 0.8) !important;
+    backdrop-filter: blur(10px);
+    }
+
+/* Khoảng cách đẩy nội dung xuống để không bị header đè */
+#step_3 { padding-top: 70px !important; }
+
+.app-container {
+    max-width: 1000px !important; /* Đã đổi thành 1000px */
+    margin-left: auto !important;
+    margin-right: auto !important;
+    width: 100% !important;
+    padding-left: 15px !important;
+    padding-right: 15px !important;
+}
+
+/* 🌟 BỌC THÉP LOẠI BỎ KHUNG NHẬT KÝ ÔN TẬP VÀ MỌI GLASS-PANEL CÒN SÓT LẠI */
+#history_view_area .glass-panel {
+    background: transparent !important;
+    border: none !important;
+    box-shadow: none !important;
+    padding-left: 0 !important;
+    padding-right: 0 !important;
+}
+#history_view_area .border-bottom {
+    border-bottom: 1px dashed rgba(255,255,255,0.1) !important;
+}
+#timeline_container {
+    max-height: none !important; /* ĐÃ THÁO BỎ THANH CUỘN LỒNG Ở NHẬT KÝ */
+    overflow-y: visible !important;
+}
+
+/* ========================================================================= */
+/* HIỆU ỨNG ĐIỂM BAY MƯỢT MÀ VÀ TRÁI TIM HỒI SINH (SURVIVAL MODE)            */
+/* ========================================================================= */
+@keyframes smoothFloatUp {
+    0% { opacity: 0; transform: translate(-50%, -50%) scale(0.5); }
+    20% { opacity: 1; transform: translate(-50%, -80px) scale(1.4); }
+    80% { opacity: 1; transform: translate(-50%, -200px) scale(1); }
+    100% { opacity: 0; transform: translate(-50%, -250px) scale(0.8); }
+}
+
+.survival-floating-score {
+    position: fixed;
+    font-size: 2.2rem;
+    font-weight: 900;
+    color: #4ade80;
+    text-shadow: 0 0 20px #4ade80, 0 0 10px #ffffff;
+    pointer-events: none;
+    z-index: 999999;
+    animation: smoothFloatUp 1.1s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
+
+@keyframes reviveHeart {
+    0% { transform: scale(1); filter: hue-rotate(0deg); }
+    50% { transform: scale(1.5); filter: hue-rotate(90deg); text-shadow: 0 0 40px #facc15; }
+    100% { transform: scale(1); filter: hue-rotate(0deg); }
+}
+
+/* ========================================================================= */
+/* 📊 CSS CHO MODULE THỐNG KÊ TRÚNG TUYỂN (ADMISSION STATS)                  */
+/* ========================================================================= */
+.form-select { background-color: #0f172a !important; color: #ffffff !important; border-color: rgba(255, 255, 255, 0.2) !important; }
+.form-select option { background-color: #0f172a !important; color: #ffffff !important; }
+.adm-kpi-card { background: rgba(15, 23, 42, 0.75) !important; backdrop-filter: blur(12px) !important; border: 1px solid rgba(255, 255, 255, 0.12) !important; border-radius: 16px !important; transition: all 0.3s ease !important; }
+.adm-kpi-card:hover { transform: translateY(-3px) scale(1.01) !important; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3) !important; }
+
+.adm-glass-table { --bs-table-bg: transparent !important; background-color: transparent !important; color: #ffffff !important; border-collapse: separate !important; border-spacing: 0 4px !important; }
+.adm-glass-table thead tr { background: rgba(15, 23, 42, 0.95) !important; backdrop-filter: blur(10px) !important; }
+.adm-glass-table tbody tr { background: rgba(255, 255, 255, 0.03) !important; border: 1px solid rgba(255, 255, 255, 0.08) !important; transition: all 0.2s ease !important; }
+.adm-glass-table tbody tr:hover { background: rgba(56, 189, 248, 0.12) !important; }
+.adm-glass-table td, .adm-glass-table th { background: transparent !important; color: #ffffff !important; border: none !important; padding: 8px 10px !important; font-size: 0.8rem !important; white-space: nowrap !important; }
+
+.sticky-col-0 { position: sticky !important; left: 0 !important; z-index: 12 !important; background: #0b1021 !important; box-shadow: 3px 0 6px rgba(0,0,0,0.6) !important; }
+.sticky-col-1 { position: sticky !important; left: 45px !important; z-index: 12 !important; background: #0b1021 !important; border-right: 2px solid #38bdf8 !important; box-shadow: 5px 0 10px rgba(0,0,0,0.6) !important; }
+.editable-cell { background: rgba(56, 189, 248, 0.15) !important; border: 1px dashed #38bdf8 !important; border-radius: 6px; padding: 2px 6px !important; outline: none !important; color: #fde047 !important; font-weight: bold; cursor: text; }
+
+.adm-icon-btn { width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); transition: all 0.2s ease; }
+.adm-icon-btn:hover { transform: scale(1.1); background: rgba(255, 255, 255, 0.2); }
+.nav-filter-btn { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.7); border-radius: 20px; font-size: 0.72rem; padding: 4px 12px; transition: all 0.2s; }
+.nav-filter-btn.active, .nav-filter-btn:hover { background: #0ea5e9; color: #fff; border-color: #38bdf8; box-shadow: 0 0 10px rgba(14, 165, 233, 0.5); }
+.tab-header-btn { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.8); border-radius: 20px; font-weight: bold; font-size: 0.75rem; padding: 4px 12px; transition: all 0.2s; }
+.tab-header-btn.active { background: #0284c7 !important; color: #fff !important; border-color: #38bdf8 !important; box-shadow: 0 0 10px rgba(2, 132, 199, 0.5); }
+.sub-hoso-btn { background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.15); color: #fff; border-radius: 12px; font-size: 0.75rem; padding: 3px 10px; }
+.sub-hoso-btn.active { background: #10b981 !important; border-color: #34d399 !important; }
+
+/* ============================================================
+   CSS MODULE THỐNG KÊ - dán vào file style.css hoặc thẻ <style>
+   ============================================================ */
+  .stat-card-hover {
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+  .stat-card-hover:hover {
+    transform: translateY(-3px) scale(1.01) !important;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3) !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+  }
+  .stat-table-scroll::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  .stat-table-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 10px;
+  }
+  .kpi-card {
+    background: rgba(255, 255, 255, 0.05) !important;
+    backdrop-filter: blur(12px) !important;
+    -webkit-backdrop-filter: blur(12px) !important;
+    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    border-radius: 16px !important;
+  }

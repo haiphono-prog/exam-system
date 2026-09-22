@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="vi" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+    <title>Hệ thống học tập V2 - Đặng Phước Hải</title>
+
+    <!-- 1. THƯ VIỆN TIÊU CHUẨN QUỐC TẾ -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    
+    <!-- 🚀 BƠM ĐỘNG CƠ CƠ SỞ DỮ LIỆU SUPABASE -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- 2. HỆ THỐNG CSS LÕI: HỖ TRỢ CHUYỂN ĐỔI SÁNG/TỐI (LIGHT/DARK MODE) -->
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<!-- NÚT CHUYỂN ĐỔI CHẾ ĐỘ SÁNG / TỐI -->
+<button class="theme-toggle-btn" onclick="toggleTheme()" title="Chuyển đổi Sáng/Tối">
+    <i class="bi bi-moon-stars-fill" id="theme_icon"></i>
+</button>
+
+<!-- ========================================================= -->
+<!-- MÀN HÌNH ĐĂNG NHẬP -->
+<!-- ========================================================= -->
+<div id="login_screen" class="w-100 mt-5 pt-5">
+    <div class="glass-login-box text-center mx-auto" style="max-width: 400px; padding: 30px;">
+        <div class="mb-2"><i class="bi bi-shield-lock-fill" style="font-size: 2.5rem; color: #38bdf8;"></i></div>
+        <h4 class="mb-1 fw-bold" style="letter-spacing: 1px;">XÁC THỰC TRUY CẬP</h4>
+        <div class="mb-4">
+            <div class="small text-white-50" style="line-height: 1.3;">Hệ thống học tập - Giảng viên Đặng Phước Hải</div>
+            <div class="app-version-text text-white-50" style="opacity: 0.5; font-size: 0.65rem;">v2.0 (Supabase Core)</div>
+        </div>
+        
+        <div class="mb-3 text-start">
+            <input type="text" id="student_id" autocapitalize="none" autocorrect="off" spellcheck="false" class="form-control glass-input-style text-center fw-bold" placeholder="Mã Sinh Viên / Username" autocomplete="off" style="padding: 12px; border-radius: 12px;">
+        </div>
+        <div class="mb-4">
+            <input type="password" id="access_code" autocapitalize="none" autocorrect="off" spellcheck="false" class="form-control glass-input-style text-center fw-bold" placeholder="Mật khẩu" autocomplete="off" style="padding: 12px; border-radius: 12px;">
+        </div>
+        
+        <div class="d-flex gap-2 mb-3">
+            <button id="btn_login" onclick="window.check_access()" class="btn flex-grow-1 shadow-sm fw-bold stat-card-hover" style="padding: 12px; border-radius: 12px; background: rgba(14, 165, 233, 0.8); color: white; border: 1px solid #0ea5e9;">
+                ĐĂNG NHẬP HỆ THỐNG
+            </button>
+            <button id="btn_face_login" type="button" class="btn shadow-sm fw-bold d-flex align-items-center justify-content-center stat-card-hover" onclick="window.login_with_face_id()" title="Đăng nhập bằng Face ID" style="padding: 12px; border-radius: 12px; background: var(--input-bg); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.5); min-width: 55px;">
+                <i class="bi bi-person-bounding-box fs-5"></i>
+            </button>
+        </div>
+        
+        <div id="login_error" class="mt-3 text-center small animate__animated animate__headShake fw-bold" style="display:none; color: #ef4444;"></div>
+    </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- CÁC KHUNG GIAO DIỆN CHÍNH (Sẽ được JS bơm dữ liệu vào sau) -->
+<!-- ========================================================= -->
+<div id="main_content" class="no-select" style="display:none;">
+    <div class="container">
+        <!-- Khung chứa Menu Môn Học / Admin -->
+        <div id="step_1" class="mt-4 app-container" style="display:none;">
+            <div class="text-center mb-4">
+                <h3 class="fw-bold text-white">HỆ THỐNG HỌC TẬP V2</h3>
+                <p class="text-white-50 small">Giảng viên: Đặng Phước Hải</p>
+            </div>
+            
+            <!-- Khung chứa Danh sách môn học -->
+            <div id="student_dashboard" class="mb-5" style="display: none;">
+                <div class="row g-4" id="dash_subject_cards_container"></div>
+            </div>
+        </div>
+
+<!-- ========================================================= -->
+<!-- MÀN HÌNH QUẢN TRỊ & THIẾT LẬP MA TRẬN BLOOM -->
+<!-- ========================================================= -->
+<div id="admin_dashboard" class="container mt-3 animate__animated animate__fadeIn" style="display:none;">
+    <div class="glass-panel border-0 rounded-4">
+        <div class="card-header border-0 py-3 d-flex justify-content-between align-items-center" style="background: rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.1) !important;">
+            <h6 class="fw-bold text-info mb-0"><i class="bi bi-grid-3x3-gap-fill me-2"></i>THIẾT LẬP MA TRẬN BLOOM</h6>
+            <button onclick="close_bloom_dashboard()" class="btn btn-sm btn-outline-light rounded-pill px-3">Đóng</button>
+        </div>
+        <div class="card-body p-2">
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle mb-0 table-dark" style="font-size: 0.7rem; background-color: transparent !important; --bs-table-bg: transparent; --bs-table-color: #fff;">
+                <thead class="text-center text-white">
+                    <tr style="border-bottom: 2px solid rgba(255,255,255,0.1);">
+                        <th rowspan="2" style="background: none; font-size: 0.75rem; vertical-align: middle;">NỘI DUNG</th>
+                        <th colspan="4" style="background: none; color: #38bdf8; font-size: 0.75rem;">TRẮC NGHIỆM</th>
+                        <th colspan="4" style="background: none; color: #4ade80; font-size: 0.75rem;">ĐÚNG / SAI</th>
+                        <th colspan="4" style="background: none; color: #fb923c; font-size: 0.75rem;">ĐIỀN KHUYẾT</th>
+                    </tr>
+                    <tr style="font-size: 0.65rem; color: rgba(255,255,255,0.7);">
+                        <th style="background: none;">L1</th><th style="background: none;">L2</th><th style="background: none;">L3</th><th style="background: none;">L4</th>
+                        <th style="background: none;">L1</th><th style="background: none;">L2</th><th style="background: none;">L3</th><th style="background: none;">L4</th>
+                        <th style="background: none;">L1</th><th style="background: none;">L2</th><th style="background: none;">L3</th><th style="background: none;">L4</th>
+                    </tr>
+                </thead>
+                <tbody id="lesson_config_body"></tbody>
+                </table>
+            </div>
+            
+            <div class="d-flex flex-wrap justify-content-center gap-2 mt-3 mb-3">
+                <div class="text-center p-2 rounded-4 glass-panel flex-fill" style="min-width: 90px; border-top: 3px solid #ef4444 !important;">
+                    <div style="font-size: 0.55rem; color: rgba(255,255,255,0.6);">THỜI GIAN</div>
+                    <div class="d-flex align-items-center justify-content-center"><input type="number" id="exam_time_input" value="45" class="form-control form-control-sm border-0 bg-transparent text-center fw-bold p-0" style="width: 35px; color: #ef4444;"><span style="color: #ef4444;">'</span></div>
+                </div>
+                <div class="text-center p-2 rounded-4 glass-panel flex-fill" style="min-width: 90px; border-top: 3px solid #94a3b8 !important;">
+                    <div style="font-size: 0.55rem; color: rgba(255,255,255,0.6);">TỔNG</div><div id="total_selected_count" class="fw-bold fs-5 text-white">0</div>
+                </div>
+                <div class="text-center p-2 rounded-4 glass-panel flex-fill" style="min-width: 90px; border-top: 3px solid #38bdf8 !important;">
+                    <div style="font-size: 0.55rem; color: #38bdf8;">MCQ</div><div id="count_single" class="fw-bold text-info">0</div>
+                </div>
+                <div class="text-center p-2 rounded-4 glass-panel flex-fill" style="min-width: 90px; border-top: 3px solid #4ade80 !important;">
+                    <div style="font-size: 0.55rem; color: #4ade80;">Đ/S</div><div id="count_true_false" class="fw-bold text-success">0</div>
+                </div>
+                <div class="text-center p-2 rounded-4 glass-panel flex-fill" style="min-width: 90px; border-top: 3px solid #fb923c !important;">
+                    <div style="font-size: 0.55rem; color: #fb923c;">ĐK</div><div id="count_fill" class="fw-bold text-warning">0</div>
+                </div>
+            </div>
+            
+            <div class="mt-3 d-grid gap-2">
+                <button onclick="window.prepare_online_exam()" class="btn btn-warning rounded-pill py-2 fw-bold shadow-lg" style="background: linear-gradient(135deg, #f59e0b, #ef4444); border: 1px solid #fff; color: white; letter-spacing: 0.5px;">
+                    <i class="bi bi-cloud-arrow-up-fill me-2"></i>LƯU THÀNH ĐỀ THI ONLINE
+                </button>
+                <button onclick="process_create_exam()" class="btn glass-btn-action primary rounded-pill py-2 fw-bold" style="border: 1px dashed rgba(56, 189, 248, 0.5);">
+                    <i class="bi bi-play-circle-fill me-2"></i>THI THỬ / REVIEW ĐỀ NÀY
+                </button>
+                <button onclick="close_bloom_dashboard()" class="btn btn-link btn-sm text-white-50 text-decoration-none">Quay lại</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+        <!-- Khung chứa Quá trình Thi / Ôn tập -->
+        <div id="step_3" style="display:none; padding-top: 55px !important;" class="w-100 position-relative">    
+            <div class="header-fixed-wrapper">
+                <div class="app-container">
+                    <!-- Thanh điều hướng: Thoát | Đồng hồ & Túi quà | Chọn chế độ -->
+                    <div class="d-grid align-items-center" style="grid-template-columns: 1fr auto 1fr; padding: 10px 0;">
+                        <div class="text-start d-flex gap-2">
+                            <!-- NÚT THOÁT ĐƯỢC CHUẨN HÓA DÙNG CLASS MỚI -->
+                            <button class="btn-unified-exit" onclick="go_back()">
+                                <i class="bi bi-chevron-left"></i> Thoát
+                            </button>
+                            <!-- NÚT CHUYỂN ĐỔI CHẾ ĐỘ SÁNG / TỐI -->
+                            <button class="btn-unified-exit" onclick="window.toggle_light_mode()" title="Đổi giao diện">
+                                <i class="bi bi-moon-stars-fill" id="theme_icon"></i>
+                            </button>
+                        </div>
+                        
+                        <div class="text-center d-flex align-items-center justify-content-center" style="gap: 4px;">
+                            <span id="prog_text" class="fw-bold glass-timer-box px-1 py-1" style="font-size: 0.8rem;">00:00</span>
+                            
+                            <button class="btn btn-sm stat-card-hover text-warning fw-bold d-flex align-items-center" style="background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; padding: 2px 5px; font-size: 0.7rem;" onclick="window.use_skill_5050()" title="Mắt Diều Hâu">
+                                <i class="bi bi-eye-fill"></i><span class="d-none d-sm-inline ms-1">50/50</span>
+                            </button>
+                            <button class="btn btn-sm stat-card-hover text-info fw-bold d-flex align-items-center" style="background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); border-radius: 6px; padding: 2px 5px; font-size: 0.7rem;" onclick="window.use_skill_time()" title="Đồng hồ Cát (+30s)">
+                                <i class="bi bi-hourglass-split"></i><span class="d-none d-sm-inline ms-1">+30s</span>
+                            </button>
+
+                            <div id="mini_inventory_badge" class="badge rounded-pill shadow-sm d-flex align-items-center gap-1 stat-card-hover" style="background: transparent; border: 1px dashed rgba(245, 158, 11, 0.6); padding: 2px 6px; cursor: pointer;" title="Mở Túi Đồ" onclick="window.toggle_inventory_popover(event)">
+                                <span style="font-size: 0.75rem; line-height: 1;">🎁</span>
+                                <span id="mini_inventory_count" class="fw-bold text-warning" style="font-size: 0.75rem; line-height: 1;">0</span>
+                            </div>
+                        </div>
+                        
+                        <div class="text-end">
+                            <button class="btn btn-sm fw-bold glass-btn-action px-3" onclick="toggle_view_mode()">
+                                <span id="mode_text">Flashcard</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Thanh tiến trình xanh lá cây phía dưới Header -->
+                    <div id="progress_container" style="width: 100%; height: 6px; background: rgba(255,255,255,0.1); border-radius: 3px; margin-bottom: 5px; overflow: hidden; display: none;">
+                        <div id="progress_bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #22c55e, #10b981); transition: width 0.5s cubic-bezier(0.4, 0, 0.2, 1);"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="app-container">
+                <!-- KHU VỰC VẼ CÂU HỎI MÀ TRÌNH DUYỆT ĐANG TÌM KIẾM -->
+                <div id="quiz_area" style="display:none; width: 100%;"></div>
+                
+                <div id="submit_btn" style="display:none;" class="text-center my-5">
+                    <button class="btn btn-danger btn-lg w-100 py-3 rounded-pill fw-bold shadow-lg" onclick="submit_final()">
+                        <i class="bi bi-check2-circle"></i> KẾT THÚC & NỘP BÀI
+                    </button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Khung chứa Kết quả -->
+        <div id="result_area" style="display:none;" class="p-3"></div>
+    </div>
+</div>
+
+<!-- ========================================================= -->
+<!-- NÚT MENU TIỆN ÍCH NỔI (FAB) - GÓC DƯỚI BÊN PHẢI -->
+<!-- ========================================================= -->
+<div id="fab_container" style="position: fixed; bottom: 40px; right: 30px; z-index: 2147483647; display: flex; flex-direction: column; align-items: flex-end; gap: 12px; pointer-events: none;">
+    <div id="fab_menu_items" class="d-flex flex-column align-items-end d-none" style="gap: 12px;">
+        <button class="btn fw-bold text-white shadow stat-card-hover" style="background: rgba(30, 41, 59, 0.95); border: 1px solid #facc15; border-radius: 50px; padding: 10px 20px; pointer-events: auto;" onclick="window.openBuilderModule()">✍️ Trạm Dịch & Thêm</button>
+        <button class="btn fw-bold text-white shadow stat-card-hover" style="background: rgba(30, 41, 59, 0.95); border: 1px solid #f43f5e; border-radius: 50px; padding: 10px 20px; pointer-events: auto;" onclick="window.openReelsModule()">🎬 Luyện Nghe Reels</button>
+        <button class="btn fw-bold text-white shadow stat-card-hover" style="background: rgba(30, 41, 59, 0.95); border: 1px solid #38bdf8; border-radius: 50px; padding: 10px 20px; pointer-events: auto;" onclick="window.openPhanXaModule()">🧠 Học Phản Xạ</button>
+    </div>
+    <button id="fab_main_btn" class="btn shadow-lg stat-card-hover" style="background: linear-gradient(135deg, #0284c7, #38bdf8); color: white; border: 2px solid rgba(255,255,255,0.2); width: 55px; height: 55px; border-radius: 50%; font-size: 1.5rem; display: flex; justify-content: center; align-items: center; pointer-events: auto;" onclick="document.getElementById('fab_menu_items').classList.toggle('d-none')">🛠️</button>
+</div>
+
+<!-- ========================================================= -->
+<!-- KỊCH BẢN LOGIC KẾT NỐI (JS) -->
+<!-- ========================================================= -->
+<script>
+    // ---------------------------------------------------------
+    // 1. TÍNH NĂNG CHUYỂN ĐỔI GIAO DIỆN SÁNG / TỐI HỢP NHẤT
+    // ---------------------------------------------------------
+    window.initTheme = function() {
+        const savedTheme = localStorage.getItem('app_theme') || 'dark';
+        document.documentElement.setAttribute('data-theme', savedTheme);
+        window.updateThemeIcon(savedTheme);
+    };
+
+    window.toggle_light_mode = function() {
+        const currentTheme = document.documentElement.getAttribute('data-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        document.documentElement.setAttribute('data-theme', newTheme);
+        localStorage.setItem('app_theme', newTheme);
+        window.updateThemeIcon(newTheme);
+    };
+    
+    // Gắn bí danh để nút cũ (toggleTheme) và nút mới (toggle_light_mode) đều dùng chung 1 lõi
+    window.toggleTheme = window.toggle_light_mode;
+
+    window.updateThemeIcon = function(theme) {
+        // Quét và cập nhật TẤT CẢ icon mặt trăng/mặt trời trên màn hình (nút nổi & nút trên thanh Header)
+        const icons = document.querySelectorAll('.bi-moon-stars-fill, .bi-sun-fill');
+        icons.forEach(icon => {
+            if(theme === 'light') {
+                icon.className = 'bi bi-sun-fill text-warning';
+            } else {
+                icon.className = 'bi bi-moon-stars-fill text-info';
+            }
+        });
+    };
+    window.initTheme(); // Chạy ngay khi mở trang
+
+    // ---------------------------------------------------------
+    // 2. KHỞI TẠO ĐỘNG CƠ SUPABASE VÀ BẮT SỰ KIỆN ENTER
+    // ---------------------------------------------------------
+    const supabaseUrl = 'https://rstwrqzuoivfcymjvdmp.supabase.co';
+    const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJzdHdycXp1b2l2ZmN5bWp2ZG1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3NjcyNjYsImV4cCI6MjEwNTM0MzI2Nn0.WJzvT9T7JuJ6uiIuvzWcRpcKON3IFaBNwQgD8gEQWqc';
+    const db = supabase.createClient(supabaseUrl, supabaseKey);
+
+    window.db = db;
+    // Gắn phím Enter để đăng nhập nhanh
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            const loginScreen = document.getElementById('login_screen');
+            if (loginScreen && loginScreen.style.display !== 'none') { 
+                e.preventDefault(); 
+                if (typeof window.check_access === 'function') window.check_access(); 
+            }
+        }
+    });
+</script>
+
+<!-- MÓC NỐI TỚI FILE XỬ LÝ LÔ-GÍC CHÍNH CỦA CHÚNG TA -->
+<script src="js_shared.js"></script>
+<script src="js_quiz.js"></script>
+<script src="js_flashcard.js"></script>
+<script src="js_game.js"></script>
+<script src="js_survival.js"></script>
+<script src="js_story.js"></script>
+<script src="js_phanxa.js"></script>
+<script src="js_reels.js"></script>
+<script src="js_builder.js"></script>
+<script src="js_proctoring.js"></script>
+<script src="js_keyword.js"></script>
+<script src="js_admission_stats.js"></script>
+<script src="js_hotspot.js"></script>
+<script src="js_clip.js"></script>
+<script src="parser_shared.js"></script>
+<script src="parser_auto.js"></script>
+<script src="parser_type.js"></script>
+<script src="parser_trainable.js"></script>
+<script src="js_statistic.js"></script>
+</body>
+</html>
