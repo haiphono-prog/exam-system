@@ -374,18 +374,54 @@ window.end_draw_hotspot = function(e) {
     }
 };
 
-window.generate_hotspot_ai = function() {
-    let qInput = document.getElementById('hs_question'); let hintInput = document.getElementById('hs_hint');
+window.generate_hotspot_ai = async function() {
+    let qInput = document.getElementById('hs_question'); 
+    let hintInput = document.getElementById('hs_hint');
     let keyword = qInput.value.trim();
     if (!keyword) return window.show_toast("⚠️ Hãy gõ từ khóa vào ô câu hỏi rồi bấm AI!", true);
+    
     qInput.value = "⏳ AI đang phân tích...";
-    google.script.run
-    .withSuccessHandler(function(res) {
-        if(res.success) { qInput.value = res.q; hintInput.value = res.hint; window.show_toast("🪄 Đã sinh câu hỏi thành công!"); } 
-        else { qInput.value = keyword; window.show_toast("❌ Lỗi AI: " + res.msg, true); }
-    })
-    .withFailureHandler(function(err) { qInput.value = keyword; window.show_toast("❌ Lỗi mạng: " + err, true); })
-    .generateHotspotAI(keyword);
+    
+    try {
+        let apiKey = localStorage.getItem("GEMINI_API_KEY") || "AQ.Ab8RN6IfRVCIBAMcIaW9eyDLfR3JJRPvONV0u2PDZE-dKvsRUA"; 
+        let prompt = "Tôi đang tạo câu hỏi trắc nghiệm tương tác chạm vào hình ảnh (Hotspot). Từ khóa người dùng nhập là: '" + keyword + "'.\n" +
+                     "Nhiệm vụ của bạn:\n" +
+                     "1. Xác định từ khóa này tiếng Anh là gì và lấy phiên âm quốc tế (IPA) của nó.\n" +
+                     "2. Sinh ra câu lệnh yêu cầu người chơi tìm vị trí trên ảnh. Trong câu lệnh, BẮT BUỘC phải chèn từ khóa theo đúng cú pháp Magic Vocab: {{Từ_Tiếng_Anh::IPA::Nghĩa_Tiếng_Việt}}.\n" +
+                     "3. Viết 1-2 câu giải thích ngắn gọn, thú vị về từ khóa.\n\n" +
+                     "Trả về ĐÚNG định dạng JSON sau (không dùng markdown block, không giải thích thêm):\n" +
+                     "{\n  \"q\": \"Hãy chạm vào vị trí của {{Cat::/kæt/::con mèo}} trên hình ảnh dưới đây.\",\n  \"hint\": \"Mèo là loài động vật có vú nhỏ...\"\n}";
+
+        let url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + apiKey;
+
+        let response = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                "contents": [{ "parts": [{ "text": prompt }] }],
+                "generationConfig": { "response_mime_type": "application/json" }
+            })
+        });
+
+        let resObj = await response.json();
+        if (resObj.error) {
+            throw new Error(resObj.error.message);
+        }
+
+        if (resObj.candidates && resObj.candidates.length > 0) {
+            let text = resObj.candidates[0].content.parts[0].text;
+            text = text.replace(/```json/g, '').replace(/```/g, '').trim();
+            let data = JSON.parse(text);
+            qInput.value = data.q; 
+            hintInput.value = data.hint; 
+            window.show_toast("🪄 Đã sinh câu hỏi thành công!");
+        } else {
+            throw new Error("AI không trả lời được từ khóa này.");
+        }
+    } catch (err) {
+        qInput.value = keyword; 
+        window.show_toast("❌ Lỗi AI: " + err.message, true);
+    }
 };
 
 // 🌟 THỦ CÔNG HOẶC CHỐT MULTI
@@ -512,16 +548,27 @@ window.submit_all_hotspots = async function() {
     btn.classList.add('disabled');
 
     let finalizeSaveBatch = async function(imageUrl) {
+        // 🌟 Map chuẩn xác theo đúng cấu trúc bảng questions của thầy
         let payloadArray = window.hs_pending_list.map(item => ({
             subject_key: window.current_subject || window.temp_subject_key || 'tienganh',
-            lesson: lesson, type: "hotspot", level: 2, q: item.q,
-            opta: "", optb: "", optc: "", optd: "", a: item.coords, answer: item.coords,
-            hint: item.hint, lessonname: lessonname, image: imageUrl, original_q: item.q
+            lesson: lesson, 
+            type: "hotspot", 
+            level: "2", 
+            q: item.q,
+            opt_a: "",
+            opt_b: "",
+            opt_c: "",
+            opt_d: "",
+            answer: item.coords,      // Lưu tọa độ vào cột answer
+            hint: item.hint, 
+            lessonname: lessonname, 
+            multimedia: imageUrl      // Lưu link ảnh vào cột multimedia chính xác của bảng
         }));
 
         try {
             const { error } = await db.from('questions').insert(payloadArray);
             if (error) throw error;
+            
             window.show_toast(`🎉 Đã lưu thành công ${payloadArray.length} câu lên Supabase!`);
             document.getElementById('hotspot_creator_modal').remove();
             if (typeof render_admin_panel === 'function') render_admin_panel();
@@ -534,7 +581,6 @@ window.submit_all_hotspots = async function() {
 
     if (!window.hotspot_current_image_id) {
         try {
-            // Chuyển Base64 thành File để đẩy lên Supabase Storage (Bucket tên là 'media')
             let res = await fetch(window.hotspot_temp_base64);
             let blob = await res.blob();
             let fileName = `hotspot_${Date.now()}.png`;
@@ -542,13 +588,15 @@ window.submit_all_hotspots = async function() {
             const { data, error } = await db.storage.from('media').upload(fileName, blob);
             if (error) throw error;
             
-            // Lấy link ảnh Public
             let publicUrl = db.storage.from('media').getPublicUrl(fileName).data.publicUrl;
             window.hotspot_current_image_id = publicUrl;
             finalizeSaveBatch(publicUrl);
         } catch (err) {
             window.show_toast("❌ Lỗi tải ảnh lên Supabase: " + err.message, true);
-            btn.classList.remove('disabled'); btn.innerHTML = `<i class="bi bi-cloud-arrow-up-fill fs-3"></i>`;
+            btn.classList.remove('disabled'); 
+            btn.innerHTML = `<i class="bi bi-cloud-arrow-up-fill fs-3"></i>`;
         }
-    } else { finalizeSaveBatch(window.hotspot_current_image_id); }
+    } else { 
+        finalizeSaveBatch(window.hotspot_current_image_id); 
+    }
 };

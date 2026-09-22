@@ -113,17 +113,26 @@ window.loadSavedReels = async function() {
 
     listContainer.innerHTML = '<div class="text-center text-white-50 p-4"><span class="spinner-border spinner-border-sm me-2"></span>Đang tải danh sách clip...</div>';
 
-    // 🌟 DỮ LIỆU MẪU (CHẠY KHI BẢNG SUPABASE TRỐNG HOẶC CHƯA TẠO)
     let fallbackData = [
         { title: "Cách tự học Tiếng Anh cực nhanh", url: "https://www.youtube.com/shorts/q2E9BqB1pS8" },
         { title: "Luyện nghe Tiếng Anh qua TED Talks", url: "https://www.youtube.com/watch?v=R2jZpYn7eJ8" }
     ];
 
     try {
-        // Mặc định lấy từ bảng 'reels' trên Supabase
-        const { data, error } = await db.from('reels').select('*').order('created_at', { ascending: false });
+        // 🌟 Đọc từ bảng questions thay vì bảng reels, lọc đúng type = 'reels'
+        const { data, error } = await db.from('questions')
+                                        .select('*')
+                                        .eq('type', 'reels')
+                                        .order('created_at', { ascending: false });
         if (error) throw error;
-        window.currentReelsList = (data && data.length > 0) ? data : fallbackData; 
+        
+        // 🌟 Ánh xạ: lấy cột 'q' làm tên clip, cột 'multimedia' làm link clip
+        let formattedData = (data && data.length > 0) ? data.map(item => ({
+            title: item.q || "Clip Luyện Nghe",
+            url: item.multimedia || ""
+        })) : fallbackData;
+
+        window.currentReelsList = formattedData; 
         if (countBadge) countBadge.innerText = window.currentReelsList.length + ' clip';
 
         if (window.currentReelsList.length === 0) {
@@ -133,10 +142,9 @@ window.loadSavedReels = async function() {
 
         let html = '<div class="reels-grid-list">';
         window.currentReelsList.forEach((reel, index) => {
-            let displayTitle = (reel.title || "Clip Luyện Nghe").trim();
-            let safeUrl = encodeURIComponent(reel.url || "");
+            let displayTitle = reel.title.trim();
+            let safeUrl = encodeURIComponent(reel.url);
             
-            // Xử lý Thumbnail giả lập tạm thời (Do file gốc quá dài, ta dùng Unsplash placeholder cho mượt)
             let thumbImg = 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?q=80&w=300&auto=format&fit=crop';
             if(reel.url.includes('youtube') || reel.url.includes('youtu.be')) {
                 let m = reel.url.match(/(?:v=|shorts\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
@@ -156,35 +164,97 @@ window.loadSavedReels = async function() {
         setTimeout(() => window.playSavedReel(encodeURIComponent(window.currentReelsList[0].url), 0), 300);
 
     } catch (err) {
-        listContainer.innerHTML = `<div class="text-danger text-center p-3">❌ Lỗi tải dữ liệu từ Supabase</div>`;
+        listContainer.innerHTML = `<div class="text-danger text-center p-3">❌ Lỗi tải dữ liệu: ${err.message}</div>`;
     }
 };
 
 window.playSavedReel = function(encodedUrl, index) {
+    if (typeof index === 'undefined') index = -1;
     window.currentReelIndex = index;
-    let rawUrl = decodeURIComponent(encodedUrl);
+    
+    let rawUrl = encodedUrl;
+    try { rawUrl = decodeURIComponent(encodedUrl); } catch(e){}
     
     let inputEl = document.getElementById('reelUrl');
     if (inputEl) inputEl.value = rawUrl;
 
-    document.querySelectorAll('.reel-thumb-card').forEach((card, idx) => {
-        if (idx === index) card.classList.add('active'); else card.classList.remove('active');
+    // Active hiệu ứng card
+    let allCards = document.querySelectorAll('.reel-thumb-card');
+    allCards.forEach((card, idx) => {
+        if (idx === index) card.classList.add('active');
+        else card.classList.remove('active');
     });
 
     let container = document.getElementById('videoContainer');
-    if (window.ytPlayerInstance) { try { window.ytPlayerInstance.destroy(); } catch(err) {} window.ytPlayerInstance = null; }
-    container.innerHTML = ''; void container.offsetHeight; 
-
-    // Chèn iframe trực tiếp
-    let ytMatch = rawUrl.match(/(?:v=|shorts\/|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-    if (ytMatch) {
-        container.innerHTML = `<iframe src="https://www.youtube.com/embed/${ytMatch[1]}?autoplay=1&playsinline=1" style="width:100%;height:100%;border:none;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
-    } else if (rawUrl.includes('tiktok.com')) {
-        let tkMatch = rawUrl.match(/video\/(\d+)/);
-        if(tkMatch) container.innerHTML = `<iframe src="https://www.tiktok.com/embed/v2/${tkMatch[1]}" style="width:100%;height:100%;border:none;" allowfullscreen></iframe>`;
-    } else {
-        container.innerHTML = `<div class="text-white-50 text-center p-5 mt-5">Link này chưa hỗ trợ nhúng trực tiếp.</div>`;
+    if (!container) return;
+    
+    // Dọn dẹp YouTube API thừa
+    if (window.ytPlayerInstance) {
+        try { if (typeof window.ytPlayerInstance.destroy === 'function') window.ytPlayerInstance.destroy(); } catch(err) {}
+        window.ytPlayerInstance = null;
     }
+
+    container.innerHTML = `<div class="text-white-50 text-center p-5 mt-5"><span class="spinner-border spinner-border-sm me-2"></span>Đang xử lý link...</div>`;
+    void container.offsetHeight;
+
+    setTimeout(() => {
+        let embedHtml = "";
+        let fallbackHtml = `
+            <div class="mt-3 text-center position-absolute bottom-0 w-100" style="z-index: 10;">
+                <p class="small text-white-50 mb-1" style="text-shadow: 1px 1px 2px #000;">Nếu video đen/lỗi bản quyền:</p>
+                <a href="${rawUrl}" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3 shadow-lg" style="background: rgba(0,0,0,0.5);">
+                    <i class="bi bi-box-arrow-up-right me-1"></i> Mở video gốc
+                </a>
+            </div>
+        `;
+
+        // 1. NHẬN DIỆN VÀ PLAY YOUTUBE (Dùng nocookie và origin chống lỗi Vercel)
+        let ytMatch = rawUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|shorts\/|live\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
+        if (!ytMatch) {
+            let directMatch = rawUrl.match(/^([a-zA-Z0-9_-]{11})$/);
+            if (directMatch) ytMatch = directMatch;
+        }
+
+        // 2. NHẬN DIỆN FACEBOOK REELS & VIDEO THƯỜNG
+        let isFbReel = /facebook\.com\/reel\//i.test(rawUrl) || /facebook\.com\/[^/]+\/reels\//i.test(rawUrl);
+        let isFbVideo = rawUrl.includes('facebook.com') || rawUrl.includes('fb.watch');
+
+        // 3. NHẬN DIỆN TIKTOK (Chuyển sang chuẩn player/v1 mới nhất)
+        let tkMatch = rawUrl.match(/tiktok\.com\/.*video\/(\d+)/);
+
+
+        // --- BẮT ĐẦU RENDER IFRAME ---
+        let domainOrigin = window.location.origin || "https://vercel.com";
+
+        if (ytMatch) {
+            embedHtml = `<iframe src="https://www.youtube-nocookie.com/embed/${ytMatch[1]}?rel=0&playsinline=1&enablejsapi=1&origin=${encodeURIComponent(domainOrigin)}" style="width:100%;height:100%;border:none;border-radius:12px;" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
+        
+        } else if (isFbReel) {
+            // FB Reel dùng thẻ post.php
+            let fbUrl = `https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(rawUrl)}&show_text=false&width=315`;
+            embedHtml = `<iframe src="${fbUrl}" style="width:100%;height:100%;border:none;overflow:hidden;border-radius:12px;" scrolling="no" frameborder="0" allowfullscreen="true" allow="clipboard-write; encrypted-media; picture-in-picture"></iframe>`;
+            
+        } else if (isFbVideo) {
+            // FB Video thường
+            let fbUrl = `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(rawUrl)}&show_text=false&width=315`;
+            embedHtml = `<iframe src="${fbUrl}" style="width:100%;height:100%;border:none;overflow:hidden;border-radius:12px;" scrolling="no" frameborder="0" allowfullscreen="true" allow="clipboard-write; encrypted-media; picture-in-picture"></iframe>`;
+            
+        } else if (tkMatch) {
+            // TIKTOK (Sửa lỗi sai url của bản GAS, bắt buộc dùng player/v1)
+            embedHtml = `<iframe src="https://www.tiktok.com/player/v1/${tkMatch[1]}?controls=1&description=0&music_info=0" style="width:100%;height:100%;border:none;border-radius:12px;" allow="fullscreen" allowfullscreen title="TikTok video"></iframe>`;
+        
+        } else if (rawUrl.includes('instagram.com')) {
+            // Bổ sung hỗ trợ instagram từ GAS cũ
+            let igMatch = rawUrl.match(/instagram\.com\/(?:reel|p)\/([a-zA-Z0-9_-]+)/);
+            if(igMatch) embedHtml = `<iframe src="https://www.instagram.com/reel/${igMatch[1]}/embed/" style="width:100%;height:100%;border:none;overflow:hidden;border-radius:12px;" scrolling="no" frameborder="0" allowfullscreen="true" allow="clipboard-write; encrypted-media; picture-in-picture"></iframe>`;
+            else embedHtml = `<div class="text-white-50 text-center p-5 mt-5">Link Instagram không đúng định dạng.</div>`;
+        } else {
+            embedHtml = `<div class="text-white-50 text-center p-5 mt-5">Định dạng link chưa được hỗ trợ.</div>`;
+        }
+
+        container.innerHTML = embedHtml + fallbackHtml;
+
+    }, 50); // Timeout ngắn tạo trải nghiệm mượt mà
 };
 
 window.playNextReel = function() {
@@ -218,10 +288,13 @@ window.submitSaveReels = async function() {
     let url = document.getElementById('reelUrl').value.trim();
 
     try {
-        const { error } = await db.from('reels').insert([{ 
-            title: title, url: url, 
-            owner_id: window.current_student_id, 
-            created_at: new Date().toISOString() 
+        // 🌟 Lưu thẳng vào bảng questions với type = 'reels'
+        const { error } = await db.from('questions').insert([{ 
+            type: 'reels',
+            q: title,              // Tên clip lưu vào cột q
+            multimedia: url,       // Link clip lưu vào cột multimedia
+            subject_key: window.current_subject || 'tienganh', // Thêm subject nếu có
+            level: '1'
         }]);
         if (error) throw error;
         
