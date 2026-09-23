@@ -209,8 +209,12 @@ window.fetch_available_classes = async function() {
 window.sync_user_inventory = async function(studentId, inventory, collectiblesStr) {
     if (!studentId) return;
     try {
+        // 🌟 ĐÃ FIX: Chuyển chuỗi String về lại Mảng (Array) để Supabase hiểu cột jsonb
+        let colData = collectiblesStr;
+        try { if (typeof collectiblesStr === 'string') colData = JSON.parse(collectiblesStr); } catch(e) {}
+
         const { error } = await db.from(window.SUPA_TABLES.users)
-            .update({ inventory: inventory, collectibles: collectiblesStr })
+            .update({ inventory: inventory, collectibles: colData })
             .ilike('student_id', studentId);
         if (error) throw error;
     } catch (err) {
@@ -494,8 +498,12 @@ window.apply_login_success = function(data) {
         
         let serverInventory = parseInt(data.inventory) || 0;
         let serverCol = data.collectibles || "[]";
+        
+        // 🌟 ĐÃ FIX: Chuyển Mảng (Array) từ Supabase thành chuỗi JSON chuẩn để không bị vỡ dữ liệu ở LocalStorage
+        let colStrToSave = (typeof serverCol === 'object') ? JSON.stringify(serverCol) : serverCol;
+        
         localStorage.setItem('mcq_inventory_' + window.current_student_id, serverInventory);
-        localStorage.setItem('mcq_col_' + window.current_student_id, serverCol);
+        localStorage.setItem('mcq_col_' + window.current_student_id, colStrToSave);
         
         // 1. Khởi tạo 4 nhóm quyền
         window.currentUserPerms = { view: [], edit: [], stats: [], system: [] }; 
@@ -944,26 +952,6 @@ window.render_student_subject_list = function(safe_role) {
     
     // 🌟 GỌI HÀM LẤY ĐỀ THI TRỰC TUYẾN
     window.fetch_and_render_active_exams();
-};
-
-window.render_stats_card_above_timeline = function() {
-    let historyArea = document.getElementById('history_view_area');
-    if (!historyArea) return;
-    let oldStatsCard = document.getElementById('stats_above_timeline_card');
-    if (oldStatsCard) oldStatsCard.remove();
-    let safe_role = String(window.current_user_role || '').trim().toLowerCase();
-    if (safe_role === 'all' || safe_role === 'admin' || safe_role === 'useradmin') return;
-
-    if (typeof window.check_stats_perm === 'function' && window.check_stats_perm()) {
-        let cardHtml = `
-        <div id="stats_above_timeline_card" class="mb-2 animate__animated animate__fadeIn">
-            <div class="p-2 d-flex align-items-center gap-2" style="cursor: pointer; background: transparent; transition: transform 0.2s;" onmouseover="this.style.transform='translateX(4px)'" onmouseout="this.style.transform='translateX(0)'" onclick="window.render_result_management()">
-                <i class="bi bi-bar-chart-fill text-danger fs-5 opacity-75"></i>
-                <h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">HỆ THỐNG BÁO CÁO THỐNG KÊ</h6>
-            </div>
-        </div>`;
-        historyArea.insertAdjacentHTML('beforebegin', cardHtml);
-    }
 };
 
 window.toggle_subject_map = function(subjectKey, displayName) {
@@ -1728,26 +1716,6 @@ window.render_admin_hub = function() {
 };
 
 // ... Các hàm Admin Login ...
-
-window.render_stats_card_above_timeline = function() {
-    let historyArea = document.getElementById('history_view_area');
-    if (!historyArea) return;
-    let oldStatsCard = document.getElementById('stats_above_timeline_card');
-    if (oldStatsCard) oldStatsCard.remove();
-    let safe_role = String(window.current_user_role || '').trim().toLowerCase();
-    if (safe_role === 'all' || safe_role === 'admin' || safe_role === 'useradmin') return;
-
-    if (typeof window.check_stats_perm === 'function' && window.check_stats_perm()) {
-        let cardHtml = `
-        <div id="stats_above_timeline_card" class="mb-2 animate__animated animate__fadeIn">
-            <div class="p-2 d-flex align-items-center gap-2" style="cursor: pointer; background: transparent; transition: transform 0.2s;" onmouseover="this.style.transform='translateX(4px)'" onmouseout="this.style.transform='translateX(0)'" onclick="window.render_result_management()">
-                <i class="bi bi-bar-chart-fill text-danger fs-5 opacity-75"></i>
-                <h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">HỆ THỐNG BÁO CÁO THỐNG KÊ</h6>
-            </div>
-        </div>`;
-        historyArea.insertAdjacentHTML('beforebegin', cardHtml);
-    }
-};
 
 // TRẠM DỊCH: Đồng bộ cột Supabase sang định dạng của App cũ để hiển thị bình thường
 window.map_supabase_questions = function(data) {
@@ -2985,147 +2953,6 @@ window.open_link_in_modal = function(url, title) {
 // 🎒 BẢNG KHO BÁU MINI (GIAO DIỆN TỐI GIẢN & ĐỔI THƯỞNG BẬC THANG)
 // =========================================================================
 
-// 🌟 TỪ ĐIỂN CẤU HÌNH PHẦN THƯỞNG
-window.REWARD_CONFIG = {
-    "10 Triệu BP 💰": { icon: "💰", shortName: "10Tr BP", rewardIcon: "🎵", baseMins: 5, action: "TIKTOK", color: "#2dd4bf" },
-    "Giáp 3 Mũ 3 🛡️": { icon: "🛡️", shortName: "Giáp 3", rewardIcon: "📱", baseMins: 10, action: "IPHONE", color: "#38bdf8" },
-    "Thẻ Nâng Cấp +5 🌟": { icon: "🌟", shortName: "Thẻ +5", rewardIcon: "▶️", baseMins: 15, action: "YOUTUBE", color: "#f87171" },
-    "Thẻ Đổi Tên 🏷️": { icon: "🏷️", shortName: "Đổi Tên", rewardIcon: "🎮", baseMins: 20, action: "CHƠI GAME", color: "#a855f7" },
-    "Thẻ Tạo Phòng 🚪": { icon: "🚪", shortName: "Tạo Phòng", rewardIcon: "🔫", baseMins: 30, action: "FREE FIRE", color: "#fb923c" },
-    "Booyah Pass 🎫": { icon: "🎫", shortName: "Pass", rewardIcon: "📺", baseMins: 45, action: "XEM TV", color: "#facc15" },
-    "Thẻ ICON +8 🏆": { icon: "🏆", shortName: "ICON +8", rewardIcon: "📱", baseMins: 60, action: "IPHONE", color: "#e879f9" },
-    "Gói Cầu Thủ Gullit 👑": { icon: "👑", shortName: "Gullit", rewardIcon: "🌈", baseMins: 0, action: "CHƠI TỰ DO", color: "#fbbf24" }
-};
-
-// 🌟 1. NÂNG CẤP ICON RANK (BỎ HIỆU ỨNG GIẬT LAG, RÊ CHUỘT MƯỢT MÀ)
-window.get_user_rank_html = function(isMini = false) {
-    let invKey = 'mcq_inventory_' + (window.current_student_id || 'guest');
-    let colKey = 'mcq_col_' + (window.current_student_id || 'guest');
-    let inv = parseInt(localStorage.getItem(invKey)) || 0;
-    let colList = []; try { colList = JSON.parse(localStorage.getItem(colKey) || "[]"); } catch(e){}
-    let totalPower = inv + (colList.length * 5); 
-
-    let rank = { icon: "🥉", color: "#d97706", power: totalPower }; // Đồng
-    if (totalPower >= 100) rank = { icon: "👑", color: "#ef4444", power: totalPower }; // Thách Đấu
-    else if (totalPower >= 50) rank = { icon: "💠", color: "#06b6d4", power: totalPower }; // Kim Cương
-    else if (totalPower >= 20) rank = { icon: "🥇", color: "#eab308", power: totalPower }; // Vàng
-    else if (totalPower >= 5) rank = { icon: "🥈", color: "#94a3b8", power: totalPower }; // Bạc
-
-    let size = isMini ? 1.8 : 2.2; 
-
-    // Đã xóa hiệu ứng Pulse và Hover gây giật. Dùng transform CSS mượt mà.
-    // Thêm data-power để hệ thống nhận biết khi nào cần cập nhật.
-    return `<div onclick="window.open_esport_hub()" class="d-flex align-items-center justify-content-center" 
-                 style="cursor: pointer; z-index: 999; flex-shrink: 0; filter: drop-shadow(0 0 10px ${rank.color}90); transition: transform 0.2s ease-out;" 
-                 onmouseover="this.style.transform='scale(1.15)'" 
-                 onmouseout="this.style.transform='scale(1)'"
-                 title="Nhấn xem Kỹ năng & Nhiệm vụ" data-power="${rank.power}">
-                <span style="font-size: ${size}rem; line-height: 1; filter: drop-shadow(0 2px 5px rgba(0,0,0,0.6)); pointer-events: none;">${rank.icon}</span>
-            </div>`;
-};
-
-window.toggle_inventory_popover = function(event) {
-    // 🌟 KHÓA TÚI ĐỒ KHI ĐANG THI THẬT
-    if (window.is_study_mode === false) { 
-        if (typeof window.play_sound === 'function') window.play_sound('error'); 
-        return window.show_toast("⚠️ TÍNH NĂNG BỊ KHÓA: Không được mở túi đồ khi đang thi!", true); 
-    }
-
-    if (event) event.stopPropagation();
-    let popoverId = 'game_inventory_popover';
-    if (document.getElementById(popoverId)) { document.getElementById(popoverId).remove(); return; } 
-
-    let invKey = 'mcq_inventory_' + (window.current_student_id || 'guest');
-    let colKey = 'mcq_col_' + (window.current_student_id || 'guest');
-    let inventory = parseInt(localStorage.getItem(invKey)) || 0;
-    
-    let colList = [];
-    try { colList = JSON.parse(localStorage.getItem(colKey) || "[]"); } catch(e) {}
-
-    let groupedItems = {};
-    colList.forEach(item => { groupedItems[item] = (groupedItems[item] || 0) + 1; });
-
-    let itemsHtml = "";
-    let itemKeys = Object.keys(groupedItems);
-    
-    if (itemKeys.length === 0) {
-        itemsHtml = `<div class="text-center p-3 text-white-50 w-100"><i class="bi bi-inbox fs-3 mb-1 d-block opacity-50"></i><span style="font-size:0.75rem;">Chưa rớt món nào.</span></div>`;
-    } else {
-        itemKeys.forEach((itemName, idx) => {
-            let count = groupedItems[itemName];
-            let cfg = window.REWARD_CONFIG[itemName] || { icon: "🎁", shortName: "Bí ẩn", rewardIcon: "✨", baseMins: 0, action: "QUÀ BÍ MẬT", color: "#fff" };
-            
-            let safeName = itemName.replace(/'/g, "\\'"); 
-            let displayVal = cfg.baseMins > 0 ? cfg.baseMins + "'" : "VIP";
-
-            itemsHtml += `
-            <div class="col-4 px-1 mb-2 animate__animated animate__zoomIn" style="animation-delay: ${idx * 0.05}s;">
-                <div class="p-2 d-flex flex-column align-items-center justify-content-center position-relative shadow-sm stat-card-hover" 
-                     style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; height: 80px; cursor: pointer;"
-                     onclick="window.redeem_item('${safeName}', ${count})" title="Bấm để đổi thưởng!">
-                    
-                    <div class="position-absolute badge rounded-pill bg-danger shadow-sm" style="top: -5px; right: -5px; font-size: 0.65rem; border: 1px solid #fff; z-index: 2;">x${count}</div>
-                    <div class="mb-1" style="font-size: 1.8rem; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); line-height: 1;">${cfg.icon}</div>
-                    <div class="fw-bold text-center w-100 text-truncate" style="font-size: 0.55rem; color: rgba(255,255,255,0.7);">${cfg.shortName}</div>
-                    
-                    <div class="mt-auto w-100 pt-1 border-top d-flex align-items-center justify-content-center gap-1" style="border-color: rgba(255,255,255,0.1) !important; color: ${cfg.color};">
-                        <span style="font-size: 0.7rem;">${cfg.rewardIcon}</span>
-                        <span class="fw-bold" style="font-size: 0.65rem;">${displayVal}</span>
-                    </div>
-                </div>
-            </div>`;
-        });
-    }
-
-    let rect = event.currentTarget.getBoundingClientRect();
-    let topPos = rect.bottom + 10; 
-    let rightPos = window.innerWidth - rect.right; 
-    if (window.innerWidth < 350) rightPos = 10;
-
-    // 🌟 TÁCH TÊN NGẮN GỌN (LẤY CHỮ CUỐI TRONG TÊN)
-    let fullName = window.current_student_name || window.current_student_id || "BẠN";
-    let shortName = fullName.split(' ').pop().toUpperCase();
-
-    let popoverHtml = `
-    <style>.popover-enter { animation: popIn 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; transform-origin: top right; } @keyframes popIn { 0% { opacity: 0; transform: scale(0.8); } 100% { opacity: 1; transform: scale(1); } }</style>
-    <div id="${popoverId}" class="popover-enter" 
-         style="position: fixed; top: ${topPos}px; right: ${rightPos}px; width: 280px; z-index: 9999999; 
-                background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
-                border: 1px solid rgba(56, 189, 248, 0.5); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.6);">
-        
-        <div style="position: absolute; top: -8px; right: 15px; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 8px solid rgba(56, 189, 248, 0.5);"></div>
-        <div class="p-2 d-flex justify-content-between align-items-center border-bottom" style="border-color: rgba(255,255,255,0.1) !important;">
-            <h6 class="fw-bold text-info mb-0" style="font-size: 0.8rem;"><i class="bi bi-backpack me-1"></i> TÚI ĐỒ CỦA ${shortName}</h6>
-            <button class="btn-close btn-close-white" style="font-size: 0.6rem;" onclick="document.getElementById('${popoverId}').remove()"></button>
-        </div>
-        
-        <div class="p-2 custom-scrollbar" style="max-height: 60vh; overflow-y: auto; overflow-x: hidden;">
-            <div class="d-flex align-items-center justify-content-between p-2 mb-3 shadow-sm" style="background: rgba(245, 158, 11, 0.15); border-radius: 12px; border: 1px dashed rgba(245, 158, 11, 0.4);">
-                <div class="d-flex align-items-center gap-2">
-                    <div class="rounded-circle d-flex justify-content-center align-items-center" style="width:30px; height:30px; background:rgba(0,0,0,0.3); font-size:1.2rem;">🎁</div>
-                    <div class="text-warning fw-bold" style="font-size: 0.75rem;">Cứu Sai / Trợ giúp</div>
-                </div>
-                <div class="fw-bold text-white d-flex align-items-center gap-1" style="font-size: 1.2rem;">
-                    <span style="font-size: 0.7rem; color: #facc15;">x</span>${inventory}
-                </div>
-            </div>
-            <div class="row g-1 w-100 m-0 pb-1">
-                ${itemsHtml}
-            </div>
-        </div>
-    </div>`;
-    
-    document.body.insertAdjacentHTML('beforeend', popoverHtml);
-    setTimeout(() => {
-        document.addEventListener('click', function closePopover(e) {
-            let pop = document.getElementById(popoverId);
-            let modal = document.getElementById('tier_redeem_modal');
-            if (pop && !pop.contains(e.target) && (!modal || !modal.contains(e.target))) { 
-                pop.remove(); document.removeEventListener('click', closePopover); 
-            }
-        });
-    }, 100);
-};
 
 // 🌟 HÀM TẠO ÂM THANH GAME & GIỌNG ĐỌC AI (KILLSTREAK)
 window.play_sound = function(type) {
@@ -3169,27 +2996,14 @@ window.REWARD_CONFIG = {
     "Gói Cầu Thủ Gullit 👑": { icon: "👑", shortName: "Gullit", rewardIcon: "🌈", baseMins: 0, action: "CHƠI TỰ DO", color: "#fbbf24" }
 };
 
-window.get_user_rank_html = function() {
-    let invKey = 'mcq_inventory_' + (window.current_student_id || 'guest');
-    let colKey = 'mcq_col_' + (window.current_student_id || 'guest');
-    let inv = parseInt(localStorage.getItem(invKey)) || 0;
-    let colList = []; try { colList = JSON.parse(localStorage.getItem(colKey) || "[]"); } catch(e){}
-    let totalPower = inv + (colList.length * 5); 
-
-    let rank = { icon: "🥉", color: "#d97706", name: "ĐỒNG" };
-    if (totalPower >= 100) rank = { icon: "👑", color: "#ef4444", name: "T.ĐẤU" };
-    else if (totalPower >= 50) rank = { icon: "💠", color: "#06b6d4", name: "K.CƯƠNG" };
-    else if (totalPower >= 20) rank = { icon: "🥇", color: "#eab308", name: "VÀNG" };
-    else if (totalPower >= 5) rank = { icon: "🥈", color: "#94a3b8", name: "BẠC" };
-
-    return `<div class="rounded-circle d-flex flex-column align-items-center justify-content-center shadow-inner" 
-                 style="width: 38px; height: 38px; background: rgba(0,0,0,0.5); border: 2px solid ${rank.color}; box-shadow: 0 0 10px ${rank.color}80; line-height: 1; flex-shrink: 0;" title="Lực chiến: ${totalPower}">
-                <span style="font-size: 1.2rem; margin-bottom: 1px; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5));">${rank.icon}</span>
-                <span style="font-size: 0.4rem; font-weight: 900; color: ${rank.color}; letter-spacing: 0.5px;">${rank.name}</span>
-            </div>`;
-};
 
 window.toggle_inventory_popover = function(event) {
+    // 🌟 ĐÃ FIX: Khóa mở túi đồ khi đang trong chế độ làm bài thi
+    if (window.is_study_mode === false) { 
+        if (typeof window.play_sound === 'function') window.play_sound('error'); 
+        return window.show_toast("⚠️ TÍNH NĂNG BỊ KHÓA: Không được mở túi đồ khi đang thi!", true); 
+    }
+
     if (event) event.stopPropagation();
     let popoverId = 'game_inventory_popover';
     if (document.getElementById(popoverId)) { document.getElementById(popoverId).remove(); return; } 
@@ -3675,13 +3489,18 @@ window.claim_quest = function(qNum, giftCount, itemDrop, icon) {
     if (giftCount > 0) inventory += giftCount;
     localStorage.setItem(invKey, inventory);
     
-    if (itemDrop) {
-        let colList = []; try { colList = JSON.parse(localStorage.getItem(colKey) || "[]"); } catch(e){}
-        colList.push(itemDrop);
-        localStorage.setItem(colKey, JSON.stringify(colList));
-    }
+    let finalColStr = localStorage.getItem(colKey) || "[]";
+        if (itemDrop) {
+            let colList = []; try { colList = JSON.parse(finalColStr); } catch(e){}
+            colList.push(itemDrop);
+            finalColStr = JSON.stringify(colList);
+            localStorage.setItem(colKey, finalColStr);
+        }
 
-    if (typeof window.play_sound === 'function') window.play_sound('reward');
+        // 🌟 ĐÃ FIX: Đẩy túi đồ lên Supabase ngay lập tức khi vừa nhận xong quà nhiệm vụ
+        window.sync_user_inventory(window.current_student_id, inventory, finalColStr);
+
+        if (typeof window.play_sound === 'function') window.play_sound('reward');
 
     let startX = window.innerWidth / 2;
     let startY = window.innerHeight / 2;
@@ -3981,6 +3800,15 @@ window.start_online_exam = function(ex) {
     window.away_seconds = 0;
     window.offense_count = 0; 
     window.start_time = new Date();
+
+    // 🌟 ĐÃ FIX: Ghi nhận trạng thái "Đang thi" lên Supabase ngay lập tức để Admin thấy
+    try {
+        db.from('exam_results').upsert({
+            exam_code: ex.examCode,
+            student_id: window.current_student_id,
+            is_started: true
+        }, { onConflict: 'exam_code,student_id' });
+    } catch(e) {}
 
     // 🌟 KHỞI ĐỘNG NHỊP TIM GIÁM SÁT THỜI GIAN THỰC (GIÃN CÁCH 60S CHỐNG SẬP NGUỒN)
     if (window.realtime_exam_monitor) clearInterval(window.realtime_exam_monitor);
@@ -4962,6 +4790,18 @@ window.fetch_troubleshoot_data = async function(examCode) {
         if (results) results.filter(r => r.is_submitted).forEach(r => window.current_troubleshoot_submitted[r.student_id] = r.score);
         window.current_troubleshoot_started = results ? results.filter(r => r.is_started).map(r => r.student_id) : []; 
         window.current_troubleshoot_sync = {}; window.current_troubleshoot_alerts = {};
+        
+        // 🌟 ĐÃ FIX: Đổ dữ liệu vi phạm (offenses), thời gian rời tab (away) và khóa máy (locked) từ Supabase vào biến giao diện
+        if (results) {
+            results.forEach(r => {
+                window.current_troubleshoot_sync[r.student_id] = {
+                    offenses: r.offense_count || 0,
+                    away: r.away_time || 0,
+                    active: r.is_started && !r.is_submitted && !r.is_absent
+                };
+                if (r.is_locked) window.current_troubleshoot_alerts[r.student_id] = true;
+            });
+        }
         
         let searchInput = document.getElementById('ctrl_search_student');
         window.render_troubleshoot_list(searchInput ? searchInput.value : ""); 
