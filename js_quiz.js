@@ -123,7 +123,14 @@ window.render_quiz = function() {
             mediaHtml = ''; // Ẩn thẻ ảnh mặc định
         }
         else if (currentType === 'clip_listen') {
-            let fileIdOnly = q.image ? q.image.replace('clip_', '') : '';
+            // 🌟 ĐÃ FIX: Bảo toàn nguyên vẹn URL của Supabase, chỉ cắt chữ 'clip_' nếu đó là ID Google Drive cũ
+            let safeVideoUrl = "";
+            if (q.image) {
+                safeVideoUrl = String(q.image).trim();
+                if (!safeVideoUrl.startsWith('http') && safeVideoUrl.startsWith('clip_')) {
+                    safeVideoUrl = safeVideoUrl.replace('clip_', '');
+                }
+            }
             
             let timeSteps = (q.a || q.answer || "").split("|||");
             let textSteps = (q.q || "").split("|||");
@@ -183,7 +190,7 @@ window.render_quiz = function() {
                     </button>
                 </div>
 
-                <img src="x" onerror="if(typeof window.init_clip_listen_ui === 'function') window.init_clip_listen_ui(${i}, '${fileIdOnly}')" style="display:none;">
+                <img src="x" onerror="if(typeof window.init_clip_listen_ui === 'function') window.init_clip_listen_ui(${i}, '${safeVideoUrl}')" style="display:none;">
             </div>`;
             mediaHtml = '';
         }
@@ -1853,7 +1860,7 @@ window.check_arrange_correct = function(q) {
     return userStr === correctStr;
 };
 // =====================================================================
-// 🚀 ENGINE VIDEO & DRAG-DROP (TỐI ƯU TUYỆT ĐỐI CHO IPHONE/IPAD)
+// 🚀 ENGINE VIDEO & DRAG-DROP (ĐÃ NÂNG CẤP CHO SUPABASE)
 // =====================================================================
 window.clip_intervals = {};
 
@@ -1861,65 +1868,47 @@ window.init_clip_listen_ui = function(idx, fileId) {
     window.fetch_clip_video_listen(idx, fileId);
     window.init_clip_sortable(idx);
     
-    let cardBody = document.getElementById('clip_listen_main_' + idx).closest('.card-body');
+    let cardBody = document.getElementById('clip_listen_main_' + idx).closest('.card-body, .ui2-case-panel, .glass-quiz-container, .ui3-lab-container');
     if (cardBody) {
         let titleEl = cardBody.querySelector('.card-title, .question-text, h5');
         if (titleEl) titleEl.innerHTML = '<div class="d-flex align-items-center mb-1"><i class="bi bi-music-note-list fs-3 text-warning me-2"></i><span class="text-info fw-bold fs-5">SẮP XẾP ÂM THANH</span></div>';
     }
+};
+
+window.fetch_clip_video_listen = function(idx, fileUrl) {
+    if (!fileUrl) return;
     
-    if (!window.clip_time_added) window.clip_time_added = {};
-    if (!window.clip_time_added[idx]) {
-        window.clip_time_added[idx] = true;
-        if (typeof window.total_time !== 'undefined') window.total_time += 540;
-        if (typeof window.remaining_time !== 'undefined') window.remaining_time += 540;
-        if (typeof window.time_limit !== 'undefined') window.time_limit += 540;
-    }
-};
-
-// 🌟 Hàm hỗ trợ giải mã Base64 sang Blob (Đặc trị cho iPad)
-window.b64toBlob_clip = function(b64Data, contentType='', sliceSize=512) {
-    const byteCharacters = atob(b64Data);
-    const byteArrays = [];
-    for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
-        const slice = byteCharacters.slice(offset, offset + sliceSize);
-        const byteNumbers = new Array(slice.length);
-        for (let i = 0; i < slice.length; i++) {
-            byteNumbers[i] = slice.charCodeAt(i);
-        }
-        byteArrays.push(new Uint8Array(byteNumbers));
-    }
-    return new Blob(byteArrays, {type: contentType});
-};
-
-window.fetch_clip_video_listen = function(idx, fileId) {
-    if (!fileId || typeof google === 'undefined') return;
+    let vidEl = document.getElementById('student_clip_vid_' + idx);
     let loadingEl = document.getElementById('clip_loading_' + idx);
+    
+    if (!vidEl) return;
 
-    google.script.run
-        .withFailureHandler(function(err) {
-            if (loadingEl) loadingEl.innerHTML = '<div class="text-danger small fw-bold">Lỗi tải Video</div>';
-        })
-        .withSuccessHandler(function(res) {
-            let vidEl = document.getElementById('student_clip_vid_' + idx);
-            if (!res || !res.success || !vidEl) return;
+    // 🌟 ĐÃ FIX: Hỗ trợ chạy ĐỒNG THỜI Link Supabase mới VÀ ID Google Drive cũ
+    let finalUrl = fileUrl;
+    if (!finalUrl.startsWith('http')) {
+        // Biến ID cũ thành link stream trực tiếp từ Google Drive
+        finalUrl = 'https://drive.google.com/uc?export=download&id=' + fileUrl;
+    }
 
-            let base64str = res.data;
-            if (!base64str.startsWith('data:')) {
-                base64str = 'data:video/mp4;base64,' + base64str;
-            }
-            
-            vidEl.src = base64str;
-
+    if (/^https?:\/\//i.test(finalUrl)) {
+        vidEl.src = finalUrl;
+        
+        vidEl.setAttribute('playsinline', '');
+        vidEl.setAttribute('webkit-playsinline', '');
+        vidEl.setAttribute('preload', 'auto');
+        vidEl.muted = false; 
+        
+        vidEl.addEventListener('loadeddata', () => {
             if (loadingEl) loadingEl.remove();
-            
-            vidEl.setAttribute('playsinline', '');
-            vidEl.setAttribute('webkit-playsinline', '');
-            vidEl.setAttribute('preload', 'auto');
-            vidEl.muted = false; 
             vidEl.style.display = 'block';
-            vidEl.load(); 
-        })
-        .getClipBase64(fileId);
+        });
+        
+        vidEl.addEventListener('error', () => {
+            if (loadingEl) loadingEl.innerHTML = '<div class="text-danger small fw-bold">Lỗi kết nối Video! Vui lòng kiểm tra lại link.</div>';
+        });
+    } else {
+        if (loadingEl) loadingEl.innerHTML = '<div class="text-danger small fw-bold">Định dạng URL Video không hợp lệ!</div>';
+    }
 };
 
 // Hàm phát audio thuần túy, sạch sẽ
@@ -1927,11 +1916,12 @@ window.play_audio_slice = function(idx, start, end) {
     let vidEl = document.getElementById('student_clip_vid_' + idx);
     if (!vidEl || isNaN(start) || isNaN(end)) return;
 
+    // 🌟 ĐÃ FIX: Bắt buộc tua đến đúng giây trước rồi mới Play để luồng Audio không bị kẹt
+    vidEl.currentTime = start;
     let playPromise = vidEl.play();
     
     if (playPromise !== undefined) {
         playPromise.then(() => {
-            vidEl.currentTime = start;
             if (window.clip_intervals[idx]) clearInterval(window.clip_intervals[idx]);
             window.clip_intervals[idx] = setInterval(() => {
                 if (vidEl.currentTime >= end) {
@@ -1941,10 +1931,10 @@ window.play_audio_slice = function(idx, start, end) {
             }, 100);
         }).catch(error => {
             console.log('Bị chặn Play do thiết bị (iPad/PC):', error);
-            // Cố thử mẹo tắt tiếng -> Play -> Bật lại
+            // Mẹo lách luật Safari/Chrome: Tắt tiếng -> Tua -> Play -> Bật tiếng
             vidEl.muted = true;
+            vidEl.currentTime = start;
             vidEl.play().then(() => {
-                vidEl.currentTime = start;
                 vidEl.muted = false;
             }).catch(e => console.log('Chặn hoàn toàn', e));
         });

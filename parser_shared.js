@@ -1088,33 +1088,6 @@ window.direct_save_single_question = async function(idx) {
     }
 };
 
-window.delete_question_direct = function(idx) {
-    show_alert("XÁC NHẬN XÓA", "Thầy chắc chắn muốn xóa vĩnh viễn câu này khỏi Supabase chứ?", async function(ans) {
-        if (!ans) return;
-        let targetQ = questions[idx];
-        let qId = targetQ.id; // Lấy ID của câu để xóa
-
-        if (!qId) return show_toast("⚠️ Câu hỏi chưa được đồng bộ, không thể xóa!", true);
-        
-        let btnDelete = document.querySelector(`button[onclick="delete_question_direct(${idx})"]`);
-        if(btnDelete) btnDelete.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-
-        try {
-            const { error } = await db.from('questions').delete().match({ id: qId });
-            if (error) throw error;
-            
-            show_toast("✅ Xóa câu hỏi thành công!");
-            
-            let finalSubjectKey = window.current_subject || window.temp_subject_key;
-            let iconEl = document.createElement("i");
-            window.refresh_subject_data(finalSubjectKey, iconEl);
-            
-        } catch (err) {
-            alert("Lỗi khi xóa: " + err.message);
-            if(btnDelete) btnDelete.innerHTML = `<i class="bi bi-trash-fill fs-6"></i>`;
-        }
-    });
-};
 // =========================================================================
 // 💾 HÀM LƯU DỮ LIỆU TẠM THỜI VÀO MẢNG
 // =========================================================================
@@ -1164,27 +1137,39 @@ window.save_question_form_data = function(idx) {
     render_admin_panel();
 };
 
-// XÓA ĐỒNG BỘ TRỰC TIẾP
 window.delete_question_direct = function(idx) {
-    show_alert("XÁC NHẬN XÓA", "Thầy chắc chắn muốn xóa vĩnh viễn câu này khỏi Google Sheets chứ?", function(ans) {
+    let q = window.questions[idx];
+    let qText = (q.q || "câu hỏi này").replace(/<[^>]*>?/gm, '').substring(0, 60) + "...";
+    
+    window.show_alert("CẢNH BÁO XÓA", `Thầy có chắc chắn muốn xóa vĩnh viễn:<br><b class="text-warning">"${qText}"</b>?`, async function(ans) {
         if (!ans) return;
-        let targetQ = questions[idx];
-        let originalQ = targetQ.original_q || targetQ.q;
         
-        let btnDelete = document.querySelector(`button[onclick="delete_question_direct(${idx})"]`);
-        if(btnDelete) btnDelete.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
-
-        google.script.run
-            .withSuccessHandler(function(msg) {
-                questions.splice(idx, 1);
-                render_admin_panel();
-                show_toast(msg);
-            })
-            .withFailureHandler(function(err) {
-                alert("Lỗi khi xóa: " + err);
-                if(btnDelete) btnDelete.innerHTML = `<i class="bi bi-trash-fill fs-6"></i>`;
-            })
-            .syncSingleQuestionToSheet(current_subject, "delete", targetQ, originalQ);
+        window.show_toast("⏳ Đang xử lý xóa...");
+        let rowEl = document.getElementById('admin_row_' + idx);
+        if (rowEl) rowEl.style.opacity = '0.4'; // Làm mờ câu hỏi đang bị xóa
+        
+        try {
+            // 🌟 Gọi lệnh xóa trực tiếp bằng ID trên bảng questions của Supabase
+            const { error } = await window.db.from('questions').delete().eq('id', q.id);
+            if (error) throw error;
+            
+            window.show_toast("✅ Đã xóa câu hỏi thành công!");
+            
+            // Xóa khỏi mảng dữ liệu đang hiển thị trên màn hình
+            window.questions.splice(idx, 1);
+            
+            // Xóa khỏi Kho dữ liệu tổng (để không bị hiện lại khi chuyển tab)
+            if (window.full_data && window.full_data[window.current_subject]) {
+                window.full_data[window.current_subject] = window.full_data[window.current_subject].filter(item => item.id !== q.id);
+            }
+            
+            // Vẽ lại giao diện Admin để câu hỏi biến mất ngay lập tức
+            if (typeof window.render_admin_panel === 'function') window.render_admin_panel();
+            
+        } catch (err) {
+            if (rowEl) rowEl.style.opacity = '1';
+            window.show_toast("❌ Lỗi xóa câu hỏi: " + err.message, true);
+        }
     });
 };
 

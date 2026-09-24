@@ -1,10 +1,12 @@
-window.clip_temp_base64 = ""; window.clip_pending_list = []; window.clip_edit_index = -1;
+window.clip_current_file = null; // 🌟 Dùng File gốc thay vì Base64
+window.clip_pending_list = []; 
+window.clip_edit_index = -1;
 
 window.open_clip_creator_modal = function() {
     let oldModal = document.getElementById('clip_creator_modal');
     if(oldModal) oldModal.remove();
 
-    window.clip_temp_base64 = ""; window.clip_pending_list = []; window.clip_edit_index = -1;
+    window.clip_current_file = null; window.clip_pending_list = []; window.clip_edit_index = -1;
     let currentLessonNum = window.selected_lessons_text || "1";
     let currentLessonName = window.lessonNames?.[window.current_subject]?.[currentLessonNum] || "";
 
@@ -13,7 +15,7 @@ window.open_clip_creator_modal = function() {
         
         <div class="glass-panel p-2 p-md-3 shadow-lg w-100 h-100 d-flex flex-column flex-lg-row gap-3" style="max-width: 1400px; max-height: 96vh; border-radius: 16px; background: rgba(15, 23, 42, 0.95) !important; border: 1px solid #0ea5e9;">
             
-            <!-- 🌟 CỘT TRÁI (7 PHẦN): VIDEO BẤM LÀ TẢI -->
+            <!-- 🌟 CỘT TRÁI: VIDEO BẤM LÀ TẢI -->
             <div class="flex-grow-1 h-100 bg-dark rounded-3 border border-secondary position-relative d-flex flex-column align-items-center justify-content-center overflow-hidden p-0">
                 <input type="file" id="clip_file_input" class="d-none" accept="video/mp4" onchange="window.preview_clip_video(this)">
                 
@@ -31,7 +33,7 @@ window.open_clip_creator_modal = function() {
                 </div>
             </div>
 
-            <!-- 🌟 CỘT PHẢI (3 PHẦN): BẢNG SOẠN THẢO SIÊU TỐC -->
+            <!-- 🌟 CỘT PHẢI: BẢNG SOẠN THẢO SIÊU TỐC -->
             <div class="d-flex flex-column h-100" style="width: 100%; max-width: 380px; flex-shrink: 0;">
                 
                 <div class="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
@@ -88,15 +90,19 @@ window.open_clip_creator_modal = function() {
 
 window.preview_clip_video = function(input) {
     if (input.files && input.files[0]) {
-        let file = input.files[0]; if (file.size > 15 * 1024 * 1024) return window.show_toast("⚠️ File Video quá lớn!", true);
-        let reader = new FileReader();
-        reader.onload = function(e) {
-            window.clip_temp_base64 = e.target.result; window.clip_current_video_id = null;
-            let vid = document.getElementById('clip_vid_preview'); vid.src = e.target.result;
-            document.getElementById('clip_upload_label').classList.add('d-none');
-            document.getElementById('clip_vid_container').classList.remove('d-none');
-            document.getElementById('clip_vid_container').classList.add('d-flex');
-        }; reader.readAsDataURL(file);
+        let file = input.files[0]; 
+        if (file.size > 20 * 1024 * 1024) return window.show_toast("⚠️ File Video quá lớn (Tối đa 20MB)!", true);
+        
+        // 🌟 ĐÃ FIX: Không tạo Base64 nữa, lưu trực tiếp File object
+        window.clip_current_file = file; 
+        
+        let vid = document.getElementById('clip_vid_preview'); 
+        // 🌟 Tạo đường dẫn ảo để Play video ngay lập tức không tốn RAM
+        vid.src = URL.createObjectURL(file); 
+        
+        document.getElementById('clip_upload_label').classList.add('d-none');
+        document.getElementById('clip_vid_container').classList.remove('d-none');
+        document.getElementById('clip_vid_container').classList.add('d-flex');
     }
 };
 
@@ -200,18 +206,70 @@ window.render_clip_pending_list = function() {
     container.innerHTML = html;
 };
 
-window.generate_clip_ai = function() {
-    let qInput = document.getElementById('clip_question'); let hintInput = document.getElementById('clip_hint'); let keyword = qInput.value.trim();
+window.generate_clip_ai = async function() {
+    let qInput = document.getElementById('clip_question'); 
+    let hintInput = document.getElementById('clip_hint'); 
+    let keyword = qInput.value.trim();
     if (!keyword) return window.show_toast("⚠️ Hãy nhập nhiệm vụ / kịch bản vào ô rồi bấm AI!", true);
+    
+    let apiKey = localStorage.getItem("GEMINI_API_KEY");
+    if (!apiKey) {
+        apiKey = prompt("Vui lòng nhập API Key Gemini của thầy để dùng tính năng AI:");
+        if (!apiKey) return;
+        localStorage.setItem("GEMINI_API_KEY", apiKey.trim());
+    }
+
     qInput.value = "⏳ AI đang xử lý...";
-    google.script.run.withSuccessHandler(res => { if(res.success){ qInput.value = res.q; hintInput.value = res.hint; window.show_toast("🪄 Xong!"); } else { qInput.value = keyword; window.show_toast("❌ Lỗi AI", true); } }).generateClipAI(keyword);
+    
+    let promptText = "Tôi đang tạo câu hỏi Luyện Nghe Video. Nội dung cần nghe là: '" + keyword + "'.\n" +
+                 "Nhiệm vụ của bạn:\n" +
+                 "1. Tạo câu lệnh yêu cầu học viên nghe video và chạm vào màn hình khi video phát tới câu này. TRONG CÂU LỆNH, BẮT BUỘC dùng cú pháp Magic Vocab để bọc câu đó lại: {{Câu_tiếng_Anh::IPA::Nghĩa_tiếng_Việt}}.\n" +
+                 "2. Viết 1 câu giải thích (hint) ngắn gọn về ý nghĩa hoặc cách dùng.\n\n" +
+                 "Trả về định dạng JSON (không giải thích thêm):\n" +
+                 "{\n" +
+                 "  \"q\": \"Hãy bấm Play và chạm vào màn hình khi đoạn clip phát tới câu: {{I feel a sharp pain::/aɪ fiːl ə ʃɑrp peɪn/::Tôi cảm thấy đau nhói}}.\",\n" +
+                 "  \"hint\": \"Câu này bệnh nhân dùng để mô tả triệu chứng.\"\n" +
+                 "}";
+
+    try {
+        let res = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=" + apiKey, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: promptText }] }],
+                generationConfig: { response_mime_type: "application/json" }
+            })
+        });
+        
+        let data = await res.json();
+        if (data.error) {
+            if (data.error.code === 400 && data.error.message.includes("API key not valid")) {
+                localStorage.removeItem("GEMINI_API_KEY"); // Xóa key lỗi
+                throw new Error("API Key không hợp lệ hoặc đã hết hạn!");
+            }
+            throw new Error(data.error.message);
+        }
+        
+        let text = data.candidates[0].content.parts[0].text.replace(/```json/g, '').replace(/```/g, '').trim();
+        let parsed = JSON.parse(text);
+        
+        qInput.value = parsed.q;
+        hintInput.value = parsed.hint;
+        window.show_toast("🪄 Xong!");
+    } catch (err) {
+        qInput.value = keyword; 
+        window.show_toast("❌ Lỗi AI: " + err.message, true);
+    }
 };
 
 window.submit_all_clips = function() {
-    if (!window.clip_temp_base64) return window.show_toast("⚠️ Thầy chưa tải Video lên!", true);
+    // 🌟 ĐÃ FIX: Bắt lỗi nếu chưa có File gốc
+    if (!window.clip_current_file) return window.show_toast("⚠️ Thầy chưa tải Video lên!", true);
     if (window.clip_pending_list.length === 0) return window.show_toast("⚠️ Danh sách chờ đang trống!", true);
     
-    let btn = document.getElementById('btn_save_all_clips'); btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`; btn.classList.add('disabled');
+    let btn = document.getElementById('btn_save_all_clips'); 
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`; 
+    btn.classList.add('disabled');
 
     let qArr=[], hintArr=[], ansArr=[], optAArr=[], optBArr=[], optCArr=[], optDArr=[];
 
@@ -224,7 +282,7 @@ window.submit_all_clips = function() {
 
         qArr.push(item.en); hintArr.push(item.vi); 
         
-        // 🌟 BẢO MẬT DỮ LIỆU: GÓI THỜI GIAN VÀ ĐÁP ÁN VÀO 1 CHUỖI ĐỂ TRÁNH SHEETS XÓA MẤT (VD: 0|2#A)
+        // GÓI THỜI GIAN VÀ ĐÁP ÁN
         let combinedAns = `${item.start}|${item.end}#${correctLetter}`;
         ansArr.push(combinedAns);
         
@@ -233,44 +291,65 @@ window.submit_all_clips = function() {
 
     let lesson = document.getElementById('clip_lesson').value.trim();
     let lessonname = document.getElementById('clip_lessonname').value.trim();
+    let subject_key = window.current_subject || window.temp_subject_key || 'tienganh';
 
     let finalizeSave = async function(videoUrl) {
         let payload = {
-            subject_key: window.current_subject || window.temp_subject_key || 'tienganh',
-            lesson: lesson, type: "clip_listen", level: 2, 
-            q: qArr.join(" ||| "), hint: hintArr.join(" ||| "), 
-            a: ansArr.join(" ||| "), answer: ansArr.join(" ||| "), 
-            opta: optAArr.join(" ||| "), optb: optBArr.join(" ||| "), optc: optCArr.join(" ||| "), optd: optDArr.join(" ||| "),
-            lessonname: lessonname, image: videoUrl, original_q: "Interactive Listening"
+            subject_key: subject_key,
+            lesson: lesson, 
+            type: "clip_listen", 
+            level: '2', 
+            q: qArr.join(" ||| "), 
+            hint: hintArr.join(" ||| "), 
+            answer: ansArr.join(" ||| "), 
+            opt_a: optAArr.join(" ||| "), 
+            opt_b: optBArr.join(" ||| "), 
+            opt_c: optCArr.join(" ||| "), 
+            opt_d: optDArr.join(" ||| "),
+            lessonname: lessonname, 
+            multimedia: videoUrl, 
+            navigation: "Interactive Listening"
         };
 
         try {
             const { error } = await db.from('questions').insert([payload]);
             if (error) throw error;
+            
             window.show_toast(`🎉 Đã đẩy Kịch bản ${window.clip_pending_list.length} câu lên Supabase!`); 
             document.getElementById('clip_creator_modal').remove(); 
-            if (typeof render_admin_panel === 'function') render_admin_panel();
+            
+            // Xóa sạch dấu vết
+            window.clip_current_file = null; 
+            window.clip_pending_list = [];
+            
+            if (typeof render_admin_panel === 'function') {
+                window.refresh_subject_data(subject_key, document.querySelector('.bi-arrow-clockwise') || document.createElement('i'));
+            }
         } catch (err) {
             window.show_toast("❌ Lỗi lưu dữ liệu: " + err.message, true); 
-            btn.innerHTML = `<i class="bi bi-cloud-arrow-up-fill fs-3"></i>`; btn.classList.remove('disabled');
+            btn.innerHTML = `<i class="bi bi-cloud-arrow-up-fill fs-3"></i>`; 
+            btn.classList.remove('disabled');
         }
     };
 
-    // Đẩy video lên Supabase Storage
+    // 🌟 ĐÃ FIX: Đẩy thẳng File Object nguyên bản lên Supabase Storage (Không gọi hàm fetch)
     (async function uploadVideo() {
         try {
-            let res = await fetch(window.clip_temp_base64);
-            let blob = await res.blob();
-            let fileName = `clip_${Date.now()}.mp4`;
+            let fileName = `clip_${subject_key}_L${lesson}_${Date.now()}.mp4`; 
             
-            const { data, error } = await db.storage.from('media').upload(fileName, blob);
+            const { data, error } = await db.storage.from('media').upload(fileName, window.clip_current_file, {
+                cacheControl: '3600',
+                upsert: false,
+                contentType: 'video/mp4' // 🌟 BẮT BUỘC CÓ DÒNG NÀY ĐỂ SUPABASE XUẤT AUDIO
+            });
             if (error) throw error;
             
             let publicUrl = db.storage.from('media').getPublicUrl(fileName).data.publicUrl;
             finalizeSave(publicUrl);
         } catch (err) {
             window.show_toast("❌ Lỗi tải Video lên Supabase: " + err.message, true); 
-            btn.innerHTML = `<i class="bi bi-cloud-arrow-up-fill fs-3"></i>`; btn.classList.remove('disabled');
+            btn.innerHTML = `<i class="bi bi-cloud-arrow-up-fill fs-3"></i>`; 
+            btn.classList.remove('disabled');
         }
     })();
 };
