@@ -1,117 +1,4 @@
 // =========================================================================
-// 📌 BẢN ĐÃ DỌN CHO SUPABASE (gỡ Google Apps Script) - cập nhật 21/09/2026
-// =========================================================================
-// ĐỢT 1 (dọn GAS):
-//  1. Thay toàn bộ google.script.run bằng lớp trung gian Supabase bên dưới
-//     (trừ "phòng luyện âm" - GAS trả về HTML, cần dựng lại thành trang riêng).
-//  2. Gỡ 13 hàm khai báo trùng tên (bản cũ bị ghi đè, nay xoá hẳn).
-//  3. Sửa lỗi JSON.parse(questions_json) làm học sinh không vào được phòng thi.
-//  4. Sửa onConflict: 'exam_code,student_id' (bỏ dấu cách) ở 6 chỗ.
-//
-// ĐỢT 2 (bảo mật + lỗi còn lại):
-//  5. 🔒 Đăng nhập (mật khẩu + Face ID) chuyển sang gọi RPC login_user() /
-//     login_by_passkey() — client KHÔNG BAO GIỜ nhận lại cột password nữa.
-//     BẮT BUỘC chạy SQL tạo 2 RPC này (xem khối SQL bên dưới), nếu không
-//     đăng nhập sẽ báo lỗi "could not find function".
-//  6. Rút gọn select('*') trên bảng users ở fetch_troubleshoot_data (không
-//     cần cột password). Bảng quản lý tài khoản (render_user_management)
-//     vẫn cần đọc password vì giao diện admin đang cho sửa trực tiếp — xem
-//     mục ⚠️ CÒN TỒN ĐỌNG bên dưới.
-//  7. Sửa lỗi mất lịch Mở/Đóng khi bấm "SỬA" một đề thi: code đọc nhầm
-//     ex.autoOpen/ex.autoClose (camelCase) trong khi cột thật là auto_open/
-//     auto_close -> mỗi lần sửa đề là lịch hẹn giờ bị xoá về null.
-//  8. Sửa lệch múi giờ: giá trị <input type="datetime-local"> là giờ máy,
-//     không có offset — trước đây lưu thẳng vào cột timestamptz nên bị lệch
-//     theo múi giờ server. Nay đổi qua ISO UTC bằng window.dtlocal_to_iso()
-//     trước khi lưu.
-//  9. Gộp .ilike('subject_key', key).range(0, 9999) (4 chỗ) thành 1 hàm dùng
-//     chung window.fetch_all_questions() — dùng .eq() thay .ilike() (tránh
-//     %, _ bị hiểu thành ký tự đại diện) và tự phân trang thay vì cứng giới
-//     hạn 10.000 câu/môn.
-//  10. Gỡ 2 biến toàn cục khai báo bằng `let` không bao giờ được gán giá trị
-//      (timer_interval/time_left/start_time/is_exam_started/is_study_mode)
-//      — 4 chỗ gọi clearInterval(timer_interval) test nhầm biến chết này,
-//      nay chỉ còn kiểm tra window.timer_interval (biến thật đang chạy).
-//  11. window.onload = ... đổi thành window.addEventListener('load', ...)
-//      để không ghi đè onload của các file .js khác lỡ khai báo sau.
-//
-// ⚠️ BẮT BUỘC CHẠY SQL SAU TRÊN SUPABASE (SQL Editor) ĐỂ ĐĂNG NHẬP HOẠT ĐỘNG:
-/*
-create or replace function public.login_user(p_student_id text, p_password text)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare u record;
-begin
-  select * into u from public.users
-    where student_id ilike p_student_id and password = p_password
-    limit 1;
-  if not found then
-    return jsonb_build_object('success', false);
-  end if;
-  return jsonb_build_object(
-    'success', true, 'student_id', u.student_id, 'full_name', u.full_name,
-    'role', u.role, 'permissions', u.permissions,
-    'inventory', u.inventory, 'collectibles', u.collectibles
-  );
-end;
-$$;
-
-create or replace function public.login_by_passkey(p_student_id text, p_passkey_id text)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare u record;
-begin
-  select * into u from public.users
-    where student_id ilike p_student_id and passkey_id = p_passkey_id
-    limit 1;
-  if not found then
-    return jsonb_build_object('success', false);
-  end if;
-  return jsonb_build_object(
-    'success', true, 'student_id', u.student_id, 'full_name', u.full_name,
-    'role', u.role, 'permissions', u.permissions,
-    'inventory', u.inventory, 'collectibles', u.collectibles
-  );
-end;
-$$;
-
--- Chỉ cho phép gọi 2 hàm trên qua RPC, không ai đọc trực tiếp được bảng users:
-revoke all on function public.login_user(text, text) from public;
-grant execute on function public.login_user(text, text) to anon, authenticated;
-revoke all on function public.login_by_passkey(text, text) from public;
-grant execute on function public.login_by_passkey(text, text) to anon, authenticated;
-*/
-//
-// ⚠️ CÒN TỒN ĐỌNG — KHÔNG SỬA ĐƯỢC CHỈ BẰNG JS, CẦN THẦY QUYẾT ĐỊNH:
-//  a) Ứng dụng đang dùng chung 1 "anon key" cho mọi người — Supabase không có
-//     cách nào phân biệt "trình duyệt của admin" với "trình duyệt của học
-//     sinh" trừ khi chuyển sang Supabase Auth thật (đăng nhập cấp session).
-//     Vì vậy chưa thể bật RLS theo kiểu "chỉ admin mới xoá/sửa được" một
-//     cách an toàn triệt để — ai rành DevTools vẫn gọi thẳng được API nếu cố
-//     tình. RPC ở trên chặn được việc LỘ MẬT KHẨU (rủi ro lớn nhất), nhưng
-//     không chặn được người có ý đồ gọi thẳng update/delete trên bảng nếu
-//     RLS không khoá. Muốn triệt để cần migrate sang Supabase Auth — đây là
-//     việc lớn hơn, nói với mình nếu thầy muốn làm tiếp.
-//  b) Bảng "Quản lý tài khoản" (render_user_management) đang hiển thị MẬT
-//     KHẨU DẠNG CHỮ THƯỜNG ngay trên giao diện admin để sửa trực tiếp. Đây
-//     là lựa chọn thiết kế có sẵn từ trước (không phải lỗi mới phát sinh) —
-//     nếu thầy muốn, mình đổi thành nút "Đặt lại mật khẩu" (không hiển thị
-//     mật khẩu cũ) ở lượt sau.
-//  c) offense_count/away_time (chống gian lận) vẫn do chính trình duyệt học
-//     sinh tự báo cáo lên — học sinh sửa code rồi tự ghi 0 vẫn được, vì máy
-//     chủ không có cách nào tự kiểm tra việc rời tab. Đây là giới hạn kỹ
-//     thuật chung của giám sát phía client, GAS cũ cũng vậy.
-//  d) UNIQUE(exam_code, student_id) cho bảng exam_results, cột passkey_id
-//     cho bảng users, bảng student_progress/study_logs: vẫn cần tạo như đã
-//     ghi ở bản trước nếu thầy chưa làm.
-// =========================================================================
-// =========================================================================
 // 🎯 PHẦN 1: KHAI BÁO BIẾN TOÀN CỤC (ĐỒNG BỘ LIÊN MODULE WINDOW SCOPE)
 // =========================================================================
 window.isGridReady = typeof window.isGridReady !== 'undefined' ? window.isGridReady : false; 
@@ -189,7 +76,10 @@ window.fetch_user_history = async function(studentId) {
         lesson  : r.lesson || r.lesson_name || r.lesson_id || '',
         score   : r.score,
         total   : r.total,
-        time    : r.time || r.created_at
+        time    : r.time || r.created_at,
+        mode    : r.mode || '',             // 🌟 BỔ SUNG: Kéo dữ liệu chế độ làm bài (Thi Thật/Ôn Tập)
+        device  : r.device || '',           // 🌟 BỔ SUNG: Kéo thiết bị
+        student : r.student_id || ''        // 🌟 BỔ SUNG: Kéo mã sinh viên
     }));
 };
 
@@ -270,18 +160,22 @@ window.check_realtime_exam_status = async function(examCode, studentId) {
 // Yêu cầu: bảng users có thêm cột text `passkey_id`.
 window.save_device_passkey = async function(studentId, passkeyId) {
     try {
-        const { error } = await db.from(window.SUPA_TABLES.users)
-            .update({ passkey_id: passkeyId }).ilike('student_id', studentId);
+        const { error } = await db.from('users')
+            .update({ passkey_id: passkeyId })
+            .ilike('student_id', studentId);
         if (error) throw error;
         return { success: true, message: '✅ Đã liên kết thiết bị thành công!' };
     } catch (err) {
-        return { success: false, message: '❌ Lỗi lưu Passkey: ' + err.message + '\n(Kiểm tra bảng users đã có cột passkey_id chưa)' };
+        return { success: false, message: '❌ Lỗi lưu Passkey: ' + err.message };
     }
 };
+
 window.get_device_passkey = async function(studentId) {
     try {
-        const { data, error } = await db.from(window.SUPA_TABLES.users)
-            .select('student_id, passkey_id').ilike('student_id', studentId).maybeSingle();
+        const { data, error } = await db.from('users')
+            .select('student_id, passkey_id')
+            .ilike('student_id', studentId)
+            .maybeSingle();
         if (error) throw error;
         if (!data || !data.passkey_id) return { success: false, message: '⚠️ Tài khoản này chưa liên kết Face ID trên hệ thống!' };
         return { success: true, passkeyId: data.passkey_id };
@@ -469,11 +363,13 @@ window.check_access = async function() {
     errorEl.style.display = 'block';
 
     try {
-        // 🔒 Đăng nhập qua RPC login_user() — mật khẩu được so ngay trong Postgres,
-        // client KHÔNG BAO GIỜ nhận lại được cột password (xem SQL ở đầu file).
+        // 🔒 Đăng nhập qua RPC login_user()
         const { data, error } = await db.rpc('login_user', { p_student_id: id, p_password: pass });
         
-        if (error || !data || data.success === false) {
+        // 🌟 XỬ LÝ QUAN TRỌNG: Supabase RPC trả về dạng Mảng (Array), cần bóc ra Object đầu tiên
+        let userData = Array.isArray(data) ? data[0] : data;
+
+        if (error || !userData || userData.success === false) {
             errorEl.innerHTML = `<div style="color: #dc3545; font-size: 0.85rem; margin-top: 10px; font-weight: bold;">⚠️ ID hoặc Mật khẩu không chính xác!</div>`;
             return;
         }
@@ -482,7 +378,7 @@ window.check_access = async function() {
         localStorage.setItem('mcq_saved_id', id);
         localStorage.setItem('mcq_saved_pass', pass);
 
-        window.apply_login_success(data);
+        window.apply_login_success(userData);
     } catch(err) {
         errorEl.innerHTML = `<div style="color: #dc3545; font-size: 0.85rem; margin-top: 10px; font-weight: bold;">⚠️ Lỗi máy chủ Supabase: ${err.message}</div>`;
     }
@@ -492,9 +388,10 @@ window.check_access = async function() {
 // cho cả đăng nhập bằng mật khẩu (login_user) và đăng nhập Face ID (login_by_passkey).
 window.apply_login_success = function(data) {
         window.current_user_role = String(data.role || 'k12').trim().toLowerCase(); 
+        window.current_class_code = data.class_code || ''; // 🎯 QUAN TRỌNG: LƯU MÃ LỚP CỦA SINH VIÊN
         window.login_time = new Date().toLocaleString('vi-VN');
         window.current_student_id = data.student_id;
-        window.current_student_name = data.full_name || data.student_id; // Đã đổi thành full_name
+        window.current_student_name = data.full_name || data.student_id;
         
         let serverInventory = parseInt(data.inventory) || 0;
         let serverCol = data.collectibles || "[]";
@@ -1625,7 +1522,6 @@ window.toggle_q_card = function(idx) {
 // 🏢 PHẦN 6: QUẢN TRỊ TRUNG TÂM (ADMIN HUB)
 // =========================================================================
 window.render_admin_hub = function() {
-    // 🌟 ĐÃ FIX: Ẩn ngay nhật ký ôn tập khi vào Menu Admin
     const historyArea = document.getElementById('history_view_area');
     if (historyArea) historyArea.style.display = 'none';
 
@@ -1653,8 +1549,6 @@ window.render_admin_hub = function() {
         html += `
         <div class="col-12 px-2 mb-3 animate__animated animate__fadeInDown">
             <div class="d-flex align-items-center justify-content-center gap-3 w-100" style="background: transparent; border: none; flex-wrap: wrap;">
-                
-                <!-- Nhóm Avatar + Lời chào (RANK HỆ THỐNG) -->
                 <div class="d-flex align-items-center gap-2">
                     ${window.get_user_rank_html()}
                     <div class="text-white-50 fw-bold" style="font-size: 0.85rem; line-height: 1.2;">
@@ -1662,59 +1556,150 @@ window.render_admin_hub = function() {
                         <span class="text-danger">${studentNameDisplay}</span>
                     </div>
                 </div>
-
-                <!-- Vạch ngăn cách mờ -->
                 <div class="text-white-50 opacity-25 d-none d-sm-block">|</div>
-
-                <!-- Nhóm Ví Quà (Đã gắn lệnh Click) -->
                 <div id="dashboard_inventory_badge" class="d-flex align-items-center gap-1 stat-card-hover" title="Bấm để mở Túi Đồ" style="cursor: pointer;" onclick="window.toggle_inventory_popover(event)">
                     <span style="font-size: 1.1rem; line-height: 1;">🎁</span>
                     <span class="text-warning fw-bold" style="font-size: 0.95rem;" id="dashboard_inventory_count">${inventoryCount}</span>
                 </div>
-
-                <!-- Vạch ngăn cách mờ -->
                 <div class="text-white-50 opacity-25">|</div>
-                
-                <!-- Nút Đăng Ký Face ID -->
                 <div class="d-flex align-items-center stat-card-hover text-info" title="Liên kết khuôn mặt (Face ID)" style="cursor: pointer;" onclick="window.setup_face_id()">
                     <i class="bi bi-person-bounding-box fs-5"></i>
                 </div>
-
-                <!-- Vạch ngăn cách mờ -->
                 <div class="text-white-50 opacity-25">|</div>
-
-                <!-- Nút Đăng Xuất -->
                 <div class="d-flex align-items-center stat-card-hover text-danger" title="Đăng xuất" style="cursor: pointer;" onclick="window.logout_user()">
                     <i class="bi bi-box-arrow-right fs-5"></i>
                 </div>
-
             </div>
         </div>`;
     } else {
         html += `
         <div class="col-12 px-2 mb-3">
             <div class="d-flex justify-content-between align-items-center w-100" style="background: transparent; border: none;">
-                <!-- 🌟 ĐÃ FIX: Đồng bộ chuẩn kích thước nút Thoát -->
                 <button class="btn btn-sm fw-bold text-white-50 p-0 d-flex align-items-center" onclick="window.render_student_subject_list(window.current_user_role)" style="background: transparent; border: none; font-size: 0.9rem; letter-spacing: 0.5px;"><i class="bi bi-arrow-left me-1"></i>Quay lại</button>
             </div>
         </div>`;
     }
 
     if (canManageBanks) html += `<div class="col-12 mb-1 animate__animated animate__fadeInUp" style="animation-delay: 0.05s;"><div class="p-2 d-flex align-items-center gap-3" style="cursor:pointer; border: none; transition: transform 0.2s; background: transparent;" ${hoverEffect} onclick="window.render_student_subject_list('all')"><div style="width: 35px; text-align: center;"><i class="bi bi-card-checklist text-info" style="${iconStyle}"></i></div><h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">QUẢN LÝ TRẮC NGHIỆM</h6></div></div>`;
-    
-    // Nút Menu mới: Quản lý Phòng Thi Online
     if (canManageBanks) html += `<div class="col-12 mb-1 animate__animated animate__fadeInUp" style="animation-delay: 0.08s;"><div class="p-2 d-flex align-items-center gap-3" style="cursor:pointer; border: none; transition: transform 0.2s; background: transparent;" ${hoverEffect} onclick="window.render_exam_management()"><div style="width: 35px; text-align: center;"><i class="bi bi-laptop text-warning" style="${iconStyle}"></i></div><h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">QUẢN LÝ PHÒNG THI ONLINE</h6></div></div>`;
-    
     if (canManageSubjects) html += `<div class="col-12 mb-1 animate__animated animate__fadeInUp" style="animation-delay: 0.1s;"><div class="p-2 d-flex align-items-center gap-3" style="cursor:pointer; border: none; transition: transform 0.2s; background: transparent;" ${hoverEffect} onclick="window.render_subject_management()"><div style="width: 35px; text-align: center;"><i class="bi bi-collection-fill" style="${iconStyle} color: #c084fc;"></i></div><h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">DANH MỤC MÔN HỌC</h6></div></div>`;
     if (canManageUsers) html += `<div class="col-12 mb-1 animate__animated animate__fadeInUp" style="animation-delay: 0.15s;"><div class="p-2 d-flex align-items-center gap-3" style="cursor:pointer; border: none; transition: transform 0.2s; background: transparent;" ${hoverEffect} onclick="window.render_user_management()"><div style="width: 35px; text-align: center;"><i class="bi bi-people-fill text-success" style="${iconStyle}"></i></div><h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">QUẢN LÝ NGƯỜI DÙNG</h6></div></div>`;
     if (canManageAdmissions) html += `<div class="col-12 mb-1 animate__animated animate__fadeInUp" style="animation-delay: 0.2s;"><div class="p-2 d-flex align-items-center gap-3" style="cursor:pointer; border: none; transition: transform 0.2s; background: transparent;" ${hoverEffect} onclick="window.render_admission_analytics()"><div style="width: 35px; text-align: center;"><i class="bi bi-person-plus-fill" style="${iconStyle} color: #f472b6;"></i></div><h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">QL TUYỂN SINH</h6></div></div>`;
+    
+    // 🌟 ĐÃ THÊM: Nút mở Nhật Ký Hệ Thống ngay trên menu Thống kê
     if (typeof window.check_stats_perm === 'function' && window.check_stats_perm()) {
-        html += `<div class="col-12 mb-1 animate__animated animate__fadeInUp" style="animation-delay: 0.25s;"><div class="p-2 d-flex align-items-center gap-3" style="cursor:pointer; border: none; transition: transform 0.2s; background: transparent;" ${hoverEffect} onclick="window.render_result_management()"><div style="width: 35px; text-align: center;"><i class="bi bi-bar-chart-line-fill text-danger" style="${iconStyle}"></i></div><h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">THỐNG KÊ</h6></div></div>`;
+        html += `<div class="col-12 mb-1 animate__animated animate__fadeInUp" style="animation-delay: 0.23s;"><div class="p-2 d-flex align-items-center gap-3" style="cursor:pointer; border: none; transition: transform 0.2s; background: transparent;" ${hoverEffect} onclick="window.open_admin_history_modal()"><div style="width: 35px; text-align: center;"><i class="bi bi-journal-text text-success" style="${iconStyle}"></i></div><h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">NHẬT KÝ HỆ THỐNG</h6></div></div>`;
+        html += `<div class="col-12 mb-1 animate__animated animate__fadeInUp" style="animation-delay: 0.25s;"><div class="p-2 d-flex align-items-center gap-3" style="cursor:pointer; border: none; transition: transform 0.2s; background: transparent;" ${hoverEffect} onclick="window.render_result_management()"><div style="width: 35px; text-align: center;"><i class="bi bi-bar-chart-line-fill text-danger" style="${iconStyle}"></i></div><h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">THỐNG KÊ (BIỂU ĐỒ)</h6></div></div>`;
     }
 
     container.innerHTML = html;
 };
 
+// =========================================================================
+// 📝 ADMIN: TRA CỨU NHẬT KÝ ÔN TẬP TOÀN HỆ THỐNG TỪ SUPABASE
+// =========================================================================
+window.open_admin_history_modal = function() {
+    let modalId = 'admin_history_modal';
+    let existing = document.getElementById(modalId);
+    if(existing) existing.remove();
+
+    let html = `
+    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 99999; backdrop-filter: blur(10px); padding: 10px;">
+        <div class="glass-panel p-3 shadow-lg d-flex flex-column w-100 animate__animated animate__zoomIn" style="max-width: 650px; height: 85vh; border-radius: 20px; background: rgba(15, 23, 42, 0.95) !important; border: 1px solid #10b981;">
+            
+            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom" style="border-color: rgba(255,255,255,0.1) !important;">
+                <h6 class="fw-bold text-success mb-0"><i class="bi bi-journal-check me-2"></i>NHẬT KÝ ÔN TẬP HỆ THỐNG</h6>
+                <button class="btn-close btn-close-white" onclick="document.getElementById('${modalId}').remove()"></button>
+            </div>
+            
+            <div class="d-flex gap-2 mb-3">
+                <input type="text" id="admin_search_history" class="form-control bg-dark text-white glass-input-style flex-grow-1" placeholder="🔍 Nhập Mã SV hoặc Bài học để lọc..." oninput="window.filter_admin_history(this.value)">
+                <button class="btn btn-success fw-bold text-white shadow-sm px-3 rounded-3" onclick="window.fetch_admin_history()" title="Làm mới dữ liệu"><i class="bi bi-arrow-clockwise"></i></button>
+            </div>
+            
+            <div id="admin_history_list" class="custom-scrollbar flex-grow-1 p-2 rounded" style="overflow-y: auto; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1);">
+                <div class="text-center p-5"><span class="spinner-border text-success"></span></div>
+            </div>
+        </div>
+    </div>`;
+    
+    document.body.insertAdjacentHTML('beforeend', html);
+    window.fetch_admin_history();
+};
+
+window.fetch_admin_history = async function() {
+    let container = document.getElementById('admin_history_list');
+    if(!container) return;
+    container.innerHTML = `<div class="text-center p-4"><span class="spinner-border text-success"></span><div class="text-success mt-2 small fw-bold">Đang tải nhật ký từ Supabase...</div></div>`;
+    
+    try {
+        // 🌟 Kéo 200 lượt học mới nhất từ Database xuống (Dùng created_at mà thầy vừa thêm)
+        const { data, error } = await db.from('study_logs')
+            .select('*')
+            .order('created_at', { ascending: false })
+            .limit(200);
+            
+        if (error) throw error;
+        
+        window.admin_full_history = data || [];
+        window.render_admin_history_list(document.getElementById('admin_search_history').value);
+    } catch(e) {
+        container.innerHTML = `<div class="text-danger text-center p-4 fw-bold">Lỗi tải dữ liệu: ${e.message}</div>`;
+    }
+};
+
+window.filter_admin_history = function(val) {
+    window.render_admin_history_list(val);
+};
+
+window.render_admin_history_list = function(query) {
+    let container = document.getElementById('admin_history_list');
+    if(!container || !window.admin_full_history) return;
+
+    let q = (query || "").toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    
+    let filtered = window.admin_full_history.filter(item => {
+        let matchStr = ((item.student_id||"") + " " + (item.subject_key||"") + " " + (item.lesson_name||"")).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        return q === "" || matchStr.includes(q);
+    });
+
+    if (filtered.length === 0) {
+        container.innerHTML = `<div class="text-center text-white-50 p-4 mt-3"><i class="bi bi-inbox fs-1 d-block mb-2"></i>Không tìm thấy lịch sử phù hợp.</div>`;
+        return;
+    }
+
+    let html = '';
+    filtered.forEach(item => {
+        let d = new Date(item.created_at || item.logout_time);
+        let timeStr = isNaN(d.getTime()) ? '' : d.toLocaleString('vi-VN');
+        
+        let score = parseFloat(item.score) || 0;
+        let isPass = score >= 5;
+        let subjName = window.subjectConfig && window.subjectConfig[item.subject_key] ? window.subjectConfig[item.subject_key].name : (item.subject_key || 'Khác');
+        
+        // Cảnh báo rời tab nếu có
+        let cheatWarn = (item.offense_count > 0) ? `<span class="badge bg-danger shadow-sm ms-2" style="font-size: 0.6rem;"><i class="bi bi-exclamation-triangle-fill"></i> Rời Tab x${item.offense_count}</span>` : '';
+
+        html += `
+        <div class="p-2 mb-2 rounded shadow-sm d-flex justify-content-between align-items-center stat-card-hover" style="background: rgba(255,255,255,0.05); border-left: 3px solid ${isPass ? '#10b981' : '#ef4444'};">
+            <div style="line-height: 1.4; flex-grow: 1; min-width: 0;">
+                <div class="fw-bold text-warning d-flex align-items-center" style="font-size: 0.9rem;">
+                    <i class="bi bi-person-badge me-1"></i>${item.student_id || 'Không rõ'} ${cheatWarn}
+                </div>
+                <div class="text-white-50 small text-truncate pe-2">
+                    <i class="bi bi-book text-info me-1"></i>${subjName} - <b class="text-light">${item.lesson_name || ''}</b>
+                </div>
+                <div class="text-info" style="font-size: 0.7rem;"><i class="bi bi-clock me-1"></i>${timeStr}</div>
+            </div>
+            <div class="text-end flex-shrink-0">
+                <div class="fw-bold ${isPass ? 'text-success' : 'text-danger'}" style="font-size: 1.25rem;">${score.toFixed(1)}đ</div>
+                <div class="badge border border-secondary text-white-50" style="font-size: 0.65rem;">${item.mode || 'quiz'}</div>
+            </div>
+        </div>`;
+    });
+    
+    container.innerHTML = html;
+};
 // ... Các hàm Admin Login ...
 
 // TRẠM DỊCH: Đồng bộ cột Supabase sang định dạng của App cũ để hiển thị bình thường
@@ -2304,52 +2289,360 @@ window.open_subject_modal = function(subjectKey = '') {
 };
 
 // =========================================================================
-// 👥 PHẦN 8: QUẢN TRỊ NGƯỜI DÙNG & PHÂN QUYỀN (ADMIN - USERS & ROLES)
+// 👥 PHẦN 8: QUẢN TRỊ THEO LỚP & NGƯỜI DÙNG (CLASS-BASED MANAGEMENT)
 // =========================================================================
+
 window.render_user_management = async function() {
     const container = document.getElementById('dash_subject_cards_container');
-    container.innerHTML = `<div class="col-12 text-center p-5"><div class="spinner-border text-success"></div></div>`;
+    container.innerHTML = `<div class="col-12 text-center p-5"><div class="spinner-border text-success"></div><div class="mt-2 text-white-50">Đang tải dữ liệu lớp học...</div></div>`;
+    
     try {
-        const { data: users, error } = await db.from('users').select('student_id, password, full_name, role, permissions, inventory'); if (error) throw error;
-        let html = `<div class="col-12 px-1 animate__animated animate__fadeIn mb-3"><div class="d-flex justify-content-between align-items-center bg-dark p-3 rounded-4 shadow-sm w-100" style="background: transparent !important; border: 1px solid rgba(255,255,255,0.1);"><div style="flex: 1;"><button class="btn btn-sm glass-action-btn fw-bold px-3" onclick="window.render_admin_hub()">Thoát</button></div><h6 class="text-white fw-bold mb-0 text-center m-0 text-uppercase flex-grow-1 text-truncate" style="letter-spacing: 1px; font-size: 0.9rem;">TÀI KHOẢN HỆ THỐNG</h6><div style="flex: 1;" class="text-end"><button class="btn btn-sm btn-success fw-bold px-3" onclick="window.open_user_modal()">Tạo Mới</button></div></div></div>`;
-        let groups = {};
-        users.forEach(u => { let role = u.role || 'k12'; let groupName = (role === 'all' || role === 'admin') ? 'QUẢN TRỊ VIÊN (ADMIN)' : 'NGƯỜI DÙNG (USER)'; if (!groups[groupName]) groups[groupName] = []; groups[groupName].push(u); });
-        
-        let delay = 0;
-        Object.keys(groups).forEach((groupName, gIndex) => {
-            let userList = groups[groupName]; let groupId = 'user_mng_group_' + gIndex;
-            html += `<div class="col-12 px-1 animate__animated animate__fadeInUp" style="animation-delay: ${delay}s;"><div class="glass-panel p-3 mb-2 d-flex justify-content-between align-items-center shadow-sm" style="cursor: pointer; border: none !important; background: linear-gradient(90deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.05) 100%); border-radius: 12px;" onclick="document.getElementById('${groupId}').classList.toggle('d-none');"><div class="d-flex align-items-center"><i class="bi bi-people-fill text-success fs-4 me-3"></i><div><h6 class="fw-bold text-white mb-0 text-uppercase" style="letter-spacing: 0.5px;">${groupName}</h6><small class="text-success">${userList.length} tài khoản</small></div></div><i class="bi bi-chevron-down text-white fs-5"></i></div><div id="${groupId}" class="d-none mb-3 w-100"><div class="row m-0 mt-2">`;
-            userList.forEach((u) => {
-                let uid = u.student_id; let pwd = u.password; let role = u.role; let fname = u.full_name || 'Chưa cập nhật'; let perms = u.permissions || '';
-                let roleBadge = (role === 'all' || role === 'admin') ? `<span class="badge bg-danger shadow-sm"><i class="bi bi-star-fill me-1"></i>ADMIN</span>` : `<span class="badge bg-primary shadow-sm"><i class="bi bi-person-fill me-1"></i>USER</span>`;
-                let permDisplay = (perms === 'all' || role === 'all' || role === 'admin') ? `<span class="badge bg-success bg-opacity-25 text-success border border-success">Toàn Quyền</span>` : (!perms ? `<span class="badge bg-secondary bg-opacity-25 text-secondary border border-secondary">Chưa cấp quyền</span>` : perms.split(',').map(p => { let isEdit = p.trim().endsWith('_edit'); let name = p.trim().replace('_edit','').replace('_view',''); return isEdit ? `<span class="badge bg-warning text-dark shadow-sm me-1 mb-1" style="font-size:0.65rem;">[SỬA] ${name.toUpperCase()}</span>` : `<span class="badge bg-info text-dark shadow-sm me-1 mb-1" style="font-size:0.65rem;">[XEM] ${name.toUpperCase()}</span>`; }).join(''));
+        // Tải song song danh sách Lớp và User
+        const [{ data: classes, error: errC }, { data: users, error: errU }] = await Promise.all([
+            db.from('classes').select('*').order('class_code', { ascending: true }),
+            db.from('users').select('student_id, password, full_name, role, permissions, inventory, class_code')
+        ]);
+        if (errC) throw errC;
+        if (errU) throw errU;
 
-                html += `<div class="col-12 px-0 mb-2"><div class="card glass-panel p-2 p-md-3" style="border-left: 3px solid ${(role === 'all' || role === 'admin') ? '#ef4444' : '#38bdf8'} !important;"><div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3"><div class="d-flex align-items-center gap-3" style="min-width: 250px;"><div class="rounded-circle d-flex align-items-center justify-content-center bg-dark text-white fw-bold shadow-inner flex-shrink-0" style="width: 45px; height: 45px; font-size: 1.2rem;">${fname.charAt(0).toUpperCase()}</div><div><div class="fw-bold text-white fs-6 lh-1 mb-1">${fname} ${roleBadge}</div><div class="text-info small fw-bold">ID: ${uid} <span class="text-white-50 mx-2">|</span> Pass: <span class="text-white" style="-webkit-text-security: disc;">${pwd}</span></div></div></div><div class="flex-grow-1 px-md-3 py-2 border-start-md border-end-md border-secondary border-opacity-25"><div class="text-white-50 mb-1" style="font-size: 0.7rem; text-transform: uppercase; font-weight: bold;">Quyền truy cập:</div><div class="d-flex flex-wrap align-items-center">${permDisplay}</div></div><div class="d-flex flex-row flex-md-column gap-2 flex-shrink-0" style="min-width: 90px;"><button class="btn btn-sm glass-action-btn w-100 text-warning" onclick="window.open_user_modal('${uid}', '${pwd}', '${role}', '${fname}', '${perms}')"><i class="bi bi-pencil-square"></i> SỬA</button><button class="btn btn-sm glass-action-btn w-100 text-danger" onclick="window.remove_user('${uid}')"><i class="bi bi-trash3"></i> XÓA</button></div></div></div></div>`;
-            });
-            html += `</div></div></div>`; delay += 0.05;
+        // Header và Nút chức năng
+        let html = `
+        <div class="col-12 px-1 animate__animated animate__fadeIn mb-3">
+            <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center bg-dark p-3 rounded-4 shadow-sm w-100" style="background: transparent !important; border: 1px solid rgba(255,255,255,0.1);">
+                <button class="btn btn-sm glass-action-btn fw-bold px-3" onclick="window.render_admin_hub()">Thoát</button>
+                <h6 class="text-white fw-bold mb-0 text-center m-0 text-uppercase flex-grow-1" style="letter-spacing: 1px; font-size: 0.9rem;">QUẢN LÝ LỚP & HỌC VIÊN</h6>
+                <div class="d-flex gap-2 flex-wrap justify-content-end">
+    <button class="btn btn-sm btn-primary fw-bold px-4 shadow-sm text-white" style="background: linear-gradient(45deg, #3b82f6, #8b5cf6); border: none;" onclick="window.open_data_manager('tab_user')">
+        <i class="bi bi-grid-1x2-fill me-2"></i> TRUNG TÂM NHẬP DỮ LIỆU
+    </button>
+</div>
+            </div>
+        </div>`;
+
+        let delay = 0;
+        let usersWithoutClass = [];
+        let admins = [];
+
+        // Gom nhóm user theo class_code, admin, và tự do
+        let classGroups = {};
+        classes.forEach(c => classGroups[c.class_code] = { info: c, users: [] });
+
+        users.forEach(u => {
+            if (u.role === 'admin' || u.role === 'all') {
+                admins.push(u);
+            } else if (u.class_code && classGroups[u.class_code]) {
+                classGroups[u.class_code].users.push(u);
+            } else {
+                usersWithoutClass.push(u);
+            }
         });
+
+        // Hàm render card sinh viên (dùng chung)
+        const renderUserCard = (u) => {
+            let uid = u.student_id; let pwd = u.password; let role = u.role; let fname = u.full_name || 'Chưa cập nhật'; let perms = u.permissions || ''; let cCode = u.class_code || '';
+            let roleBadge = (role === 'all' || role === 'admin') ? `<span class="badge bg-danger shadow-sm">ADMIN</span>` : `<span class="badge bg-primary shadow-sm">USER</span>`;
+            return `
+            <div class="col-12 px-0 mb-2">
+                <div class="card glass-panel p-2 p-md-3" style="border-left: 3px solid ${(role === 'all' || role === 'admin') ? '#ef4444' : '#38bdf8'} !important;">
+                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+                        <div class="d-flex align-items-center gap-3" style="min-width: 250px;">
+                            <div class="rounded-circle d-flex align-items-center justify-content-center bg-dark text-white fw-bold shadow-inner flex-shrink-0" style="width: 45px; height: 45px; font-size: 1.2rem;">${fname.charAt(0).toUpperCase()}</div>
+                            <div>
+                                <div class="fw-bold text-white fs-6 lh-1 mb-1">${fname} ${roleBadge}</div>
+                                <div class="text-info small fw-bold">ID: ${uid} <span class="text-white-50 mx-1">|</span> Pass: <span class="text-white">${pwd}</span></div>
+                            </div>
+                        </div>
+                        <div class="d-flex flex-row flex-md-column gap-2 flex-shrink-0" style="min-width: 90px;">
+                            <button class="btn btn-sm glass-action-btn w-100 text-warning" onclick="window.open_data_manager('tab_user', '${uid}', '${pwd}', '${role}', '${fname}', '${perms}', '${cCode}')"><i class="bi bi-pencil-square"></i> SỬA</button>
+                            <button class="btn btn-sm glass-action-btn w-100 text-danger" onclick="window.remove_user('${uid}')"><i class="bi bi-trash3"></i> XÓA</button>
+                        </div>
+                    </div>
+                </div>
+            </div>`;
+        };
+
+        // Render các lớp học
+        Object.keys(classGroups).forEach((classCode, gIndex) => {
+            let cls = classGroups[classCode];
+            let groupId = 'class_mng_group_' + gIndex;
+            html += `
+            <div class="col-12 px-1 animate__animated animate__fadeInUp" style="animation-delay: ${delay}s;">
+                <div class="glass-panel p-3 mb-2 d-flex justify-content-between align-items-center shadow-sm" style="cursor: pointer; border: none !important; background: linear-gradient(90deg, rgba(14, 165, 233, 0.2) 0%, rgba(14, 165, 233, 0.05) 100%); border-radius: 12px;" onclick="document.getElementById('${groupId}').classList.toggle('d-none');">
+                    <div class="d-flex align-items-center">
+                        <i class="bi bi-journal-bookmark-fill text-info fs-4 me-3"></i>
+                        <div>
+                            <h6 class="fw-bold text-white mb-0 text-uppercase" style="letter-spacing: 0.5px;">LỚP ${classCode} <span class="text-white-50 ms-2" style="font-size:0.8rem; text-transform:none;">${cls.info.class_name || ''}</span></h6>
+                            <small class="text-info">${cls.users.length} sinh viên</small>
+                        </div>
+                    </div>
+                    <i class="bi bi-chevron-down text-white fs-5"></i>
+                </div>
+                <div id="${groupId}" class="d-none mb-3 w-100">
+                    <div class="row m-0 mt-2">
+                        ${cls.users.map(u => renderUserCard(u)).join('')}
+                        ${cls.users.length === 0 ? '<div class="text-white-50 small mb-2">Lớp này chưa có sinh viên nào.</div>' : ''}
+                    </div>
+                </div>
+            </div>`;
+            delay += 0.05;
+        });
+
+        // Render Admin & Sinh viên tự do
+        const renderExtraGroup = (title, list, icon, color, gid) => {
+            if(list.length === 0) return '';
+            html += `
+            <div class="col-12 px-1 animate__animated animate__fadeInUp" style="animation-delay: ${delay}s;">
+                <div class="glass-panel p-3 mb-2 d-flex justify-content-between align-items-center shadow-sm" style="cursor: pointer; border: none !important; background: linear-gradient(90deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.05) 100%); border-radius: 12px;" onclick="document.getElementById('${gid}').classList.toggle('d-none');">
+                    <div class="d-flex align-items-center">
+                        <i class="${icon} text-${color} fs-4 me-3"></i>
+                        <div><h6 class="fw-bold text-white mb-0 text-uppercase">${title}</h6><small class="text-${color}">${list.length} tài khoản</small></div>
+                    </div>
+                    <i class="bi bi-chevron-down text-white fs-5"></i>
+                </div>
+                <div id="${gid}" class="d-none mb-3 w-100"><div class="row m-0 mt-2">${list.map(u => renderUserCard(u)).join('')}</div></div>
+            </div>`;
+            delay += 0.05;
+        };
+
+        renderExtraGroup('QUẢN TRỊ VIÊN (ADMIN)', admins, 'bi-shield-lock-fill', 'danger', 'group_admins');
+        renderExtraGroup('SINH VIÊN TỰ DO (CHƯA CÓ LỚP)', usersWithoutClass, 'bi-person-lines-fill', 'warning', 'group_free_users');
+
         container.innerHTML = html;
-    } catch(err) { container.innerHTML = `<div class="col-12 text-center p-5 text-danger">Lỗi tải danh sách Users: ${err.message}</div>`; }
+    } catch(err) { container.innerHTML = `<div class="col-12 text-center p-5 text-danger">Lỗi tải dữ liệu: ${err.message}</div>`; }
 };
-window.open_user_modal = function(uname='', pwd='', role='k12', fname='', perms='') {
+
+
+
+// Hàm thực hiện lưu dữ liệu lớp học vào Supabase
+window.save_new_class = async function() {
+    let codeInput = document.getElementById('modal_c_code').value;
+    let nameInput = document.getElementById('modal_c_name').value;
+    
+    if (!codeInput || codeInput.trim() === '') {
+        alert("Vui lòng nhập Mã Lớp!");
+        return;
+    }
+    
+    let code = codeInput.trim().toUpperCase();
+    let name = nameInput.trim();
+    
+    try {
+        const { error } = await db.from('classes').insert([{ class_code: code, class_name: name }]);
+        if (error) {
+            if (error.code === '23505') alert("Mã lớp này đã tồn tại trong hệ thống!");
+            else throw error;
+        } else {
+            alert(`Đã tạo thành công lớp: ${code}`);
+            document.getElementById('class_modal').remove(); // Đóng popup
+            window.render_user_management(); // Tải lại danh sách
+        }
+    } catch(err) { 
+        alert("Lỗi khi tạo lớp: " + err.message); 
+    }
+};
+
+// =========================================================================
+// HÀM IMPORT EXCEL
+// =========================================================================
+window.import_excel_students = function(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonList = XLSX.utils.sheet_to_json(worksheet);
+            
+            if (jsonList.length === 0) { alert("File Excel không có dữ liệu!"); return; }
+
+            // 1. Thu thập các class_code có trong file để tạo lớp tự động nếu chưa có
+            const uniqueClasses = [...new Set(jsonList.map(r => r['MaLop'] ? String(r['MaLop']).trim().toUpperCase() : null).filter(Boolean))];
+            if (uniqueClasses.length > 0) {
+                const classesToInsert = uniqueClasses.map(c => ({ class_code: c, class_name: c }));
+                // Dùng upsert để bỏ qua nếu lớp đã tồn tại
+                await db.from('classes').upsert(classesToInsert, { onConflict: 'class_code' });
+            }
+
+            // 2. Chẩn bị dữ liệu Sinh viên
+            const usersToInsert = jsonList.map(row => ({
+                student_id: row['MaSV'] ? String(row['MaSV']).trim() : null,
+                full_name: row['HoTen'] ? String(row['HoTen']).trim() : '',
+                password: row['MatKhau'] ? String(row['MatKhau']).trim() : '123456',
+                class_code: row['MaLop'] ? String(row['MaLop']).trim().toUpperCase() : null,
+                role: 'k12'
+            })).filter(u => u.student_id);
+
+            if (usersToInsert.length === 0) { alert("Không tìm thấy cột 'MaSV' hợp lệ trong file!"); return; }
+
+            // 3. Đẩy lên bảng users
+            const { error } = await db.from('users').upsert(usersToInsert, { onConflict: 'student_id' });
+            if (error) throw error;
+            
+            alert(`Import thành công ${usersToInsert.length} sinh viên!`);
+            window.render_user_management();
+        } catch (err) {
+            alert("Lỗi quá trình Import: " + err.message);
+            console.error(err);
+        } finally {
+            event.target.value = ''; // Reset input file
+        }
+    };
+    reader.readAsArrayBuffer(file);
+};
+// =========================================================================
+// HÀM TẢI FILE EXCEL MẪU
+// =========================================================================
+window.download_excel_template = function() {
+    try {
+        // Dữ liệu mẫu (Header và 3 dòng ví dụ)
+        const templateData = [
+            { "MaSV": "SV001", "HoTen": "Nguyễn Văn A", "MatKhau": "123456", "MaLop": "DD21F" },
+            { "MaSV": "SV002", "HoTen": "Trần Thị B", "MatKhau": "123456", "MaLop": "DD21F" },
+            { "MaSV": "SV003", "HoTen": "Lê Văn C", "MatKhau": "123456", "MaLop": "Y20A" }
+        ];
+        
+        const worksheet = XLSX.utils.json_to_sheet(templateData);
+        
+        // Căn chỉnh độ rộng cột cho đẹp dễ nhìn
+        const wscols = [
+            {wch: 15}, // Độ rộng cột MaSV
+            {wch: 25}, // Độ rộng cột HoTen
+            {wch: 15}, // Độ rộng cột MatKhau
+            {wch: 15}  // Độ rộng cột MaLop
+        ];
+        worksheet['!cols'] = wscols;
+
+        // Tạo và tải file
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "DanhSachSinhVien");
+        XLSX.writeFile(workbook, "Mau_Import_SinhVien.xlsx");
+        
+    } catch (err) {
+        alert("Lỗi khi tạo file mẫu: " + err.message);
+        console.error(err);
+    }
+};
+
+window.switch_dm_tab = function(tabId) {
+    document.querySelectorAll('.dm-tab-pane').forEach(el => el.style.display = 'none');
+    document.querySelectorAll('.dm-tab-btn').forEach(el => {
+        el.style.borderBottom = 'none';
+        el.classList.remove('text-info', 'fw-bold', 'bg-dark');
+        el.classList.add('text-white-50');
+    });
+    document.getElementById(tabId).style.display = 'block';
+    let activeBtn = document.querySelector(`[data-target="${tabId}"]`);
+    if(activeBtn) {
+        activeBtn.style.borderBottom = '2px solid #0ea5e9';
+        activeBtn.classList.remove('text-white-50');
+        activeBtn.classList.add('text-info', 'fw-bold', 'bg-dark');
+    }
+};
+
+window.open_data_manager = function(activeTab = 'tab_user', uname='', pwd='', role='k12', fname='', perms='', classCode='') {
+    let existingModal = document.getElementById('data_manager_modal');
+    if (existingModal) existingModal.remove();
+
     let pList = perms === 'all' ? ['all'] : perms.split(',').map(s => s.trim().toLowerCase());
     let hasP = (key, act) => { if (pList.includes('all')) return true; if (act === 'system') return pList.includes(`system_${key}`); if (act === 'stats') return pList.includes(`${key}_stats`) || pList.includes('stats_view') || pList.includes('stats_all') || pList.includes('stats'); if (act === 'edit') return pList.includes(`${key}_edit`); if (act === 'view') return pList.includes(`${key}_view`) || pList.includes(`${key}_edit`) || pList.includes(key); return false; };
-
     let groupedSubjects = {};
-    Object.keys(window.subjectConfig).forEach(k => { let grp = window.subjectConfig[k].role || 'Khác'; if(!groupedSubjects[grp]) groupedSubjects[grp] = []; groupedSubjects[grp].push(k); });
+    Object.keys(window.subjectConfig || {}).forEach(k => { let grp = window.subjectConfig[k].role || 'Khác'; if(!groupedSubjects[grp]) groupedSubjects[grp] = []; groupedSubjects[grp].push(k); });
 
     let subjectsCheckboxes = "";
     Object.keys(groupedSubjects).forEach(grp => {
         let grpLower = grp.toLowerCase();
         subjectsCheckboxes += `<div class="mb-3 p-2 rounded shadow-sm" style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.05);"><div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2" style="border-color: rgba(255,255,255,0.1) !important;"><div class="text-warning fw-bold text-uppercase" style="font-size: 0.75rem;"><i class="bi bi-folder-fill me-1"></i> NHÓM: ${grp}</div><div class="d-flex gap-2 text-center"><div style="width: 45px;"><label class="text-white-50 fw-bold m-0 d-block" style="font-size: 0.6rem;">XEM</label><input type="checkbox" class="form-check-input chk-view chk-group custom-switch-view m-0" data-base="${grpLower}" ${hasP(grpLower, 'view')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div><div style="width: 45px;"><label class="text-white-50 fw-bold m-0 d-block" style="font-size: 0.6rem;">SỬA</label><input type="checkbox" class="form-check-input chk-edit chk-group custom-switch-edit m-0" data-base="${grpLower}" ${hasP(grpLower, 'edit')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div><div style="width: 45px;"><label class="text-white-50 fw-bold m-0 d-block" style="font-size: 0.6rem; color: #c084fc !important;">T.KÊ</label><input type="checkbox" class="form-check-input chk-stats chk-group custom-switch-stats m-0" data-base="${grpLower}" ${hasP(grpLower, 'stats')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div></div></div>`;
         groupedSubjects[grp].forEach(subjKey => {
-            subjectsCheckboxes += `<div class="d-flex justify-content-between align-items-center px-1 py-1 mb-1 rounded" style="background: rgba(255,255,255,0.02);"><div class="text-white text-truncate pe-2" style="font-size: 0.8rem;"><i class="bi bi-dot text-info"></i> ${subjectNames[subjKey] || subjKey}</div><div class="d-flex gap-2 text-center flex-shrink-0"><div style="width: 45px;"><input type="checkbox" class="form-check-input chk-view custom-switch-view m-0" data-base="${subjKey.toLowerCase()}" data-group="${grpLower}" ${hasP(subjKey.toLowerCase(), 'view')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div><div style="width: 45px;"><input type="checkbox" class="form-check-input chk-edit custom-switch-edit m-0" data-base="${subjKey.toLowerCase()}" data-group="${grpLower}" ${hasP(subjKey.toLowerCase(), 'edit')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div><div style="width: 45px;"><input type="checkbox" class="form-check-input chk-stats custom-switch-stats m-0" data-base="${subjKey.toLowerCase()}" data-group="${grpLower}" ${hasP(subjKey.toLowerCase(), 'stats')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div></div></div>`;
+            subjectsCheckboxes += `<div class="d-flex justify-content-between align-items-center px-1 py-1 mb-1 rounded" style="background: rgba(255,255,255,0.02);"><div class="text-white text-truncate pe-2" style="font-size: 0.8rem;"><i class="bi bi-dot text-info"></i> ${window.subjectNames ? window.subjectNames[subjKey] : subjKey}</div><div class="d-flex gap-2 text-center flex-shrink-0"><div style="width: 45px;"><input type="checkbox" class="form-check-input chk-view custom-switch-view m-0" data-base="${subjKey.toLowerCase()}" data-group="${grpLower}" ${hasP(subjKey.toLowerCase(), 'view')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div><div style="width: 45px;"><input type="checkbox" class="form-check-input chk-edit custom-switch-edit m-0" data-base="${subjKey.toLowerCase()}" data-group="${grpLower}" ${hasP(subjKey.toLowerCase(), 'edit')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div><div style="width: 45px;"><input type="checkbox" class="form-check-input chk-stats custom-switch-stats m-0" data-base="${subjKey.toLowerCase()}" data-group="${grpLower}" ${hasP(subjKey.toLowerCase(), 'stats')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div></div></div>`;
         });
         subjectsCheckboxes += `</div>`;
     });
 
-    let modalHtml = `<div id="user_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 28000; backdrop-filter: blur(10px); padding: 10px;"><style>.form-check-input { width: 2rem; height: 1.1rem; } .custom-switch-view:checked { background-color: #10b981 !important; border-color: #10b981 !important; } .custom-switch-edit:checked { background-color: #f59e0b !important; border-color: #f59e0b !important; } .custom-switch-stats:checked { background-color: #a855f7 !important; border-color: #a855f7 !important; } .custom-switch-admin:checked { background-color: #ef4444 !important; border-color: #ef4444 !important; } .chk-system:checked { background-color: #0ea5e9 !important; border-color: #0ea5e9 !important; }</style><div class="glass-panel p-3 shadow-lg w-100 d-flex flex-column" style="max-width: 580px; max-height: 98vh; border-radius: 16px; background: rgba(15, 23, 42, 0.95) !important;"><div class="d-flex justify-content-between align-items-center mb-2 border-bottom pb-2" style="border-color: rgba(255,255,255,0.1) !important;"><h6 class="fw-bold text-success mb-0"><i class="bi bi-person-vcard me-2"></i>${uname ? 'SỬA TÀI KHOẢN' : 'TẠO TÀI KHOẢN'}</h6><button class="btn-close btn-close-white" onclick="document.getElementById('user_modal').remove()"></button></div><div class="overflow-auto custom-scrollbar pe-2 flex-grow-1" style="margin-bottom: -5px;"><div class="row g-2 mb-2 mt-1"><div class="col-6"><label class="text-white-50 small fw-bold mb-1" style="font-size: 0.7rem;">ID <span class="text-danger">*</span></label><input type="text" id="modal_u_id" class="form-control form-control-sm text-white glass-input-style" value="${uname}" ${uname ? 'readonly style="opacity:0.6"' : 'placeholder="Nhập ID"'}></div><div class="col-6"><label class="text-white-50 small fw-bold mb-1" style="font-size: 0.7rem;">Mật khẩu <span class="text-danger">*</span></label><input type="text" id="modal_u_pass" class="form-control form-control-sm text-white glass-input-style" value="${pwd}" placeholder="Mật khẩu"></div></div><div class="mb-2"><label class="text-white-50 small fw-bold mb-1" style="font-size: 0.7rem;">Họ và Tên</label><input type="text" id="modal_u_name" class="form-control form-control-sm text-white glass-input-style fw-bold text-info" value="${fname}" placeholder="Nhập họ tên..."></div><div class="d-flex justify-content-between align-items-center p-2 mb-3 mt-3 rounded shadow-sm" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3);"><div class="text-danger fw-bold" style="font-size: 0.8rem;"><i class="bi bi-star-fill me-1"></i> SUPER ADMIN (TOÀN QUYỀN)</div><div class="form-check form-switch m-0 p-0 d-flex align-items-center"><input class="form-check-input custom-switch-admin ms-0 mt-0" type="checkbox" id="modal_u_isadmin" ${role==='all'||role==='admin'?'checked':''} onchange="document.getElementById('matrix_wrapper').style.display = this.checked ? 'none' : 'block'" style="cursor: pointer;"></div></div><div id="matrix_wrapper" style="display: ${role==='all'||role==='admin'?'none':'block'};"><div class="mb-3 p-3 rounded shadow-sm" style="background: rgba(14, 165, 233, 0.1); border: 1px solid rgba(14, 165, 233, 0.3);"><div class="text-info fw-bold mb-2 text-uppercase" style="font-size: 0.8rem;"><i class="bi bi-gear-fill me-1"></i> Tính năng Quản trị (Admin Menu)</div><div class="row g-2"><div class="col-6 d-flex align-items-center gap-2"><input type="checkbox" class="form-check-input chk-system custom-switch-view m-0" value="system_users" ${hasP('users', 'system')?'checked':''}> <span class="text-white-50 small fw-bold">QL Tài khoản</span></div><div class="col-6 d-flex align-items-center gap-2"><input type="checkbox" class="form-check-input chk-system custom-switch-view m-0" value="system_subjects" ${hasP('subjects', 'system')?'checked':''}> <span class="text-white-50 small fw-bold">QL Môn học</span></div><div class="col-6 d-flex align-items-center gap-2"><input type="checkbox" class="form-check-input chk-system custom-switch-view m-0" value="system_admissions" ${hasP('admissions', 'system')?'checked':''}> <span class="text-white-50 small fw-bold">QL Tuyển sinh</span></div><div class="col-6 d-flex align-items-center gap-2"><input type="checkbox" class="form-check-input chk-system custom-switch-view m-0" value="system_banks" ${hasP('banks', 'system')?'checked':''}> <span class="text-white-50 small fw-bold">Trộn đề thi</span></div></div></div><div class="text-success fw-bold mb-2 text-uppercase" style="font-size: 0.8rem;"><i class="bi bi-ui-checks-grid me-1"></i> Phân quyền theo Môn học</div>${subjectsCheckboxes}</div></div><div class="d-flex justify-content-end gap-2 pt-2 mt-2 border-top flex-shrink-0" style="border-color: rgba(255,255,255,0.1) !important;"><button class="btn btn-sm glass-action-btn px-4" onclick="document.getElementById('user_modal').remove()">HỦY</button><button class="btn btn-sm btn-success fw-bold px-4 shadow-sm" onclick="window.save_user_to_sheet(this)"><i class="bi bi-save2-fill me-1"></i> LƯU PHÂN QUYỀN</button></div></div></div>`;
+    let modalHtml = `
+    <div id="data_manager_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 28000; backdrop-filter: blur(10px); padding: 10px;">
+        <style>.form-check-input { width: 2rem; height: 1.1rem; } .custom-switch-view:checked { background-color: #10b981 !important; border-color: #10b981 !important; } .custom-switch-edit:checked { background-color: #f59e0b !important; border-color: #f59e0b !important; } .custom-switch-stats:checked { background-color: #a855f7 !important; border-color: #a855f7 !important; } .custom-switch-admin:checked { background-color: #ef4444 !important; border-color: #ef4444 !important; } .chk-system:checked { background-color: #0ea5e9 !important; border-color: #0ea5e9 !important; }</style>
+        
+        <div class="glass-panel shadow-lg w-100 d-flex flex-column p-0" style="max-width: 650px; max-height: 95vh; border-radius: 16px; background: rgba(15, 23, 42, 0.95) !important; overflow: hidden;">
+            <div class="d-flex justify-content-between align-items-center p-3 border-bottom" style="border-color: rgba(255,255,255,0.1) !important; background: rgba(0,0,0,0.2);">
+                <h6 class="fw-bold text-white mb-0"><i class="bi bi-database-fill me-2 text-primary"></i>TRUNG TÂM DỮ LIỆU</h6>
+                <button class="btn-close btn-close-white" onclick="document.getElementById('data_manager_modal').remove()"></button>
+            </div>
+
+            <div class="d-flex border-bottom" style="border-color: rgba(255,255,255,0.1) !important; background: rgba(255,255,255,0.02);">
+                <button class="flex-fill btn rounded-0 border-0 p-2 dm-tab-btn" data-target="tab_user" onclick="window.switch_dm_tab('tab_user')"><i class="bi bi-person-vcard me-1"></i> USER & QUYỀN</button>
+                <button class="flex-fill btn rounded-0 border-0 p-2 dm-tab-btn" data-target="tab_class" onclick="window.switch_dm_tab('tab_class')"><i class="bi bi-folder-plus me-1"></i> TẠO LỚP</button>
+                <button class="flex-fill btn rounded-0 border-0 p-2 dm-tab-btn" data-target="tab_import" onclick="window.switch_dm_tab('tab_import')"><i class="bi bi-file-earmark-spreadsheet me-1"></i> IMPORT EXCEL</button>
+            </div>
+
+            <div class="p-3 overflow-auto custom-scrollbar flex-grow-1">
+                
+                <div id="tab_user" class="dm-tab-pane animate__animated animate__fadeIn">
+                    <div class="row g-2 mb-2">
+                        <div class="col-6"><label class="text-white-50 small fw-bold mb-1">ID <span class="text-danger">*</span></label><input type="text" id="modal_u_id" class="form-control form-control-sm text-white glass-input-style" value="${uname}" ${uname ? 'readonly style="opacity:0.6"' : 'placeholder="VD: SV01"'}></div>
+                        <div class="col-6"><label class="text-white-50 small fw-bold mb-1">Mật khẩu <span class="text-danger">*</span></label><input type="text" id="modal_u_pass" class="form-control form-control-sm text-white glass-input-style" value="${pwd}" placeholder="Mật khẩu"></div>
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-7"><label class="text-white-50 small fw-bold mb-1">Họ và Tên</label><input type="text" id="modal_u_name" class="form-control form-control-sm text-white glass-input-style fw-bold text-info" value="${fname}" placeholder="Nhập họ tên..."></div>
+                        <div class="col-5"><label class="text-white-50 small fw-bold mb-1">Mã Lớp</label><input type="text" id="modal_u_class" class="form-control form-control-sm text-white glass-input-style fw-bold text-warning" value="${classCode}" placeholder="VD: DD21F"></div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center p-2 mb-3 rounded shadow-sm" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3);">
+                        <div class="text-danger fw-bold" style="font-size: 0.8rem;"><i class="bi bi-star-fill me-1"></i> QUYỀN ADMIN TỐI CAO</div>
+                        <div class="form-check form-switch m-0 p-0"><input class="form-check-input custom-switch-admin ms-0 mt-0" type="checkbox" id="modal_u_isadmin" ${role==='all'||role==='admin'?'checked':''} onchange="document.getElementById('matrix_wrapper').style.display = this.checked ? 'none' : 'block'" style="cursor: pointer;"></div>
+                    </div>
+                    <div id="matrix_wrapper" style="display: ${role==='all'||role==='admin'?'none':'block'};">
+                        <div class="text-success fw-bold mb-2 text-uppercase" style="font-size: 0.8rem;"><i class="bi bi-ui-checks-grid me-1"></i> Phân quyền theo Môn học</div>
+                        ${subjectsCheckboxes}
+                    </div>
+                    <div class="d-flex justify-content-end pt-2 border-top mt-3" style="border-color: rgba(255,255,255,0.1) !important;">
+                        <button class="btn btn-sm btn-success fw-bold px-4 shadow-sm" onclick="window.save_user_to_sheet(this)"><i class="bi bi-save2-fill me-1"></i> LƯU USER NÀY</button>
+                    </div>
+                </div>
+
+                <div id="tab_class" class="dm-tab-pane animate__animated animate__fadeIn" style="display:none;">
+                    <div class="p-4 text-center mb-3">
+                        <i class="bi bi-folder-plus text-info mb-2" style="font-size: 3rem;"></i>
+                        <h6 class="text-white fw-bold">KHỞI TẠO LỚP RỖNG</h6>
+                        <small class="text-white-50">Tạo lớp học trước, sau đó thêm Sinh viên hoặc Import danh sách vào lớp này.</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="text-white-50 small fw-bold mb-1">Mã Lớp (Bắt buộc) <span class="text-danger">*</span></label>
+                        <input type="text" id="modal_c_code" class="form-control text-white glass-input-style fw-bold text-warning form-control-lg" placeholder="VD: DD21F (Viết liền, không dấu)">
+                    </div>
+                    <div class="mb-4">
+                        <label class="text-white-50 small fw-bold mb-1">Tên Lớp (Không bắt buộc)</label>
+                        <input type="text" id="modal_c_name" class="form-control text-white glass-input-style fw-bold text-info form-control-lg" placeholder="VD: Điều dưỡng 21F">
+                    </div>
+                    <div class="d-flex justify-content-end pt-2 border-top" style="border-color: rgba(255,255,255,0.1) !important;">
+                        <button class="btn btn-info fw-bold px-4 shadow-sm text-dark w-100" onclick="window.save_new_class()"><i class="bi bi-plus-circle-fill me-1"></i> TẠO LỚP MỚI</button>
+                    </div>
+                </div>
+
+                <div id="tab_import" class="dm-tab-pane animate__animated animate__fadeIn" style="display:none;">
+                    <div class="p-4 text-center">
+                        <i class="bi bi-file-earmark-excel-fill text-success mb-2" style="font-size: 3.5rem;"></i>
+                        <h5 class="text-white fw-bold">IMPORT DỮ LIỆU HÀNG LOẠT</h5>
+                        <p class="text-white-50 small mb-4">Nhập tự động sinh viên và lớp học cùng lúc thông qua file Excel. Hệ thống sẽ tự động tạo Lớp nếu mã lớp chưa tồn tại.</p>
+                        <div class="d-grid gap-3">
+                            <button class="btn btn-outline-info fw-bold py-2" onclick="window.download_excel_template()">
+                                <i class="bi bi-cloud-arrow-down-fill me-2"></i> 1. TẢI FILE EXCEL MẪU
+                            </button>
+                            <button class="btn btn-success fw-bold py-2" onclick="document.getElementById('excel_upload_input').click()">
+                                <i class="bi bi-cloud-arrow-up-fill me-2"></i> 2. CHỌN FILE ĐỂ IMPORT
+                            </button>
+                            <input type="file" id="excel_upload_input" accept=".xlsx, .xls" class="d-none" onchange="window.import_excel_students(event)">
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>`;
+    
     document.body.insertAdjacentHTML('beforeend', modalHtml);
+    window.switch_dm_tab(activeTab);
 };
 window.handle_perm_change = function(el) {
     let base = el.getAttribute('data-base');
@@ -2480,8 +2773,16 @@ window.render_personal_timeline = function() {
         tenDaysAgo.setDate(tenDaysAgo.getDate() - 10);
         tenDaysAgo.setHours(0, 0, 0, 0);
 
+        // 🌟 XÁC ĐỊNH QUYỀN TRUY CẬP TỪ ĐẦU ĐỂ ÁP DỤNG BỘ LỌC
+        let safe_role = String(window.current_user_role || '').trim().toLowerCase();
+        let isAdmin = (safe_role === 'all' || safe_role === 'admin' || safe_role === 'teacher' || safe_role === 'useradmin');
+
         const groupedData = {};
         history.forEach(item => {
+            // 🌟 ĐÃ FIX: ẨN "THI THẬT" TRONG NHẬT KÝ NẾU TÀI KHOẢN LÀ SINH VIÊN
+            let modeStr = String(item.mode || item[14] || "").toUpperCase();
+            if (!isAdmin && modeStr.includes('THI THẬT')) return;
+
             let timeRaw = item.time || item[7] || item[6] || new Date().toISOString();
             let dateObj = new Date();
             let rawStr = String(timeRaw).trim();
@@ -2519,9 +2820,6 @@ window.render_personal_timeline = function() {
         }
 
         let html = `<style>.glass-timeline { padding-left: 1rem; border-left: 1px dashed rgba(255, 255, 255, 0.1); margin-top: 10px; margin-left: 10px;} .timeline-item { position: relative; margin-bottom: 1rem; } .timeline-dot { position: absolute; left: -1.25rem; top: 0.3rem; width: 8px; height: 8px; border-radius: 50%; z-index: 2; }</style><div class="glass-timeline animate__animated animate__fadeIn">`;
-
-        let safe_role = String(window.current_user_role || '').trim().toLowerCase();
-        let isAdmin = (safe_role === 'all' || safe_role === 'admin' || safe_role === 'teacher' || safe_role === 'useradmin');
 
         for (let dateLabel in groupedData) {
             html += `<div class="mb-2 mt-3" style="position: relative; z-index: 2; margin-left: -1.5rem;"><span class="text-info fw-bold" style="font-size: 0.75rem;"><i class="bi bi-calendar-event me-1"></i> ${dateLabel}</span></div>`;
@@ -3598,7 +3896,17 @@ window.update_modal_close_time = function(prefix) {
 };
 
 
-window.show_online_exam_modal = function(defaultTime) {
+window.show_online_exam_modal = async function(defaultTime) {
+    // --- NẠP DANH SÁCH LỚP TỪ DATABASE TRƯỚC KHI MỞ ---
+    try {
+        const { data: classData, error: classErr } = await db.from('classes').select('class_code').order('class_code', { ascending: true });
+        window.available_classes = (!classErr && classData) ? classData.map(c => c.class_code) : [];
+    } catch (err) {
+        console.error("Lỗi tải danh sách lớp:", err);
+        window.available_classes = [];
+    }
+    // ------------------------------------------------
+
     let oldModal = document.getElementById('online_exam_modal'); if (oldModal) oldModal.remove();
     let examCount = window.temp_online_exam_questions.length;
     let autoCode = "DE_" + Math.floor(Date.now() / 1000).toString().slice(-6);
@@ -3642,7 +3950,17 @@ window.show_online_exam_modal = function(defaultTime) {
 // [ĐÃ GỠ BẢN TRÙNG] window.submit_online_exam_to_server (dòng cũ 3540-3574) - bản dùng thật nằm ở phía dưới file
 
 
-window.open_edit_exam_modal = function(encodedEx) {
+window.open_edit_exam_modal = async function(encodedEx) {
+    // --- NẠP DANH SÁCH LỚP TỪ DATABASE TRƯỚC KHI MỞ ---
+    try {
+        const { data: classData, error: classErr } = await db.from('classes').select('class_code').order('class_code', { ascending: true });
+        window.available_classes = (!classErr && classData) ? classData.map(c => c.class_code) : [];
+    } catch (err) {
+        console.error("Lỗi tải danh sách lớp:", err);
+        window.available_classes = [];
+    }
+    // ------------------------------------------------
+
     let ex = JSON.parse(decodeURIComponent(encodedEx));
     let isMo = ex.status === "MỞ" || ex.status.includes("MỞ");
 
@@ -4623,7 +4941,16 @@ window.render_exam_management = async function() {
                 let statusBadge = isMo ? `<span class="badge bg-success shadow-sm px-3 py-2"><i class="bi bi-broadcast me-1"></i> ĐANG MỞ</span>` : `<span class="badge bg-secondary shadow-sm px-3 py-2"><i class="bi bi-lock-fill me-1"></i> ĐÃ KHÓA</span>`;
                 let statusToggleBtn = isMo ? `<button class="btn btn-sm fw-bold w-100 mb-2 shadow-sm" style="background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #ef4444;" onclick="window.toggle_exam_status('${ex.exam_code}', 'ĐÓNG')"><i class="bi bi-x-octagon-fill me-1"></i> KHÓA NGAY</button>` : `<button class="btn btn-sm fw-bold w-100 mb-2 shadow-sm" style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #10b981;" onclick="window.toggle_exam_status('${ex.exam_code}', 'MỞ')"><i class="bi bi-unlock-fill me-1"></i> MỞ PHÒNG</button>`;
                 let subjectDisplayName = window.subjectConfig[ex.subject_key] ? window.subjectConfig[ex.subject_key].name : ex.subject_key;
-                let safeExStr = encodeURIComponent(JSON.stringify({ code: ex.exam_code, name: ex.exam_name, time: ex.time_limit, status: ex.status, pass: ex.password, users: ex.allowed_users }));
+                let safeExStr = encodeURIComponent(JSON.stringify({ 
+                    code: ex.exam_code, 
+                    name: ex.exam_name, 
+                    time: ex.time_limit, 
+                    status: ex.status, 
+                    pass: ex.password, 
+                    users: ex.allowed_users,
+                    auto_open: ex.auto_open, 
+                    auto_close: ex.auto_close 
+                }));
 
                 html += `<div class="col-12 px-1 mb-3 animate__animated animate__fadeInUp" style="animation-delay: ${idx * 0.05}s;"><div class="card glass-panel p-3 shadow-sm border-start border-3 ${isMo ? 'border-success' : 'border-secondary'}"><div class="d-flex flex-column flex-md-row justify-content-between gap-3"><div class="flex-grow-1"><div class="d-flex align-items-center gap-3 mb-2"><span class="badge bg-dark border font-monospace text-warning shadow-sm" style="font-size: 0.85rem;">${ex.exam_code}</span>${statusBadge}</div><h6 class="fw-bold text-white mb-1" style="font-size: 1.05rem;">${ex.exam_name}</h6><div class="text-white-50 small d-flex flex-wrap gap-3 mb-1" style="font-size: 0.8rem;"><span><i class="bi bi-book"></i> Môn: <b class="text-light">${subjectDisplayName}</b></span><span><i class="bi bi-clock-history text-warning"></i> Thời gian: <b>${ex.time_limit} phút</b></span></div></div><div class="d-flex flex-row flex-md-column gap-2 flex-shrink-0" style="min-width: 150px;">${statusToggleBtn}<button class="btn btn-sm fw-bold w-100 mb-1 shadow-sm" style="background: rgba(14, 165, 233, 0.2); border: 1px solid #0ea5e9; color: #38bdf8;" onclick="window.open_student_control_modal('${ex.exam_code}')"><i class="bi bi-person-gear me-1"></i> XỬ LÝ SỰ CỐ</button><div class="d-flex gap-2"><button class="btn btn-sm glass-action-btn text-warning w-100 fw-bold shadow-sm" onclick="window.open_edit_exam_modal('${safeExStr}')"><i class="bi bi-pencil-square"></i> SỬA</button><button class="btn btn-sm glass-action-btn text-danger w-100 fw-bold shadow-sm" onclick="window.delete_online_exam('${ex.exam_code}', '${ex.exam_name}')"><i class="bi bi-trash3"></i> XÓA</button></div></div></div></div></div>`;
             });
@@ -4731,26 +5058,69 @@ window.fetch_and_render_active_exams = async function() {
         let oldWrap = document.getElementById('active_exams_wrapper'); if (oldWrap) oldWrap.remove(); 
         if (!exams || exams.length === 0) return;
 
-        let validExams = []; let now = new Date(); let currentRole = window.current_user_role || "";
+        let validExams = []; 
+        let now = new Date(); 
+        let currentRole = window.current_user_role || "";
+        let sId = (window.current_student_id || "").toLowerCase();
+        let sClass = (window.current_class_code || currentRole).toLowerCase(); // Đã thêm nhận diện Lớp
+
         exams.forEach(ex => {
-            if (ex.auto_open && new Date(ex.auto_open) > now) return;
-            if (ex.auto_close && new Date(ex.auto_close) < now) return;
-            if (currentRole === 'all' || currentRole === 'admin' || currentRole === 'teacher') { validExams.push(ex); return; }
+            // Chỉ ẩn đi nếu đã quá hạn ĐÓNG
+            if (ex.auto_close && new Date(ex.auto_close) < now) return; 
+            
+            // Admin và Giáo viên thấy mọi đề
+            if (currentRole === 'all' || currentRole === 'admin' || currentRole === 'teacher') { 
+                validExams.push(ex); return; 
+            }
+            
+            // Lọc theo danh sách được phép
             let allowedArr = (ex.allowed_users || "").split(',').map(s => s.trim().toLowerCase()).filter(s => s !== "");
             if (allowedArr.length === 0) return;
-            if (allowedArr.includes('all') || allowedArr.includes((window.current_student_id || "").toLowerCase())) validExams.push(ex);
+            if (allowedArr.includes('all') || allowedArr.includes(sId) || (sClass && allowedArr.includes(sClass))) {
+                validExams.push(ex);
+            }
         });
+
         if (validExams.length === 0) return;
 
-        let html = `<div id="active_exams_wrapper" class="col-12 px-1 mb-2 animate__animated animate__fadeInDown"><div class="glass-panel p-3" style="border: 2px dashed #ef4444; background: rgba(239, 68, 68, 0.15); border-radius: 16px;"><h6 class="fw-bold text-danger mb-3 text-uppercase"><i class="bi bi-fire me-2"></i>KỲ THI ĐANG DIỄN RA</h6><div class="d-flex flex-column gap-2">`;
+        let html = `<div id="active_exams_wrapper" class="col-12 px-1 mb-2 animate__animated animate__fadeInDown"><div class="glass-panel p-3" style="border: 2px dashed #ef4444; background: rgba(239, 68, 68, 0.15); border-radius: 16px;"><h6 class="fw-bold text-danger mb-3 text-uppercase"><i class="bi bi-fire me-2"></i>KỲ THI TRỰC TUYẾN</h6><div class="d-flex flex-column gap-2">`;
+        
         validExams.forEach(ex => {
             let safeEx = encodeURIComponent(JSON.stringify({ examCode: ex.exam_code, subjectKey: ex.subject_key, examName: ex.exam_name, timeLimit: ex.time_limit, hasPassword: ex.password && ex.password !== "", password: ex.password, questionsJSON: ex.questions_json }));
             let subjectDisplayName = window.subjectConfig[ex.subject_key] ? window.subjectConfig[ex.subject_key].name : ex.subject_key;
-            html += `<div class="p-3 rounded-3 d-flex flex-column flex-md-row justify-content-between align-items-md-center shadow-sm gap-2" style="background: rgba(0,0,0,0.5); border-left: 5px solid #ef4444;"><div><div class="fw-bold text-white mb-1" style="font-size: 1rem;">${ex.exam_name}</div><div class="text-white-50 d-flex align-items-center gap-2 flex-wrap" style="font-size: 0.75rem;"><span class="badge bg-danger shadow-sm">Mã: ${ex.exam_code}</span><span>Môn: <b class="text-info">${subjectDisplayName}</b></span><span class="text-secondary">|</span><span><b>${ex.time_limit}</b> phút</span>${ex.password ? `<span class="text-danger ms-2"><i class="bi bi-lock-fill"></i> Có mật khẩu</span>` : ''}</div></div><button class="btn btn-danger fw-bold rounded-pill px-4 py-2 shadow-lg" onclick="window.join_online_exam('${safeEx}')">THI NGAY <i class="bi bi-arrow-right-circle-fill"></i></button></div>`;
+            
+            // KIỂM TRA XEM ĐÃ TỚI GIỜ MỞ CHƯA
+            let isFuture = ex.auto_open && new Date(ex.auto_open) > now;
+            let actionBtn = "";
+            
+            if (isFuture) {
+                // Đề thi trong tương lai -> Khóa nút, báo thời gian
+                let openTime = new Date(ex.auto_open).toLocaleString('vi-VN', {hour: '2-digit', minute:'2-digit', day:'2-digit', month:'2-digit', year:'numeric'});
+                actionBtn = `<button class="btn btn-secondary fw-bold rounded-pill px-3 py-2 shadow-sm text-white-50" disabled style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);"><i class="bi bi-clock-history me-1"></i> Mở lúc: ${openTime}</button>`;
+            } else {
+                // Đã tới giờ -> Mở nút THI NGAY
+                actionBtn = `<button class="btn btn-danger fw-bold rounded-pill px-4 py-2 shadow-lg" onclick="window.join_online_exam('${safeEx}')">THI NGAY <i class="bi bi-arrow-right-circle-fill"></i></button>`;
+            }
+
+            html += `<div class="p-3 rounded-3 d-flex flex-column flex-md-row justify-content-between align-items-md-center shadow-sm gap-2" style="background: rgba(0,0,0,0.5); border-left: 5px solid ${isFuture ? '#6c757d' : '#ef4444'};">
+                <div>
+                    <div class="fw-bold ${isFuture ? 'text-white-50' : 'text-white'} mb-1" style="font-size: 1rem;">${ex.exam_name}</div>
+                    <div class="text-white-50 d-flex align-items-center gap-2 flex-wrap" style="font-size: 0.75rem;">
+                        <span class="badge ${isFuture ? 'bg-secondary' : 'bg-danger'} shadow-sm">Mã: ${ex.exam_code}</span>
+                        <span>Môn: <b class="text-info">${subjectDisplayName}</b></span>
+                        <span class="text-secondary">|</span>
+                        <span><b>${ex.time_limit}</b> phút</span>
+                        ${ex.password ? `<span class="text-warning ms-2"><i class="bi bi-lock-fill"></i> Có mật khẩu</span>` : ''}
+                    </div>
+                </div>
+                ${actionBtn}
+            </div>`;
         });
         html += `</div></div></div>`;
+        
         let firstCard = container.querySelector('.animate__fadeInUp');
-        if (firstCard) firstCard.insertAdjacentHTML('beforebegin', html); else container.insertAdjacentHTML('beforeend', html);
+        if (firstCard) firstCard.insertAdjacentHTML('beforebegin', html); 
+        else container.insertAdjacentHTML('beforeend', html);
     } catch(err) { console.error("Lỗi kéo đề thi:", err); }
 };
 
@@ -4771,42 +5141,103 @@ window.join_online_exam = async function(encodedEx) {
 window.fetch_troubleshoot_data = async function(examCode) {
     window.current_troubleshoot_exam = examCode; 
     let listContainer = document.getElementById('troubleshoot_student_list');
-    if(listContainer) listContainer.innerHTML = `<div class="text-center p-3 mt-4"><span class="spinner-border text-info"></span><div class="text-info fw-bold mt-2">Đang quét sóng radar từ Supabase...</div></div>`;
+    if(listContainer) listContainer.innerHTML = `<div class="text-center p-3 mt-4"><span class="spinner-border text-info"></span><div class="text-info fw-bold mt-2">Đang tải dữ liệu phòng thi từ Supabase...</div></div>`;
 
     try {
-        const { data: allUsers } = await db.from('users').select('student_id, full_name, role, inventory');
-        const { data: results, error } = await db.from('exam_results').select('*').eq('exam_code', examCode);
-        if (error) throw error;
-        
+        // 🌟 1. LẤY THÔNG TIN ĐỀ THI TỪ BẢNG 'online_exams' (Bốc lớp được thi và danh sách vắng)
+        const { data: examData, error: errExam } = await db.from('online_exams')
+            .select('allowed_users, absent_list')
+            .eq('exam_code', examCode)
+            .single();
+        if (errExam) throw errExam;
+
+        // Xử lý bộ lọc "Ai được thi"
+        let allowedStr = examData ? (examData.allowed_users || "") : ""; 
+        let allowedArr = allowedStr.split(',').map(s => s.trim().toLowerCase()).filter(s => s !== "");
+        let isAllAllowed = allowedArr.includes('all'); // Nếu có 'all' thì mới hiện toàn trường
+
+        // Xử lý danh sách vắng (lưu dạng chuỗi text trong Supabase)
+        let absentStr = examData ? (examData.absent_list || "") : "";
+        window.current_troubleshoot_absent = absentStr.split(',').map(s => s.trim().toLowerCase()).filter(s => s !== "");
+
+        // 🌟 2. LẤY DANH SÁCH USER TỪ BẢNG 'users'
+        const { data: allUsers, error: errUsers } = await db.from('users')
+            .select('student_id, full_name, role, class_code, inventory');
+        if (errUsers) throw errUsers;
+
+        // 🌟 3. LẤY KẾT QUẢ ĐÃ NỘP TỪ BẢNG 'exam_results'
+        const { data: results, error: errResults } = await db.from('exam_results')
+            .select('student_id, score, is_submitted')
+            .eq('exam_code', examCode);
+        if (errResults) throw errResults;
+
+        // 🌟 4. LẤY ÁN TÍCH GIAN LẬN TỪ BẢNG 'study_logs' (Chế độ thi thật)
+        const { data: logs, error: errLogs } = await db.from('study_logs')
+            .select('student_id, offense_count, away_time, logout_time')
+            .eq('lesson_name', examCode)
+            .eq('mode', 'THI THẬT');
+        if (errLogs) throw errLogs;
+
         let filteredClassUsers = [];
         let sttCounter = 1; 
+
+        // 🌟 5. BỘ LỌC CỐT LÕI: Lọc người dùng hợp lệ
         allUsers.forEach(u => {
-            filteredClassUsers.push({ rawId: u.student_id, id: u.student_id.toLowerCase(), name: u.full_name, cls: u.role, inv: u.inventory, stt: sttCounter++ });
+            let uCls = (u.class_code || u.role || '').toLowerCase();
+            let uId = u.student_id.toLowerCase();
+
+            // Ráp điều kiện: Trùng chữ 'all' HOẶC trùng Lớp HOẶC trùng Mã SV
+            if (isAllAllowed || allowedArr.includes(uCls) || allowedArr.includes(uId)) {
+                filteredClassUsers.push({ 
+                    rawId: u.student_id, 
+                    id: u.student_id.toLowerCase(), 
+                    name: u.full_name || 'Chưa cập nhật', 
+                    cls: u.class_code || u.role || '', 
+                    inv: u.inventory || 0, 
+                    stt: sttCounter++ 
+                });
+            }
         });
 
+        // 🌟 6. ĐỔ DỮ LIỆU VÀO CÁC BIẾN CỦA GIAO DIỆN
         window.current_troubleshoot_users = filteredClassUsers; 
-        window.current_troubleshoot_absent = results ? results.filter(r => r.is_absent).map(r => r.student_id) : [];
-        window.current_troubleshoot_submitted = {};
-        if (results) results.filter(r => r.is_submitted).forEach(r => window.current_troubleshoot_submitted[r.student_id] = r.score);
-        window.current_troubleshoot_started = results ? results.filter(r => r.is_started).map(r => r.student_id) : []; 
-        window.current_troubleshoot_sync = {}; window.current_troubleshoot_alerts = {};
         
-        // 🌟 ĐÃ FIX: Đổ dữ liệu vi phạm (offenses), thời gian rời tab (away) và khóa máy (locked) từ Supabase vào biến giao diện
+        window.current_troubleshoot_submitted = {};
+        window.current_troubleshoot_started = [];
+        
+        // Quét những em đã nộp bài
         if (results) {
             results.forEach(r => {
-                window.current_troubleshoot_sync[r.student_id] = {
-                    offenses: r.offense_count || 0,
-                    away: r.away_time || 0,
-                    active: r.is_started && !r.is_submitted && !r.is_absent
-                };
-                if (r.is_locked) window.current_troubleshoot_alerts[r.student_id] = true;
+                let sId = r.student_id.toLowerCase();
+                window.current_troubleshoot_started.push(sId);
+                if (r.is_submitted) {
+                    window.current_troubleshoot_submitted[sId] = r.score;
+                }
             });
         }
         
+        window.current_troubleshoot_sync = {}; 
+        window.current_troubleshoot_alerts = {};
+        
+        // Quét những em vi phạm, rời tab (lấy từ study_logs)
+        if (logs) {
+            logs.forEach(log => {
+                let sId = log.student_id.toLowerCase();
+                window.current_troubleshoot_sync[sId] = {
+                    offenses: log.offense_count || 0,
+                    away: log.away_time || 0,
+                    active: !log.logout_time // Nếu chưa có giờ logout thì tính là đang online làm bài
+                };
+            });
+        }
+        
+        // 🌟 7. RENDER RA MÀN HÌNH CHÍNH THỨC
         let searchInput = document.getElementById('ctrl_search_student');
         window.render_troubleshoot_list(searchInput ? searchInput.value : ""); 
+        
     } catch(err) {
-        if(listContainer) listContainer.innerHTML = `<div class="text-danger p-3 text-center fw-bold">LỖI: ${err.message}</div>`;
+        if(listContainer) listContainer.innerHTML = `<div class="text-danger p-3 text-center fw-bold">LỖI SUPABASE: ${err.message}</div>`;
+        console.error(err);
     }
 };
 

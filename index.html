@@ -12,9 +12,25 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     
     <!-- 🚀 BƠM ĐỘNG CƠ CƠ SỞ DỮ LIỆU SUPABASE -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+    <!-- 🧮 BỘ DỊCH TOÁN HỌC MATHJAX -->
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [['$', '$'], ['\\(', '\\)']],
+          displayMath: [['$$', '$$'], ['\\[', '\\]']],
+          processEscapes: true
+        },
+        startup: {
+          typeset: false // Chờ lệnh từ hàm render_quiz của thầy
+        }
+      };
+    </script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 
     <!-- 2. HỆ THỐNG CSS LÕI: HỖ TRỢ CHUYỂN ĐỔI SÁNG/TỐI (LIGHT/DARK MODE) -->
     <link rel="stylesheet" href="style.css">
