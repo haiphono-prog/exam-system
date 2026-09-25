@@ -45,6 +45,46 @@ window.supa_safe_select = async function(table, builderFn) {
     }
 };
 
+
+// --- LẮNG NGHE THAY ĐỔI REALTIME TRÊN BẢNG USERS ---
+function init_users_realtime() {
+    const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+    if (!clientDb) return;
+
+    // Tránh đăng ký trùng lặp nhiều lần nếu gọi hàm nhiều lần
+    if (window._usersChannelSubscribed) return;
+    window._usersChannelSubscribed = true;
+
+    clientDb
+        .channel('public-users-changes')
+        .on(
+            'postgres_changes',
+            {
+                event: '*', // Lắng nghe mọi sự kiện: INSERT, UPDATE, DELETE
+                schema: 'public',
+                table: 'users'
+            },
+            (payload) => {
+                console.log("⚡ Phát hiện thay đổi Realtime từ cơ sở dữ liệu:", payload);
+                
+                // Hiển thị thông báo nhẹ hoặc tự động vẽ lại giao diện quản lý người dùng
+                if (typeof window.render_user_management === 'function') {
+                    // Kiểm tra xem thầy có đang ở màn hình quản lý người dùng không thì mới load lại
+                    let userTableArea = document.getElementById('dash_subject_cards_container');
+                    if (userTableArea) {
+                        window.render_user_management();
+                    }
+                }
+            }
+        )
+        .subscribe((status) => {
+            console.log("📡 Trạng thái kết nối Realtime bảng users:", status);
+        });
+}
+
+// Gọi hàm này một lần khi ứng dụng khởi động (ví dụ sau khi đăng nhập thành công)
+// window.init_users_realtime();
+
 // --- Tiến độ học của 1 học sinh (thay getStudentProgress) ---
 window.fetch_student_progress = async function(studentId) {
     if (!studentId) return {};
@@ -4897,38 +4937,97 @@ window.remove_subject = function(code) {
     });
 };
 
-// --- 2. QUẢN LÝ PHÂN QUYỀN TÀI KHOẢN ---
+// --- 2. QUẢN LÝ PHÂN QUYỀN TÀI KHOẢN (ĐÃ FIX TRẠNG THÁI NÚT VÀ MODAL) ---
 window.save_user_to_sheet = async function(btn) {
-    let isAdmin = document.getElementById('modal_u_isadmin').checked; let finalPerms = "all";
+    let studentId = document.getElementById('modal_u_id').value.trim();
+    let pass = document.getElementById('modal_u_pass').value.trim();
+    let fullName = document.getElementById('modal_u_name').value.trim();
+    let isAdmin = document.getElementById('modal_u_isadmin').checked; 
+    
+    let roleInput = document.getElementById('modal_u_role');
+    let userRole = roleInput ? roleInput.value.trim() : (isAdmin ? 'all' : 'medical'); 
+    if (isAdmin) userRole = 'all';
+
+    let finalPerms = "all";
     if (!isAdmin) {
         let pArr = [];
         document.querySelectorAll('.chk-system:checked').forEach(c => pArr.push(c.value));
         document.querySelectorAll('.chk-edit:checked').forEach(c => pArr.push(c.getAttribute('data-base') + '_edit'));
-        document.querySelectorAll('.chk-view:checked').forEach(c => { let base = c.getAttribute('data-base'); if (!pArr.includes(base + '_edit')) pArr.push(base + '_view'); });
+        document.querySelectorAll('.chk-view:checked').forEach(c => { 
+            let base = c.getAttribute('data-base'); 
+            if (!pArr.includes(base + '_edit')) pArr.push(base + '_view'); 
+        });
         document.querySelectorAll('.chk-stats:checked').forEach(c => pArr.push(c.getAttribute('data-base') + '_stats'));
         finalPerms = pArr.join(', ');
     }
-    let data = { student_id: document.getElementById('modal_u_id').value.trim(), password: document.getElementById('modal_u_pass').value.trim(), full_name: document.getElementById('modal_u_name').value.trim(), role: isAdmin ? 'all' : 'k12', permissions: finalPerms };
-    if(!data.student_id || !data.password) return window.show_toast("⚠️ Vui lòng nhập đủ ID và Mật khẩu!", true);
-    
-    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span> LƯU...`; btn.classList.add('disabled');
+
+    if (!studentId) {
+        return window.show_toast("⚠️ Vui lòng nhập Mã ID sinh viên!", true);
+    }
+
+    let userPayload = { 
+        student_id: studentId, 
+        full_name: fullName, 
+        role: userRole, 
+        permissions: finalPerms 
+    };
+
+    if (pass) {
+        userPayload.password = pass;
+    }
+
+    let originalHtml = btn.innerHTML;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span> Đang lưu...`; 
+    btn.classList.add('disabled');
+
     try {
-        const { error } = await db.from('users').upsert([data], { onConflict: 'student_id' });
-        if (error) throw error; window.show_toast("✅ Phân quyền thành công!"); document.getElementById('user_modal').remove(); window.render_user_management(); 
-    } catch (err) { window.show_toast("❌ Lỗi: " + err.message, true); btn.innerHTML = `LƯU PHÂN QUYỀN`; btn.classList.remove('disabled'); }
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        const { error } = await clientDb.from('users').upsert([userPayload], { onConflict: 'student_id' });
+        
+        if (error) throw error;
+        
+        // 🎯 1. TRẢ LẠI TRẠNG THÁI NÚT NGAY LẬP TỨC (Tránh bị kẹt chữ Đang lưu)
+        btn.innerHTML = originalHtml; 
+        btn.classList.remove('disabled');
+
+        window.show_toast("✅ Lưu phân quyền thành công!"); 
+        
+        // 🎯 2. ĐÓNG MODAL VÀ DỌN SẠCH LỚP PHỦ BOOTSTRAP BACKDROP
+        let modalEl = document.getElementById('user_modal');
+        if (modalEl) modalEl.remove(); 
+        
+        document.querySelectorAll('.modal-backdrop').forEach(el => el.remove());
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+
+        // 🎯 3. TẢI LẠI GIAO DIỆN QUẢN LÝ NGƯỜI DÙNG
+        if (typeof window.render_user_management === 'function') {
+            window.render_user_management(); 
+        }
+    } catch (err) { 
+        console.error("❌ Lỗi:", err);
+        window.show_toast("❌ Lỗi: " + err.message, true); 
+        
+        btn.innerHTML = originalHtml; 
+        btn.classList.remove('disabled'); 
+    }
 };
+
 window.remove_user = function(uname) {
     window.show_alert("CẢNH BÁO XÓA", `Chắc chắn muốn xóa tài khoản: <b class="text-danger">${uname}</b>?`, async function(ans) {
         if (!ans) return;
-        try { const { error } = await db.from('users').delete().eq('student_id', uname); if (error) throw error; window.show_toast("✅ Đã xóa!"); window.render_user_management(); } catch (err) { window.show_toast("❌ Lỗi: " + err.message, true); }
+        try { 
+            const { error } = await db.from('users').delete().eq('student_id', uname); 
+            if (error) throw error; 
+            window.show_toast("✅ Đã xóa tài khoản thành công!"); 
+            if (typeof window.render_user_management === 'function') {
+                window.render_user_management(); 
+            }
+        } catch (err) { 
+            window.show_toast("❌ Lỗi xóa: " + err.message, true); 
+        }
     });
 };
-// --- 3. QUẢN LÝ ĐỀ THI ONLINE (TẠO/SỬA/XÓA PHÒNG) ---
-// [ĐÃ GỠ BẢN TRÙNG] window.submit_online_exam_to_server (dòng cũ 4651-4690) - bản dùng thật nằm ở phía dưới file
-
-// [ĐÃ GỠ BẢN TRÙNG] window.save_edit_exam (dòng cũ 4623-4653) - bản dùng thật nằm ở phía dưới file
-
-// [ĐÃ GỠ BẢN TRÙNG] window.toggle_exam_status (dòng cũ 4497-4505) - bản dùng thật nằm ở phía dưới file
 
 // =========================================================================
 // 🚀 QUẢN LÝ PHÒNG THI ONLINE (TẠO/SỬA/XÓA/LẤY DANH SÁCH) -> KẾT NỐI BẢNG online_exams
