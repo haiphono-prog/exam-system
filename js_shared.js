@@ -4744,15 +4744,21 @@ window.setup_face_id = async function() {
 
         let publicKey = {
             challenge: challengeBuffer,
-            rp: { name: "Hệ thống Thi Trực Tuyến ĐHYD" },
+            rp: { 
+                name: "Hệ thống Thi Trực Tuyến", 
+                id: window.location.hostname // 🎯 THÊM DÒNG NÀY ĐỂ GẮN CHUẨN TÊN MIỀN VERCEL
+            },
             user: {
                 id: userIdBuffer,
                 name: window.current_student_id,
                 displayName: window.current_student_fullname || window.current_student_id
             },
             pubKeyCredParams: [{ type: "public-key", alg: -7 }, { type: "public-key", alg: -257 }],
-            // 🌟 ĐÃ MỞ RỘNG: Bỏ 'platform' để cho phép dùng điện thoại quét mã QR xác thực cho Máy tính bàn
-            authenticatorSelection: { userVerification: "required" },
+            // 🎯 THÊM LẠI 'platform' ĐỂ ÉP IPHONE DÙNG LUÔN FACE ID CỦA MÁY, KHÔNG ĐẨY SANG CHROME
+            authenticatorSelection: { 
+                authenticatorAttachment: "platform", 
+                userVerification: "required" 
+            },
             timeout: 60000,
             attestation: "none"
         };
