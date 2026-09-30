@@ -23,7 +23,7 @@ window.openReelsModule = function() {
     if (!wrapper) {
         wrapper = document.createElement('div');
         wrapper.id = 'reels_module_wrapper';
-        wrapper.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 100005; overflow-y: auto; background-color: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px);';
+        wrapper.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 100005; overflow-y: auto; background-color: rgba(15, 23, 42, 0.95); ';
         
         wrapper.innerHTML = `
         <style>

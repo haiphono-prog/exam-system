@@ -94,61 +94,61 @@
         </div>
 
 <!-- ========================================================= -->
-<!-- MÀN HÌNH QUẢN TRỊ & THIẾT LẬP MA TRẬN BLOOM -->
+<!-- MÀN HÌNH QUẢN TRỊ & THIẾT LẬP MA TRẬN BLOOM (PREMIUM MOBILE UI) -->
 <!-- ========================================================= -->
-<div id="admin_dashboard" class="container mt-3 animate__animated animate__fadeIn" style="display:none;">
-    <div class="glass-panel border-0 rounded-4">
-        <div class="card-header border-0 py-3 d-flex justify-content-between align-items-center" style="background: rgba(255,255,255,0.05); border-bottom: 1px solid rgba(255,255,255,0.1) !important;">
-            <h6 class="fw-bold text-info mb-0"><i class="bi bi-grid-3x3-gap-fill me-2"></i>THIẾT LẬP MA TRẬN BLOOM</h6>
-            <button onclick="close_bloom_dashboard()" class="btn btn-sm btn-outline-light rounded-pill px-3">Đóng</button>
+<div id="admin_dashboard" class="container mt-3 animate__animated animate__fadeIn" style="display:none; max-width: 900px;">
+    <div class="glass-panel border-0 rounded-4" style="background: #0f172a; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+        <!-- HEADER -->
+        <div class="card-header border-0 p-3 d-flex justify-content-between align-items-center rounded-top-4" style="background: #1e293b; border-bottom: 1px solid #334155 !important;">
+            <h6 class="fw-bold text-info mb-0" style="letter-spacing: 0.5px;"><i class="bi bi-grid-3x3-gap-fill me-2"></i>THIẾT LẬP MA TRẬN BLOOM</h6>
+            <button onclick="close_bloom_dashboard()" class="btn btn-sm btn-outline-secondary text-light rounded-pill px-3 fw-bold"><i class="bi bi-x-lg me-1"></i>Đóng</button>
         </div>
-        <div class="card-body p-2">
-            <div class="table-responsive">
-                <table class="table table-sm table-bordered align-middle mb-0 table-dark" style="font-size: 0.7rem; background-color: transparent !important; --bs-table-bg: transparent; --bs-table-color: #fff;">
-                <thead class="text-center text-white">
-                    <tr style="border-bottom: 2px solid rgba(255,255,255,0.1);">
-                        <th rowspan="2" style="background: none; font-size: 0.75rem; vertical-align: middle;">NỘI DUNG</th>
-                        <th colspan="4" style="background: none; color: #38bdf8; font-size: 0.75rem;">TRẮC NGHIỆM</th>
-                        <th colspan="4" style="background: none; color: #4ade80; font-size: 0.75rem;">ĐÚNG / SAI</th>
-                        <th colspan="4" style="background: none; color: #fb923c; font-size: 0.75rem;">ĐIỀN KHUYẾT</th>
-                    </tr>
-                    <tr style="font-size: 0.65rem; color: rgba(255,255,255,0.7);">
-                        <th style="background: none;">L1</th><th style="background: none;">L2</th><th style="background: none;">L3</th><th style="background: none;">L4</th>
-                        <th style="background: none;">L1</th><th style="background: none;">L2</th><th style="background: none;">L3</th><th style="background: none;">L4</th>
-                        <th style="background: none;">L1</th><th style="background: none;">L2</th><th style="background: none;">L3</th><th style="background: none;">L4</th>
-                    </tr>
-                </thead>
-                <tbody id="lesson_config_body"></tbody>
-                </table>
-            </div>
-            
-            <div class="d-flex flex-wrap justify-content-center gap-2 mt-3 mb-3">
-                <div class="text-center p-2 rounded-4 glass-panel flex-fill" style="min-width: 90px; border-top: 3px solid #ef4444 !important;">
-                    <div style="font-size: 0.55rem; color: rgba(255,255,255,0.6);">THỜI GIAN</div>
-                    <div class="d-flex align-items-center justify-content-center"><input type="number" id="exam_time_input" value="45" class="form-control form-control-sm border-0 bg-transparent text-center fw-bold p-0" style="width: 35px; color: #ef4444;"><span style="color: #ef4444;">'</span></div>
+
+        <div class="card-body p-3">
+            <!-- KHU VỰC THỐNG KÊ TỔNG QUAN (NÚT NỔI 3D) -->
+            <div class="d-flex flex-wrap justify-content-center gap-2 mb-3">
+                <div class="text-center p-2 rounded shadow-sm flex-fill" style="background: #1e293b; border: 1px solid #334155; border-top: 3px solid #ef4444 !important; min-width: 80px;">
+                    <div style="font-size: 0.6rem; color: #94a3b8; font-weight: bold; margin-bottom: 2px;">THỜI GIAN</div>
+                    <div class="d-flex align-items-center justify-content-center">
+                        <input type="number" id="exam_time_input" value="45" class="form-control form-control-sm border-0 bg-transparent text-center fw-bold p-0" style="width: 35px; color: #ef4444; font-size: 1.1rem; box-shadow: none;">
+                        <span style="color: #ef4444; font-weight: bold;">phút</span>
+                    </div>
                 </div>
-                <div class="text-center p-2 rounded-4 glass-panel flex-fill" style="min-width: 90px; border-top: 3px solid #94a3b8 !important;">
-                    <div style="font-size: 0.55rem; color: rgba(255,255,255,0.6);">TỔNG</div><div id="total_selected_count" class="fw-bold fs-5 text-white">0</div>
+                <div class="text-center p-2 rounded shadow-sm flex-fill" style="background: #1e293b; border: 1px solid #334155; border-top: 3px solid #94a3b8 !important; min-width: 80px;">
+                    <div style="font-size: 0.6rem; color: #94a3b8; font-weight: bold; margin-bottom: 2px;">TỔNG CÂU</div>
+                    <div id="total_selected_count" class="fw-bold text-white" style="font-size: 1.1rem;">0</div>
                 </div>
-                <div class="text-center p-2 rounded-4 glass-panel flex-fill" style="min-width: 90px; border-top: 3px solid #38bdf8 !important;">
-                    <div style="font-size: 0.55rem; color: #38bdf8;">MCQ</div><div id="count_single" class="fw-bold text-info">0</div>
+                <div class="text-center p-2 rounded shadow-sm flex-fill" style="background: #1e293b; border: 1px solid #334155; border-top: 3px solid #38bdf8 !important; min-width: 60px;">
+                    <div style="font-size: 0.6rem; color: #38bdf8; font-weight: bold; margin-bottom: 2px;">MCQ</div>
+                    <div id="count_single" class="fw-bold text-white" style="font-size: 1.1rem;">0</div>
                 </div>
-                <div class="text-center p-2 rounded-4 glass-panel flex-fill" style="min-width: 90px; border-top: 3px solid #4ade80 !important;">
-                    <div style="font-size: 0.55rem; color: #4ade80;">Đ/S</div><div id="count_true_false" class="fw-bold text-success">0</div>
+                <div class="text-center p-2 rounded shadow-sm flex-fill" style="background: #1e293b; border: 1px solid #334155; border-top: 3px solid #4ade80 !important; min-width: 60px;">
+                    <div style="font-size: 0.6rem; color: #4ade80; font-weight: bold; margin-bottom: 2px;">Đ/S</div>
+                    <div id="count_true_false" class="fw-bold text-white" style="font-size: 1.1rem;">0</div>
                 </div>
-                <div class="text-center p-2 rounded-4 glass-panel flex-fill" style="min-width: 90px; border-top: 3px solid #fb923c !important;">
-                    <div style="font-size: 0.55rem; color: #fb923c;">ĐK</div><div id="count_fill" class="fw-bold text-warning">0</div>
+                <div class="text-center p-2 rounded shadow-sm flex-fill" style="background: #1e293b; border: 1px solid #334155; border-top: 3px solid #fb923c !important; min-width: 60px;">
+                    <div style="font-size: 0.6rem; color: #fb923c; font-weight: bold; margin-bottom: 2px;">Đ/K</div>
+                    <div id="count_fill" class="fw-bold text-white" style="font-size: 1.1rem;">0</div>
+                </div>
+                <div class="text-center p-2 rounded shadow-sm flex-fill" style="background: #1e293b; border: 1px solid #334155; border-top: 3px solid #c084fc !important; min-width: 60px;">
+                    <div style="font-size: 0.6rem; color: #c084fc; font-weight: bold; margin-bottom: 2px;">MEDIA</div>
+                    <div id="count_media" class="fw-bold text-white" style="font-size: 1.1rem;">0</div>
                 </div>
             </div>
             
-            <div class="mt-3 d-grid gap-2">
-                <button onclick="window.prepare_online_exam()" class="btn btn-warning rounded-pill py-2 fw-bold shadow-lg" style="background: linear-gradient(135deg, #f59e0b, #ef4444); border: 1px solid #fff; color: white; letter-spacing: 0.5px;">
-                    <i class="bi bi-cloud-arrow-up-fill me-2"></i>LƯU THÀNH ĐỀ THI ONLINE
+            <!-- CONTAINER MA TRẬN GRID (Thay thế hoàn toàn cho Table cũ) -->
+            <div id="lesson_config_body" class="mb-3 custom-scrollbar" style="max-height: 60vh; overflow-y: auto; overflow-x: hidden; background: transparent; padding-right: 5px;">
+                <!-- JS sẽ tự động vẽ các Thẻ (Cards) vào đây -->
+            </div>
+            
+            <!-- ACTION BUTTONS -->
+            <div class="mt-3 d-flex flex-column flex-md-row gap-2 border-top pt-3" style="border-color: #334155 !important;">
+                <button onclick="window.prepare_online_exam()" class="btn btn-warning rounded-pill py-3 fw-bold shadow-sm flex-grow-1" style="background: linear-gradient(135deg, #f59e0b, #ef4444); border: none; color: white; letter-spacing: 0.5px;">
+                    <i class="bi bi-cloud-arrow-up-fill me-2"></i>LƯU ĐỀ THI ONLINE
                 </button>
-                <button onclick="process_create_exam()" class="btn glass-btn-action primary rounded-pill py-2 fw-bold" style="border: 1px dashed rgba(56, 189, 248, 0.5);">
-                    <i class="bi bi-play-circle-fill me-2"></i>THI THỬ / REVIEW ĐỀ NÀY
+                <button onclick="process_create_exam()" class="btn btn-outline-info rounded-pill py-3 fw-bold flex-grow-1" style="border-width: 2px;">
+                    <i class="bi bi-play-circle-fill me-2"></i>THI THỬ / REVIEW
                 </button>
-                <button onclick="close_bloom_dashboard()" class="btn btn-link btn-sm text-white-50 text-decoration-none">Quay lại</button>
             </div>
         </div>
     </div>

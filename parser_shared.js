@@ -31,7 +31,7 @@ window.render_bulk_preview = function() {
         #preview_excel_table td { padding: 2px; border-bottom: 1px solid rgba(255,255,255,0.05); border-right: 1px solid rgba(255,255,255,0.02); vertical-align: top; }
         
         .row-hover-magic { transition: background 0.2s; cursor: pointer; }
-        .row-hover-magic:hover { background: rgba(255,255,255,0.1) !important; }
+        .row-hover-magic:hover { background: #2a2a2a !important; }
         
         .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(255,255,255,0.3); border-radius: 4px; }
@@ -505,7 +505,7 @@ window.open_story_import_modal = function(lessonName) {
         .story-table th { background: #0f172a !important; position: sticky; top: 0; z-index: 10; border-bottom: 2px solid #334155; color: #38bdf8; font-size: 0.75rem; white-space: nowrap; }
         .story-table td { border-color: #334155 !important; vertical-align: top; font-size: 0.8rem; }
     </style>
-    <div id="story_import_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 26000;">
+    <div id="story_import_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.9); z-index: 26000;">
         <div class="d-flex flex-column shadow-lg" style="width: 98vw; height: 96vh; background: #0f172a; border: 1px solid #334155; border-radius: 8px;">
             
             <div class="d-flex justify-content-between align-items-center px-3 py-2" style="border-bottom: 1px solid #334155; background: #0f172a; border-radius: 8px 8px 0 0;">
@@ -1400,7 +1400,7 @@ window.render_admin_panel = function() {
     let html = `
     <div class="p-1 m-1 animate__animated animate__fadeIn" style="max-width: 100%; overflow-x: hidden;">
         
-        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom" style="border-color: rgba(255,255,255,0.1) !important;">
+        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom" style="border-color: #2a2a2a !important;">
             <button class="btn btn-sm btn-light border-0 rounded-pill px-3 text-dark shadow-sm fw-bold glass-action-btn" style="font-size:0.75rem;" onclick="window.back_to_subject_select()">
                 <i class="bi bi-arrow-left me-1"></i> Đóng
             </button>
@@ -1465,7 +1465,7 @@ window.render_admin_panel = function() {
                     let optC = q.optc || (q.opts && q.opts[2] ? q.opts[2] : '');
                     let optD = q.optd || (q.opts && q.opts[3] ? q.opts[3] : '');
                     optsHtml = `
-                    <div class="mb-3 p-2 rounded border" style="background: rgba(0,0,0,0.25); border-color: rgba(255,255,255,0.1) !important; font-size: 0.85rem; color: rgba(255,255,255,0.9);">
+                    <div class="mb-3 p-2 rounded border" style="background: rgba(0,0,0,0.25); border-color: #2a2a2a !important; font-size: 0.85rem; color: rgba(255,255,255,0.9);">
                         <div class="mb-1"><strong class="text-white">A.</strong> ${optA}</div>
                         <div class="mb-1"><strong class="text-white">B.</strong> ${optB}</div>
                         <div class="mb-1"><strong class="text-white">C.</strong> ${optC}</div>
@@ -1500,7 +1500,7 @@ window.render_admin_panel = function() {
                             ${mediaHtml}${hintHtml}
                         </div>
 
-                        <div class="d-flex justify-content-end gap-2 border-top pt-3 mt-3" style="border-color: rgba(255,255,255,0.1) !important;">
+                        <div class="d-flex justify-content-end gap-2 border-top pt-3 mt-3" style="border-color: #2a2a2a !important;">
                             <button class="btn glass-action-btn delete" onclick="window.delete_question_direct(${idx})">
                                 <i class="bi bi-trash3 me-1"></i> Xóa
                             </button>
@@ -1538,7 +1538,7 @@ window.render_admin_panel = function() {
 // =========================================================================
 window.open_interaction_selector = function() {
     let modalHtml = `
-    <div id="interaction_selector_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.8); z-index: 27000; backdrop-filter: blur(10px);">
+    <div id="interaction_selector_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.8); z-index: 27000; ">
         <div class="glass-panel p-4 shadow-lg mx-2 text-center" style="width: 100%; max-width: 400px; border-radius: 20px; border: 1px solid #f43f5e; background: rgba(15, 23, 42, 0.95);">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="fw-bold text-white mb-0"><i class="bi bi-layers-half text-danger me-2"></i>CHỌN LOẠI TƯƠNG TÁC</h6>
@@ -1591,10 +1591,10 @@ window.open_question_modal = function(idx) {
     window.current_checked_opt = null; 
 
     let modalHtml = `
-    <div id="q_admin_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="background: rgba(0,0,0,0.6); z-index: 25000; backdrop-filter: blur(10px);">
+    <div id="q_admin_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="background: rgba(0,0,0,0.6); z-index: 25000; ">
         <div class="glass-panel p-3 p-md-4 shadow-lg mx-2" style="width: 100%; max-width: 650px; max-height: 90vh; overflow-y: auto; border-radius: 20px;">
             
-            <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3" style="border-color: rgba(255,255,255,0.1) !important;">
+            <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3" style="border-color: #2a2a2a !important;">
                 <button class="btn-close btn-close-white" onclick="document.getElementById('q_admin_modal').remove()"></button>
                 <h6 class="fw-bold text-white m-0 text-end" style="text-shadow: 0 0 10px rgba(255,255,255,0.3); text-transform: uppercase;">
                     ${!isNew ? '✏️ CHỈNH SỬA CÂU HỎI' : '➕ THÊM CÂU HỎI MỚI'}
@@ -1690,7 +1690,7 @@ window.open_question_modal = function(idx) {
                 <textarea id="modal_q_hint" class="form-control text-success" rows="2" placeholder="💡 Giải thích (Hint): Lý do chọn đáp án này..." style="resize: none;">${q.hint || ''}</textarea>
             </div>
             
-            <div class="d-flex justify-content-end pt-3 border-top" style="border-color: rgba(255,255,255,0.1) !important;">
+            <div class="d-flex justify-content-end pt-3 border-top" style="border-color: #2a2a2a !important;">
                 <button id="btn_save_sync" class="btn px-5 fw-bold shadow-sm" style="background: #0ea5e9; color: #fff; border-radius: 14px;" onclick="window.direct_save_single_question(${idx})">
                     LƯU CÂU HỎI
                 </button>
@@ -1725,7 +1725,7 @@ window.show_add_lesson_modal = function(subjectKey) {
     window.temp_subject_key = subjectKey; 
     
     let modalHtml = `
-    <div id="add_lesson_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.6); z-index: 26000; backdrop-filter: blur(10px);">
+    <div id="add_lesson_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.6); z-index: 26000; ">
         <div class="glass-panel p-4 shadow-lg mx-2 text-center" style="width: 100%; max-width: 320px; border-radius: 20px;">
             <div class="mb-3">
                 <i class="bi bi-journal-plus text-info" style="font-size: 2.5rem; text-shadow: 0 0 15px rgba(14,165,233,0.5);"></i>
@@ -1827,7 +1827,7 @@ window.confirm_add_new_lesson = function() {
 // =========================================================================
 window.open_interaction_selector = function() {
     let modalHtml = `
-    <div id="interaction_selector_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.8); z-index: 27000; backdrop-filter: blur(10px);">
+    <div id="interaction_selector_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.8); z-index: 27000; ">
         <div class="glass-panel p-4 shadow-lg mx-2 text-center" style="width: 100%; max-width: 400px; border-radius: 20px; border: 1px solid #f43f5e; background: rgba(15, 23, 42, 0.95);">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="fw-bold text-white mb-0"><i class="bi bi-layers-half text-danger me-2"></i>CHỌN LOẠI TƯƠNG TÁC</h6>
@@ -1879,10 +1879,10 @@ window.open_question_modal = function(idx) {
     window.current_checked_opt = null; 
 
     let modalHtml = `
-    <div id="q_admin_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="background: rgba(0,0,0,0.6); z-index: 25000; backdrop-filter: blur(10px);">
+    <div id="q_admin_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center" style="background: rgba(0,0,0,0.6); z-index: 25000; ">
         <div class="glass-panel p-3 p-md-4 shadow-lg mx-2" style="width: 100%; max-width: 650px; max-height: 90vh; overflow-y: auto; border-radius: 20px;">
             
-            <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3" style="border-color: rgba(255,255,255,0.1) !important;">
+            <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3" style="border-color: #2a2a2a !important;">
                 <button class="btn-close btn-close-white" onclick="document.getElementById('q_admin_modal').remove()"></button>
                 <h6 class="fw-bold text-white m-0 text-end" style="text-shadow: 0 0 10px rgba(255,255,255,0.3); text-transform: uppercase;">
                     ${!isNew ? '✏️ CHỈNH SỬA CÂU HỎI' : '➕ THÊM CÂU HỎI MỚI'}
@@ -1978,7 +1978,7 @@ window.open_question_modal = function(idx) {
                 <textarea id="modal_q_hint" class="form-control text-success" rows="2" placeholder="💡 Giải thích (Hint): Lý do chọn đáp án này..." style="resize: none;">${q.hint || ''}</textarea>
             </div>
             
-            <div class="d-flex justify-content-end pt-3 border-top" style="border-color: rgba(255,255,255,0.1) !important;">
+            <div class="d-flex justify-content-end pt-3 border-top" style="border-color: #2a2a2a !important;">
                 <button id="btn_save_sync" class="btn px-5 fw-bold shadow-sm" style="background: #0ea5e9; color: #fff; border-radius: 14px;" onclick="direct_save_single_question(${idx})">
                     LƯU CÂU HỎI
                 </button>
@@ -2014,7 +2014,7 @@ window.show_add_lesson_modal = function(subjectKey) {
     window.temp_subject_key = subjectKey; 
     
     let modalHtml = `
-    <div id="add_lesson_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.6); z-index: 26000; backdrop-filter: blur(10px);">
+    <div id="add_lesson_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.6); z-index: 26000; ">
         <div class="glass-panel p-4 shadow-lg mx-2 text-center" style="width: 100%; max-width: 320px; border-radius: 20px;">
             <div class="mb-3">
                 <i class="bi bi-journal-plus text-info" style="font-size: 2.5rem; text-shadow: 0 0 15px rgba(14,165,233,0.5);"></i>
@@ -2249,7 +2249,7 @@ window.delete_current_lesson = function(subjKey, lessonNum) {
 
     // Vẽ giao diện Bảng cảnh báo xóa thay cho confirm() mặc định của trình duyệt
     let modalHtml = `
-    <div id="delete_confirm_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.8); z-index: 30000; backdrop-filter: blur(10px);">
+    <div id="delete_confirm_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.8); z-index: 30000; ">
         <div class="glass-panel p-4 shadow-lg mx-3 text-center" style="width: 100%; max-width: 420px; border-radius: 16px; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(239, 68, 68, 0.3);">
             
             <i class="bi bi-exclamation-triangle-fill text-danger mb-3 d-block" style="font-size: 3.5rem; filter: drop-shadow(0 0 15px rgba(239,68,68,0.5));"></i>

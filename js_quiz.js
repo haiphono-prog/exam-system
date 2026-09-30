@@ -677,7 +677,7 @@ function calculate_and_show_result() {
     // ===============================================================
     if (window.is_study_mode === false) {
         let overlayHtml = `
-        <div id="${overlayId}" class="animate__animated animate__fadeIn" style="position: fixed; inset: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 999999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px); overflow: hidden; margin: 0; padding: 0;">
+        <div id="${overlayId}" class="animate__animated animate__fadeIn" style="position: fixed; inset: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 999999; display: flex; align-items: center; justify-content: center;  overflow: hidden; margin: 0; padding: 0;">
             <div class="text-center animate__animated animate__zoomIn p-4 position-relative" style="background: rgba(30, 41, 59, 0.95); border: 1px solid #10b981; border-radius: 24px; box-shadow: 0 20px 50px rgba(16, 185, 129, 0.4); width: 92%; max-width: 400px;">
                 <div class="mb-3"><i class="bi bi-check-circle-fill text-success" style="font-size: 5rem; text-shadow: 0 0 20px rgba(16, 185, 129, 0.5);"></i></div>
                 <h5 class="fw-bold text-white mb-2 text-uppercase" style="letter-spacing: 1px;">ĐÃ NỘP BÀI THÀNH CÔNG</h5>
@@ -708,7 +708,7 @@ function calculate_and_show_result() {
     let smsText = encodeURIComponent(`📝 BÁO CÁO NỘP BÀI:\n👤 ${stdName.split(' ').pop().toUpperCase()}\n📚 Bài: ${window.selected_lessons_text}\n🎯 Điểm: ${score10}/10 (Đúng ${correct}/${total})\n👉 Ba kiểm tra Gmail để xem chi tiết nhé!`);
 
     let overlayHtml = `
-    <div id="${overlayId}" class="animate__animated animate__fadeIn" style="position: fixed; inset: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 999999; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(10px); overflow: hidden; margin: 0; padding: 0;">
+    <div id="${overlayId}" class="animate__animated animate__fadeIn" style="position: fixed; inset: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 999999; display: flex; align-items: center; justify-content: center;  overflow: hidden; margin: 0; padding: 0;">
         <div class="text-center animate__animated animate__zoomIn p-4 position-relative" style="background: rgba(30, 41, 59, 0.95); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8); width: 92%; max-width: 360px; max-height: 95vh; overflow-y: auto;">
             <button class="btn-close btn-close-white position-absolute" style="top: 20px; left: 20px; z-index: 100; opacity: 0.8; transition: 0.3s;" onclick="exit_quiz_to_menu()"></button>
             <div class="mb-2 mt-2">${trophyIcon}</div>
@@ -1000,16 +1000,59 @@ function exit_quiz_to_menu() {
 }
 
 // =========================================================================
-// 🔄 ÉP HIỂN THỊ NÚT NỘP BÀI
+// 🔄 KIỂM TRA TIẾN ĐỘ & ÉP HIỂN THỊ NÚT NỘP BÀI (ĐÃ FIX LỖI BƠM DATA)
 // =========================================================================
 function check_complete() {
     let done_count = questions.filter(q => q.done).length;
+    let total_q = questions.length;
+    
+    // Tính phần trăm tiến độ làm bài
+    let progressPct = total_q > 0 ? Math.round((done_count / total_q) * 100) : 0;
+    
+    // Cập nhật thanh tiến trình nội bộ
     let p_bar = document.getElementById('p_bar'); 
-    if (p_bar) p_bar.style.width = (questions.length > 0 ? (done_count / questions.length * 100) : 0) + "%";
+    if (p_bar) p_bar.style.width = progressPct + "%";
     
     let s_btn = document.getElementById('submit_btn'); 
-    if (s_btn) s_btn.style.display = 'block'; // LUÔN HIỆN
+    if (s_btn) s_btn.style.display = 'block'; 
+
+    // Theo dõi xem máy bơm có kích hoạt không
+    console.log(`[Radar] Sinh viên tick chọn. Đạt: ${progressPct}%. Chế độ thi: ${window.is_study_mode === false ? 'BẬT' : 'TẮT'}`);
+
+    // Kích hoạt Máy bơm
+    if (window.is_study_mode === false && window.proctoring_state && window.proctoring_state.exam_code) {
+        window.update_student_progress_to_server(window.proctoring_state.exam_code, window.current_student_id, progressPct);
+    }
 }
+
+// =========================================================================
+// 🚀 STUDENT: HÀM BƠM TIẾN ĐỘ LÀM BÀI LÊN SUPABASE (DÙNG ILIKE CHỐNG LỖI)
+// =========================================================================
+window.update_student_progress_to_server = async function(examCode, studentId, progressPct) {
+    if (progressPct > 100) progressPct = 100;
+    
+    console.log(`[Radar] Bắt đầu bơm ${progressPct}% lên Supabase cho SV: ${studentId}...`);
+
+    try {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        
+        // Dùng .ilike thay vì .eq để bỏ qua lỗi HOA/thường của Mã sinh viên
+        const { data, error } = await clientDb.from('exam_results')
+            .update({ progress: progressPct })
+            .eq('exam_code', examCode)
+            .ilike('student_id', studentId || "");
+            
+        if (error) {
+            console.error("[Radar] Lỗi từ Supabase: ", error.message);
+            throw error;
+        }
+        
+        console.log(`[Radar] Bơm thành công ${progressPct}% lên Database!`);
+            
+    } catch(err) {
+        console.error("[Radar] Lỗi đường ống dữ liệu: ", err);
+    }
+};
 // =========================================================================
 // 🚀 XÁC NHẬN NỘP BÀI
 // =========================================================================
@@ -1135,7 +1178,7 @@ window.send_result_to_server = async function(correct_count, total_count) {
         style.innerHTML = `
             .vocab-highlight { color: inherit; font-weight: inherit; cursor: pointer; border-bottom: 1px dashed currentColor; transition: 0.3s; padding: 0 2px; }
             .vocab-highlight:hover { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
-            .vocab-tooltip { position: absolute; z-index: 1000; background: rgba(15,23,42,0.95); border: 1px solid #38bdf8; border-radius: 8px; padding: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); backdrop-filter: blur(10px); color: #fff; font-size: 0.85rem; width: max-content; max-width: 250px; pointer-events: none; opacity: 0; transform: translateY(10px); transition: 0.3s; }
+            .vocab-tooltip { position: absolute; z-index: 1000; background: rgba(15,23,42,0.95); border: 1px solid #38bdf8; border-radius: 8px; padding: 10px; box-shadow: 0 10px 25px rgba(0,0,0,0.5);  color: #fff; font-size: 0.85rem; width: max-content; max-width: 250px; pointer-events: none; opacity: 0; transform: translateY(10px); transition: 0.3s; }
             .vocab-tooltip.show { opacity: 1; transform: translateY(0); pointer-events: auto; }
             .ui2-case-panel { background: rgba(0,0,0,0.2) !important; border-radius: 12px 0 0 12px; border-right: 1px solid rgba(255,255,255,0.05); }
         `;
@@ -1289,7 +1332,7 @@ window.build_quiz_html = function(q_data, ui_type) {
         });
         return `
         <div class="ui1-glass-container animate__animated animate__fadeIn">
-            <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3" style="border-color: rgba(255,255,255,0.1) !important;">
+            <div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-3" style="border-color: #2a2a2a !important;">
                 <span class="badge bg-info text-dark rounded-pill shadow-sm"><i class="bi bi-bezier2 me-1"></i> Mặc định</span>
                 <span class="text-white-50 fw-bold small">Câu 1/20</span>
             </div>
@@ -1416,10 +1459,10 @@ window.open_report_modal = function(qIndex) {
     let qPreview = (q.q || q.vi || "Nội dung câu hỏi").substring(0, 80) + "...";
 
     let html = `
-    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 99999; backdrop-filter: blur(10px); padding: 15px;">
-        <div class="glass-panel p-4 shadow-lg d-flex flex-column w-100 animate__animated animate__zoomIn" style="max-width: 500px; border-radius: 20px; background: rgba(15, 23, 42, 0.95) !important; border: 1px solid rgba(239, 68, 68, 0.5);">
+    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.9); z-index: 99999;  padding: 15px;">
+        <div class="glass-panel p-4 shadow-lg d-flex flex-column w-100 animate__animated animate__zoomIn" style="max-width: 500px; border-radius: 20px; background: #1a1a1a !important; border: 1px solid rgba(239, 68, 68, 0.5);">
             
-            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom" style="border-color: rgba(255,255,255,0.1) !important;">
+            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom" style="border-color: #2a2a2a !important;">
                 <h5 class="fw-bold text-danger mb-0"><i class="bi bi-flag-fill me-2"></i> BÁO LỖI CÂU ${qIndex + 1}</h5>
                 <button class="btn-close btn-close-white" onclick="document.getElementById('${modalId}').remove()"></button>
             </div>

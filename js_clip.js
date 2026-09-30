@@ -11,9 +11,9 @@ window.open_clip_creator_modal = function() {
     let currentLessonName = window.lessonNames?.[window.current_subject]?.[currentLessonNum] || "";
 
     let modalHtml = `
-    <div id="clip_creator_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 28000; backdrop-filter: blur(10px); padding: 15px;">
+    <div id="clip_creator_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.9); z-index: 28000;  padding: 15px;">
         
-        <div class="glass-panel p-2 p-md-3 shadow-lg w-100 h-100 d-flex flex-column flex-lg-row gap-3" style="max-width: 1400px; max-height: 96vh; border-radius: 16px; background: rgba(15, 23, 42, 0.95) !important; border: 1px solid #0ea5e9;">
+        <div class="glass-panel p-2 p-md-3 shadow-lg w-100 h-100 d-flex flex-column flex-lg-row gap-3" style="max-width: 1400px; max-height: 96vh; border-radius: 16px; background: #1a1a1a !important; border: 1px solid #0ea5e9;">
             
             <!-- 🌟 CỘT TRÁI: VIDEO BẤM LÀ TẢI -->
             <div class="flex-grow-1 h-100 bg-dark rounded-3 border border-secondary position-relative d-flex flex-column align-items-center justify-content-center overflow-hidden p-0">

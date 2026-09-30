@@ -363,22 +363,47 @@ vElements.forEach(el => { el.innerHTML = "v2.0 (Supabase Core)"; });
 // 1000 dòng/lần) — trước đây .range(0,9999) vừa dò sai bằng ilike() (rủi ro ký
 // tự %, _) vừa cứng giới hạn 10.000 câu/môn. Trả về {data, error} để không
 // phải sửa lại chỗ gọi.
-window.fetch_all_questions = async function(subjectKey) {
-    let all = [];
-    let from = 0, pageSize = 1000;
+window.fetch_all_questions = async function(key) {
+    if (!key) return { data: [], error: null };
+
+    // 🌟 CHỈ LẤY BẢNG PHẢN XẠ NẾU KEY CHỨA 'phanxa'
+    let isPhanXaKey = key.includes('phanxa');
+
     try {
-        while (true) {
-            const { data, error } = await db.from('questions').select('*')
-                .eq('subject_key', subjectKey).range(from, from + pageSize - 1);
-            if (error) return { data: null, error };
-            all = all.concat(data || []);
-            if (!data || data.length < pageSize) break;
-            from += pageSize;
+        if (isPhanXaKey && typeof db !== 'undefined') {
+            const { data, error } = await db
+                .from('phanxa_questions')
+                .select('*')
+                .eq('subject_key', key);
+
+            return { data: data || [], error };
+        } else if (typeof db !== 'undefined') {
+            // 🌟 MÔN TIẾNG ANH CŨ ('tienganh', 'tienganhconam') & MÔN KHÁC -> LẤY TỪ TABLE 'questions'
+            const { data, error } = await db
+                .from('questions')
+                .select('*')
+                .eq('subject_key', key);
+
+            return { data: data || [], error };
         }
-        return { data: all, error: null };
     } catch (err) {
-        return { data: null, error: err };
+        console.error("Lỗi khi tải câu hỏi cho key:", key, err);
+        return { data: [], error: err };
     }
+
+    return { data: [], error: null };
+};
+
+// Hàm trả về danh sách các subject_key Phản xạn hợp lệ của User
+window.getUserPhanXaKeys = function() {
+    let user = localStorage.getItem('username') || localStorage.getItem('user_id') || localStorage.getItem('user') || window.current_student_id;
+    let keys = ['phanxacongdong']; // Mặc định chưa đăng nhập luôn có Phản xạ cộng đồng
+
+    if (user) {
+        let cleanUser = user.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+        keys.push(`phanxa${cleanUser}`); // Thêm Phản xạ cá nhân của User
+    }
+    return keys;
 };
 
 window.check_access = async function() {
@@ -485,6 +510,11 @@ window.apply_login_success = function(data) {
         window.try_render_menu();
         if(typeof window.render_personal_timeline === 'function') window.render_personal_timeline();
         if(typeof window.render_stats_card_above_timeline === 'function') window.render_stats_card_above_timeline();
+        
+        // 🌟 KÍCH HOẠT: Bật ăng-ten nhận sóng phòng thi Realtime từ Admin
+        if (typeof window.enable_realtime_exams_for_student === 'function') {
+            window.enable_realtime_exams_for_student();
+        }
 };
 
 window.check_subj_perm = function(subjKey, action = 'view') {
@@ -616,56 +646,30 @@ window.loadAndRenderStudentDashboard = function(studentId) {
     });
 };
 
-window.preload_background_data = function() {
-    let safe_role = String(window.current_user_role).trim().toLowerCase();
-    Object.keys(subjectConfig).forEach(key => {
-        let config = subjectConfig[key];
-        let môn_quyền = config.role ? String(config.role).trim().toLowerCase() : "all";
-        if (safe_role === "all" || môn_quyền === "all" || môn_quyền === safe_role) {
-            if (!window.full_data[key]) preloadQueue.push(key);
-        }
-    });
-    if (!window.isPreloading) window.process_preload_queue();
-}
-
 window.process_preload_queue = async function() {
     if (!window.preloadQueue || window.preloadQueue.length === 0) { 
-        window.isPreloading = false; return; 
+        window.isPreloading = false; 
+        return; 
     }
     window.isPreloading = true;
     let key = window.preloadQueue.shift();
 
     if (window.full_data[key] || window.loading_subjects[key]) { 
-        window.process_preload_queue(); return; 
+        window.process_preload_queue(); 
+        return; 
     } 
     window.loading_subjects[key] = true;
 
     try {
-        const { data, error } = await window.fetch_all_questions(key);
-        window.loading_subjects[key] = false;
-        if (!error && data && data.length > 0) {
-            // Xử lý dữ liệu từ Supabase để khớp cấu trúc cũ
-            let mappedData = data.map(q => ({
-                id: q.old_uuid || q.id,
-                lesson: q.lesson !== undefined && q.lesson !== null ? String(q.lesson).trim() : "1",
-                type: q.type || 'single',
-                level: q.level || 1,
-                q: q.q || q.question_text || "",
-                opta: q.opt_a || "", optb: q.opt_b || "", optc: q.opt_c || "", optd: q.opt_d || "",
-                opts: [q.opt_a || "", q.opt_b || "", q.opt_c || "", q.opt_d || ""],
-                answer: q.answer || "", a: q.answer || "",
-                hint: q.hint || "", lessonname: q.lessonname || "",
-                image: q.multimedia || "", nav: q.navigation || ""
-            }));
-            
-            window.full_data[key] = mappedData;
-            let badge = document.getElementById(`stats_badge_${key}`);
-            if (badge) badge.innerText = data.length + " câu";
+        const res = await window.fetch_all_questions(key);
+        if (res && res.data) {
+            window.full_data[key] = res.data;
         }
-        setTimeout(window.process_preload_queue, 400);
-    } catch(err) {
+    } catch (err) {
+        console.error("Lỗi preload dữ liệu môn:", key, err);
+    } finally {
         window.loading_subjects[key] = false;
-        setTimeout(window.process_preload_queue, 400);
+        window.process_preload_queue();
     }
 };
 
@@ -749,14 +753,12 @@ window.go_back = function() {
     else { window.execute_back(); }
 };
 // =========================================================================
-// 📚 PHẦN 5: CHỌN MÔN & CHẾ ĐỘ HỌC (ĐÃ ĐỒNG BỘ NÚT THOÁT VÀ HIỆN NHẬT KÝ)
+// 📚 PHẦN 5: CHỌN MÔN & CHẾ ĐỘ HỌC (STUDENT HUB - DETAILED CARDS UI)
 // =========================================================================
 window.render_student_subject_list = function(safe_role) {
     const container = document.getElementById('dash_subject_cards_container');
     if(!container) return;
-    let html = "";
     
-    // 🌟 ĐÃ FIX: Luôn hiển thị lại Nhật Ký khi ở giao diện ngoài
     const historyArea = document.getElementById('history_view_area');
     if (historyArea) historyArea.style.display = 'block';
 
@@ -764,11 +766,31 @@ window.render_student_subject_list = function(safe_role) {
     let inventoryCount = parseInt(localStorage.getItem(invKey)) || 0;
     let studentNameDisplay = window.current_student_name || window.current_student_id || "Học viên";
     
+    let html = `
+    <style>
+        .student-subj-group { cursor: pointer; border: 1px solid #2b3035; background: #1a1d20; border-radius: 12px; transition: 0.2s; }
+        .student-subj-group:hover { border-color: #495057; background: #212529; }
+        
+        .student-subj-card { background: #121416; border: 1px solid #2b3035; border-radius: 16px; transition: 0.3s; cursor: pointer; display: flex; flex-direction: column; padding: 20px; height: 100%; box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
+        .student-subj-card:hover { border-color: #0ea5e9; transform: translateY(-4px); background: #1e293b; box-shadow: 0 8px 25px rgba(14, 165, 233, 0.2); }
+        
+        .subj-card-header { display: flex; align-items: flex-start; gap: 15px; margin-bottom: 12px; }
+        .subj-icon-box { width: 60px; height: 80px; border-radius: 8px; background: #1a1d20; border: 1px solid #343a40; display: flex; align-items: center; justify-content: center; font-size: 2rem; flex-shrink: 0; box-shadow: 2px 4px 10px rgba(0,0,0,0.3); overflow: hidden; transition: 0.3s; }
+        .student-subj-card:hover .subj-icon-box { transform: scale(1.05) rotate(2deg); box-shadow: 4px 6px 15px rgba(0,0,0,0.4); border-color: #0ea5e9; }
+        
+        .subj-info-box { flex-grow: 1; min-width: 0; }
+        .subj-title { font-size: 0.95rem; font-weight: 700; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .subj-desc { font-size: 0.75rem; color: #94a3b8; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        
+        .subj-stats-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 12px; }
+        .subj-stat-badge { font-size: 0.7rem; font-weight: 600; padding: 4px 10px; border-radius: 8px; background: rgba(255,255,255,0.05); color: #cbd5e1; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.05); }
+        .top-greeting-bar { background: #121416; border: 1px solid #2b3035; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+    </style>
+    <div class="row w-100 m-0 g-3">`;
+    
     html += `
-    <div class="col-12 px-2 mb-3 animate__animated animate__fadeInDown">
-        <div class="d-flex align-items-center justify-content-center gap-3 w-100" style="background: transparent; border: none; flex-wrap: wrap;">
-            
-            <!-- Nhóm Avatar + Lời chào (RANK HỆ THỐNG) -->
+    <div class="col-12 px-0 mb-2 animate__animated animate__fadeInDown">
+        <div class="top-greeting-bar p-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
             <div class="d-flex align-items-center gap-2">
                 ${window.get_user_rank_html()}
                 <div class="text-white-50 fw-bold" style="font-size: 0.85rem; line-height: 1.2;">
@@ -776,43 +798,24 @@ window.render_student_subject_list = function(safe_role) {
                     <span class="text-white">${studentNameDisplay}</span>
                 </div>
             </div>
-
-            <!-- Vạch ngăn cách mờ -->
-            <div class="text-white-50 opacity-25 d-none d-sm-block">|</div>
-
-            <!-- Nhóm Ví Quà siêu gọn -->
-            <div id="dashboard_inventory_badge" class="d-flex align-items-center gap-1 stat-card-hover" title="Bấm để mở Túi Đồ" style="cursor: pointer;" onclick="window.toggle_inventory_popover(event)">
-                <span style="font-size: 1.1rem; line-height: 1;">🎁</span>
-                <span class="text-warning fw-bold" style="font-size: 0.95rem;" id="dashboard_inventory_count">${inventoryCount}</span>
+            <div class="d-flex align-items-center gap-3">
+                <div id="dashboard_inventory_badge" class="d-flex align-items-center gap-1 stat-card-hover bg-dark px-3 py-1 rounded-pill border border-secondary" title="Bấm để mở Túi Đồ" style="cursor: pointer;" onclick="window.toggle_inventory_popover(event)">
+                    <span style="font-size: 1.1rem; line-height: 1;">🎁</span>
+                    <span class="text-warning fw-bold" style="font-size: 0.95rem;" id="dashboard_inventory_count">${inventoryCount}</span>
+                </div>
+                <div class="d-flex align-items-center stat-card-hover text-info bg-dark p-2 rounded-circle border border-secondary" title="Liên kết khuôn mặt" style="cursor: pointer;" onclick="window.setup_face_id()"><i class="bi bi-person-bounding-box fs-5"></i></div>
+                <div class="d-flex align-items-center stat-card-hover text-danger bg-dark p-2 rounded-circle border border-danger border-opacity-50" title="Đăng xuất" style="cursor: pointer;" onclick="window.logout_user()"><i class="bi bi-power fs-5"></i></div>
             </div>
-
-            <!-- Vạch ngăn cách mờ -->
-            <div class="text-white-50 opacity-25">|</div>
-            
-            <!-- Nút Đăng Ký Face ID -->
-            <div class="d-flex align-items-center stat-card-hover text-info" title="Liên kết khuôn mặt (Face ID)" style="cursor: pointer;" onclick="window.setup_face_id()">
-                <i class="bi bi-person-bounding-box fs-5"></i>
-            </div>
-
-            <!-- Vạch ngăn cách mờ -->
-            <div class="text-white-50 opacity-25">|</div>
-
-            <!-- Nút Đăng Xuất -->
-            <div class="d-flex align-items-center stat-card-hover text-danger" title="Đăng xuất" style="cursor: pointer;" onclick="window.logout_user()">
-                <i class="bi bi-box-arrow-right fs-5"></i>
-            </div>
-
         </div>
     </div>`;
 
     if (safe_role === 'all') {
         html += `
-        <div class="col-12 px-2 animate__animated animate__fadeIn mb-4">
-            <div class="d-flex justify-content-between align-items-center w-100" style="background: transparent; border: none;">
-                <!-- 🌟 ĐÃ FIX: Đồng bộ chuẩn kích thước nút Thoát -->
-                <button class="btn btn-sm fw-bold text-white-50 p-0 d-flex align-items-center" onclick="window.render_admin_hub()" style="background: transparent; border: none; font-size: 0.9rem; letter-spacing: 0.5px;"><i class="bi bi-arrow-left me-1"></i>Thoát</button>
-                <h6 class="text-white fw-bold mb-0 text-center flex-grow-1 text-truncate" style="letter-spacing: 1px; font-size: 0.85rem;">QUẢN LÝ TRẮC NGHIỆM</h6>
-                <div style="width: 55px;"></div>
+        <div class="col-12 px-0 animate__animated animate__fadeIn mb-2">
+            <div class="d-flex justify-content-between align-items-center w-100 bg-dark p-2 rounded-3 border border-secondary">
+                <button class="btn btn-sm fw-bold text-white-50 px-3 d-flex align-items-center" onclick="window.render_admin_hub()" style="background: transparent; border: none; font-size: 0.9rem; letter-spacing: 0.5px;"><i class="bi bi-arrow-left me-1"></i>Thoát</button>
+                <h6 class="text-info fw-bold mb-0 text-center flex-grow-1 text-truncate" style="letter-spacing: 1px; font-size: 0.85rem;"><i class="bi bi-journal-check me-2"></i>KHO TRẮC NGHIỆM</h6>
+                <div style="width: 85px;"></div>
             </div>
         </div>`;
     }
@@ -840,55 +843,283 @@ window.render_student_subject_list = function(safe_role) {
         });
         
         html += `
-        <div class="col-12 px-1 animate__animated animate__fadeInUp" style="animation-delay: ${delay}s;">
-            <div class="p-2 mb-2 d-flex justify-content-between align-items-center" 
-                 style="cursor: pointer; background: transparent; border: none; border-bottom: 1px dashed rgba(255,255,255,0.05);"
+        <div class="col-12 px-0 animate__animated animate__fadeInUp" style="animation-delay: ${delay}s;">
+            <div class="student-subj-group p-3 mb-2 d-flex justify-content-between align-items-center shadow-sm" 
                  onclick="let el = document.getElementById('${groupId}'); el.classList.toggle('d-none'); let icon = document.getElementById('icon_${groupId}'); if(el.classList.contains('d-none')){icon.classList.replace('bi-chevron-up', 'bi-chevron-down')}else{icon.classList.replace('bi-chevron-down', 'bi-chevron-up')}">
-                <div class="d-flex align-items-center"><i class="bi bi-folder2-open text-info fs-5 me-2 opacity-75"></i><h6 class="fw-bold text-info mb-0 text-uppercase" style="letter-spacing: 0.5px; font-size:0.85rem;">${groupName}</h6></div>
-                <i id="icon_${groupId}" class="bi bi-chevron-down text-white-50 fs-6"></i>
+                <div class="d-flex align-items-center"><i class="bi bi-folder-fill text-info fs-4 me-3 opacity-75"></i><h6 class="fw-bold text-white mb-0 text-uppercase" style="letter-spacing: 0.5px; font-size:0.9rem;">${groupName}</h6></div>
+                <i id="icon_${groupId}" class="bi bi-chevron-down text-white-50 fs-5"></i>
             </div>
-            <div id="${groupId}" class="d-none mb-3 w-100">
-                <div class="row m-0 mt-1">`;
+            
+            <div id="${groupId}" class="d-none w-100">
+                <div class="row m-0 g-3 mt-1 mb-4">`;
         
         subjectKeys.forEach((key, sIndex) => {
             let config = subjectConfig[key];
             let displayName = config.name || config['Tên hiển thị'] || subjectNames[key] || key;
-            let icon = config.icon || config['Icon'] || '📚';
-            let canEdit = window.check_subj_perm(key, 'edit');
             
+            let iconStr = String(config.icon || config['Icon'] || '📚').trim();
+            let displayIconHtml = "";
+            if (iconStr.startsWith('http') || iconStr.startsWith('data:image')) {
+                displayIconHtml = `<img src="${iconStr}" style="width: 100%; height: 100%; object-fit: cover;" alt="Bìa sách">`;
+            } else {
+                displayIconHtml = iconStr;
+            }
+            
+            let canEdit = window.check_subj_perm(key, 'edit');
+            let qCount = (window.full_data && window.full_data[key]) ? window.full_data[key].length : 'Đang đếm...';
+            let descFallback = config.desc || "Bao gồm hệ thống bài tập, đề thi trắc nghiệm và tài liệu học tập cập nhật mới nhất.";
+
             let refreshIconHtml = ""; let adminBtnHtml = "";
             if (canEdit && safe_role === 'all') {
-                refreshIconHtml = `<i class="bi bi-arrow-clockwise text-primary ms-2 opacity-75" style="cursor:pointer; font-size: 1rem;" onclick="event.stopPropagation(); window.refresh_subject_data('${key}', this)"></i>`;
-                adminBtnHtml = `<button class="btn btn-sm fw-bold border-0 p-1 text-white-50 d-flex align-items-center" style="background: transparent;" onclick="event.stopPropagation(); window.admin_login_process('${key}')"><i class="bi bi-pencil-square fs-6"></i></button>`;
+                refreshIconHtml = `<i class="bi bi-arrow-clockwise text-primary ms-2 opacity-75" style="cursor:pointer; font-size: 1rem;" onclick="event.stopPropagation(); window.refresh_subject_data('${key}', this)" title="Tải lại môn học"></i>`;
+                adminBtnHtml = `<button class="btn btn-sm btn-outline-warning fw-bold border-0 px-2 d-flex align-items-center rounded-pill" onclick="event.stopPropagation(); window.admin_login_process('${key}')"><i class="bi bi-pencil-square me-1"></i> Soạn</button>`;
             }
 
             html += `
-                <div class="col-12 px-0 mb-1 animate__animated animate__fadeInUp" style="animation-delay: ${sIndex * 0.03}s;" id="subject_card_block_${key}">
-                    <div class="p-2" onclick="window.toggle_subject_map('${key}', '${displayName}')" style="cursor: pointer; background: transparent; border: none; transition: transform 0.2s;" onmouseover="this.style.transform='translateX(4px)'" onmouseout="this.style.transform='translateX(0)'">
-                        <div class="d-flex align-items-center justify-content-between w-100 gap-2">
-                            <div class="d-flex align-items-center gap-3 flex-grow-1" style="min-width: 0;">
-                                <div class="d-flex align-items-center justify-content-center flex-shrink-0" style="width: 38px; height: 38px; background: transparent;"><span style="font-size: 1.5rem; line-height: 1;">${icon}</span></div>
-                                <div class="d-flex flex-column justify-content-center" style="min-width: 0;">
-                                    <div class="d-flex align-items-center"><h6 class="fw-bold text-white text-uppercase mb-0 text-truncate" style="font-size: 0.85rem; letter-spacing: 0.3px;">${displayName}</h6>${refreshIconHtml}</div>
+                <div class="col-12 col-md-6 px-1 animate__animated animate__fadeInUp" style="animation-delay: ${sIndex * 0.03}s;" id="subject_card_block_${key}">
+                    <div class="student-subj-card" onclick="window.toggle_subject_map('${key}', '${displayName}')">
+                        
+                        <div class="subj-card-header">
+                            <div class="subj-icon-box">${displayIconHtml}</div>
+                            <div class="subj-info-box">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <div class="subj-title">${displayName}</div>
+                                    ${adminBtnHtml}
                                 </div>
+                                <div class="subj-desc">${descFallback}</div>
                             </div>
-                            <div class="flex-shrink-0">${adminBtnHtml}</div>
                         </div>
-                        <div id="map_area_${key}" class="mt-1 text-start animate__animated animate__fadeIn w-100 pt-1" style="display:none; border: none !important;" onclick="event.stopPropagation();"></div>
+
+                        <div class="subj-stats-bar justify-content-between align-items-center w-100">
+                            <div class="d-flex gap-2">
+                                <span class="subj-stat-badge"><i class="bi bi-ui-checks-grid text-info"></i> Mã: ${key}</span>
+                                <span class="subj-stat-badge" id="stats_badge_${key}"><i class="bi bi-database text-warning"></i> ${qCount} câu</span>
+                            </div>
+                            <div class="d-flex align-items-center">
+                                ${refreshIconHtml}
+                            </div>
+                        </div>
+                        
+                        <!-- 🌟 NƠI HIỂN THỊ CÁC BADGE PHÂN LOẠI CÂU DƯỚI ĐÁY THẺ -->
+                        <div id="stats_details_${key}" class="w-100 mt-2 d-flex flex-wrap gap-1"></div>
+                        
+                        <div id="map_area_${key}" class="mt-3 text-start animate__animated animate__fadeIn w-100 pt-3 border-top" style="display:none; border-color: #2b3035 !important;" onclick="event.stopPropagation();"></div>
                     </div>
                 </div>`;
         });
         html += `       </div>
                 </div>
-            </div>`;
+        </div>`;
         delay += 0.05;
     });
     
+    html += `</div>`;
     container.innerHTML = html;
     window.render_stats_card_above_timeline();
-    
-    // 🌟 GỌI HÀM LẤY ĐỀ THI TRỰC TUYẾN
     window.fetch_and_render_active_exams();
+    
+    // 🌟 TỰ ĐỘNG ĐẾM & PHÂN LOẠI SỐ LƯỢNG CÂU HỎI TRỰC TIẾP TỪ SUPABASE
+    setTimeout(() => {
+        Object.keys(subjectConfig).forEach(async (key) => {
+            // Lấy ID badge của cả Sinh viên hoặc Admin
+            let badge = document.getElementById('stats_badge_' + key) || document.getElementById('admin_stats_badge_' + key);
+            let details = document.getElementById('stats_details_' + key) || document.getElementById('admin_stats_details_' + key);
+            if (!badge) return;
+
+            // Hàm xử lý phân loại câu hỏi chung
+            const renderDetails = (dataArr) => {
+                let single = 0, tf = 0, fill = 0, media = 0, phanxa = 0;
+                dataArr.forEach(q => {
+                    let t = String(q.type || 'single').toLowerCase().trim();
+                    if (t === 'phanxa') phanxa++;
+                    else if (t === 'quiz' || t === 'mcq' || t === '') single++;
+                    else if (t === 'tf' || t === 'true_false' || t === 'đúng sai') tf++;
+                    else if (t === 'fill' || t === 'short' || t === 'điền khuyết') fill++;
+                    else if (['hotspot', 'clip', 'clip_listen', 'arrange', 'sắp xếp'].includes(t)) media++;
+                    else single++;
+                });
+                
+                let h = '';
+                if(single > 0) h += `<span class="badge bg-info text-dark shadow-sm me-1 mb-1" style="font-size:0.65rem;">MCQ: ${single}</span>`;
+                if(tf > 0) h += `<span class="badge bg-success shadow-sm me-1 mb-1" style="font-size:0.65rem;">Đ/S: ${tf}</span>`;
+                if(fill > 0) h += `<span class="badge bg-warning text-dark shadow-sm me-1 mb-1" style="font-size:0.65rem;">Đ/K: ${fill}</span>`;
+                if(media > 0) h += `<span class="badge shadow-sm me-1 mb-1" style="background:#c084fc; color:#fff; font-size:0.65rem;">Media: ${media}</span>`;
+                if(phanxa > 0) h += `<span class="badge bg-danger shadow-sm me-1 mb-1" style="font-size:0.65rem;">Phản Xạ: ${phanxa}</span>`;
+                
+                if(details) details.innerHTML = h;
+                return dataArr.length;
+            };
+            
+            // Đếm từ RAM nếu đã tải
+            if (window.full_data && window.full_data[key]) {
+                let total = renderDetails(window.full_data[key]);
+                badge.innerHTML = `<i class="bi bi-database text-warning"></i> ${total} câu`;
+            } else {
+                // Đếm ngầm từ Supabase (Chỉ lấy cột type cho nhẹ)
+                try {
+                    const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+                    
+                    // 🌟 SỬA LỖI: Nhận diện mã môn có chữ 'phanxa' để query đúng bảng phanxa_questions
+                    let targetTable = key.includes('phanxa') ? 'phanxa_questions' : 'questions';
+                    
+                    const { data, error } = await clientDb.from(targetTable).select('type').eq('subject_key', key);
+                    if (!error && data) {
+                        let total = renderDetails(data);
+                        badge.innerHTML = `<i class="bi bi-database text-warning"></i> ${total} câu`;
+                    } else {
+                        badge.innerHTML = `<i class="bi bi-database text-warning"></i> 0 câu`;
+                    }
+                } catch(e) {
+                    badge.innerHTML = `<i class="bi bi-database text-warning"></i> Lỗi`;
+                }
+            }
+        });
+    }, 300);
+};
+
+// =========================================================================
+// 🏢 PHẦN 6: QUẢN TRỊ TRUNG TÂM (ADMIN HUB - DETAILED CARDS UI)
+// =========================================================================
+window.render_admin_hub = function() {
+    const historyArea = document.getElementById('history_view_area');
+    if (historyArea) historyArea.style.display = 'none';
+
+    const container = document.getElementById('dash_subject_cards_container');
+    if (!container) return;
+
+    let isSuper = (window.current_user_role === 'all');
+    let sys = window.currentUserPerms?.system || [];
+    let edt = window.currentUserPerms?.edit || [];
+    
+    let canManageBanks = isSuper || sys.includes('system_banks') || edt.length > 0;
+    let canManageSubjects = isSuper || sys.includes('system_subjects');
+    let canManageUsers = isSuper || sys.includes('system_users');
+    let canManageAdmissions = isSuper || sys.includes('system_admissions');
+
+    let html = `
+    <style>
+        /* Thiết kế Thẻ Quản Trị Chi tiết (Detailed Card) */
+        .admin-dash-card { background: #1a1d20; border: 1px solid #2b3035; border-radius: 16px; transition: 0.3s; cursor: pointer; display: flex; align-items: center; padding: 20px; height: 100%; box-shadow: 0 4px 15px rgba(0,0,0,0.2); text-align: left; gap: 15px; }
+        .admin-dash-card:hover, .admin-dash-card:active { border-color: #0ea5e9; box-shadow: 0 8px 25px rgba(14, 165, 233, 0.25); transform: translateY(-4px); background: #1e293b; }
+        
+        .admin-dash-icon { font-size: 2.2rem; line-height: 1; padding: 15px; border-radius: 14px; flex-shrink: 0; box-shadow: inset 0 2px 5px rgba(0,0,0,0.3); }
+        .admin-dash-info { display: flex; flex-direction: column; flex-grow: 1; min-width: 0; justify-content: center; }
+        .admin-dash-title { font-size: 0.95rem; font-weight: 700; color: #f8fafc; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .admin-dash-desc { font-size: 0.75rem; color: #94a3b8; line-height: 1.4; margin-bottom: 8px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .admin-dash-stats { font-size: 0.7rem; font-weight: 600; padding: 4px 10px; border-radius: 6px; background: rgba(255,255,255,0.05); display: inline-flex; align-items: center; gap: 5px; width: fit-content; }
+        
+        .top-greeting-bar { background: #121416; border: 1px solid #2b3035; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
+    </style>
+    <div class="row w-100 m-0 g-3">`;
+
+    if (isSuper) {
+        let invKey = 'mcq_inventory_' + (window.current_student_id || 'guest');
+        let inventoryCount = parseInt(localStorage.getItem(invKey)) || 0;
+        let studentNameDisplay = window.current_student_name || window.current_student_id || "Admin";
+
+        html += `
+        <div class="col-12 px-0 mb-2 animate__animated animate__fadeInDown">
+            <div class="top-greeting-bar p-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    ${window.get_user_rank_html()}
+                    <div class="text-white-50 fw-bold" style="font-size: 0.85rem; line-height: 1.2;">
+                        <div style="font-size: 0.7rem; text-transform: uppercase;">Xin chào,</div>
+                        <span class="text-danger">${studentNameDisplay}</span>
+                    </div>
+                </div>
+                <div class="d-flex align-items-center gap-3">
+                    <div id="dashboard_inventory_badge" class="d-flex align-items-center gap-1 stat-card-hover bg-dark px-3 py-1 rounded-pill border border-secondary" title="Bấm để mở Túi Đồ" style="cursor: pointer;" onclick="window.toggle_inventory_popover(event)">
+                        <span style="font-size: 1.1rem; line-height: 1;">🎁</span>
+                        <span class="text-warning fw-bold" style="font-size: 0.95rem;" id="dashboard_inventory_count">${inventoryCount}</span>
+                    </div>
+                    <div class="d-flex align-items-center stat-card-hover text-info bg-dark p-2 rounded-circle border border-secondary" title="Liên kết khuôn mặt" style="cursor: pointer;" onclick="window.setup_face_id()"><i class="bi bi-person-bounding-box fs-5"></i></div>
+                    <div class="d-flex align-items-center stat-card-hover text-danger bg-dark p-2 rounded-circle border border-danger border-opacity-50" title="Đăng xuất" style="cursor: pointer;" onclick="window.logout_user()"><i class="bi bi-power fs-5"></i></div>
+                </div>
+            </div>
+        </div>`;
+    } else {
+        html += `
+        <div class="col-12 px-0 mb-3">
+            <div class="d-flex justify-content-between align-items-center w-100">
+                <button class="btn btn-sm fw-bold text-white-50 px-3 d-flex align-items-center shadow-sm" onclick="window.render_student_subject_list(window.current_user_role)" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; font-size: 0.9rem; letter-spacing: 0.5px;"><i class="bi bi-arrow-left me-1"></i>Quay lại Sảnh</button>
+            </div>
+        </div>`;
+    }
+
+    let delay = 0;
+    // 🌟 THAY ĐỔI LỚN TẠI ĐÂY: Hàm tạo Thẻ Admin dùng cấu trúc col-12 col-md-6, chứa Mô tả và Thống kê
+    const renderAdminCard = (title, desc, statsHtml, icon, color, action) => {
+        let cardHtml = `
+        <div class="col-12 col-md-6 px-1 animate__animated animate__zoomIn" style="animation-delay: ${delay}s;">
+            <div class="admin-dash-card" onclick='${action}'>
+                <div class="admin-dash-icon" style="color: ${color}; border: 1px solid ${color}40; background: ${color}15;">
+                    <i class="bi ${icon}"></i>
+                </div>
+                <div class="admin-dash-info">
+                    <div class="admin-dash-title">${title}</div>
+                    <div class="admin-dash-desc">${desc}</div>
+                    <div class="admin-dash-stats" style="color: ${color}; border: 1px solid ${color}40;">${statsHtml}</div>
+                </div>
+            </div>
+        </div>`;
+        delay += 0.05;
+        return cardHtml;
+    };
+
+    let subjectCount = Object.keys(subjectConfig).length;
+
+    if (canManageBanks) html += renderAdminCard(
+        'Q.LÝ TRẮC NGHIỆM', 
+        'Truy cập kho ngân hàng câu hỏi, soạn thảo đề thi và cài đặt ma trận Bloom.', 
+        `<i class="bi bi-database"></i> Quản lý ${subjectCount} môn học`, 
+        'bi-journal-check', '#38bdf8', 'window.render_student_subject_list("all")'
+    );
+    
+    if (canManageBanks) html += renderAdminCard(
+        'PHÒNG THI ONLINE', 
+        'Tổ chức thi, giám sát sinh viên rời tab (Real-time), khóa máy chống gian lận.', 
+        `<i class="bi bi-broadcast"></i> Trung tâm Giám sát Live`, 
+        'bi-laptop', '#f59e0b', 'window.render_exam_management()'
+    );
+    
+    if (canManageSubjects) html += renderAdminCard(
+        'DANH MỤC MÔN', 
+        'Cài đặt ID Google Sheets, phân quyền nhóm (Role) và đổi giao diện UI.', 
+        `<i class="bi bi-gear"></i> Cấu trúc hệ thống`, 
+        'bi-collection-fill', '#c084fc', 'window.render_subject_management()'
+    );
+    
+    if (canManageUsers) html += renderAdminCard(
+        'Q.LÝ NGƯỜI DÙNG', 
+        'Thêm sinh viên từ Excel, gán lớp học, cấp quyền Admin/User chi tiết.', 
+        `<i class="bi bi-person-lines-fill"></i> Quản lý danh bạ & Lớp`, 
+        'bi-people-fill', '#10b981', 'window.render_user_management()'
+    );
+    
+    if (canManageAdmissions) html += renderAdminCard(
+        'QL TUYỂN SINH', 
+        'Phân tích hồ sơ tuyển sinh, theo dõi nguồn thí sinh và tiến độ nộp hồ sơ.', 
+        `<i class="bi bi-pie-chart"></i> Báo cáo tăng trưởng`, 
+        'bi-person-plus-fill', '#f472b6', 'window.render_admission_analytics()'
+    );
+    
+    if (typeof window.check_stats_perm === 'function' && window.check_stats_perm()) {
+        html += renderAdminCard(
+            'NHẬT KÝ HỆ THỐNG', 
+            'Tra cứu toàn bộ lịch sử ôn tập, thời gian đăng nhập và IP của học viên.', 
+            `<i class="bi bi-clock-history"></i> Log máy chủ`, 
+            'bi-journal-text', '#4ade80', 'window.open_admin_history_modal()'
+        );
+        html += renderAdminCard(
+            'THỐNG KÊ (BIỂU ĐỒ)', 
+            'Phân tích phổ điểm, tỷ lệ làm đúng sai theo từng bài học và môn học.', 
+            `<i class="bi bi-graph-up-arrow"></i> Đánh giá chất lượng`, 
+            'bi-bar-chart-line-fill', '#ef4444', 'window.render_result_management()'
+        );
+    }
+
+    html += `</div>`;
+    container.innerHTML = html;
 };
 
 window.toggle_subject_map = function(subjectKey, displayName) {
@@ -1296,16 +1527,18 @@ window.quick_start_lesson = function(subjectKey, lessonId) {
             window.is_flashcard_mode = false;
             
             let processedPool = pool.map((q, idx, arr) => {
-                let isPhanXa = String(q.type).toLowerCase() === 'phanxa';
+                let newQ = Array.isArray(q) ? [...q] : { ...q };
+                let isPhanXa = String(q.type || q[1] || "").toLowerCase() === 'phanxa';
+                
+                // 1. NẾU LÀ CÂU HỎI PHẢN XẠ NHƯNG MỞ BẰNG QUIZ -> Tạo đáp án nhiễu tự động
                 if (isPhanXa) {
-                    let newQ = {...q};
-                    newQ.q = q.vi || q.q || "Câu hỏi trống";
-                    let correctAns = q.en || q.answer || q.a || "Đáp án trống";
+                    newQ.q = q.vi || q.q || q[2] || "Câu hỏi trống";
+                    let correctAns = q.en || q.answer || q.a || q[4] || "Đáp án trống";
                     
                     let fakeOpts = [correctAns];
                     for(let i = 1; i <= 3; i++) {
                         let nextQ = arr[(idx + i) % arr.length];
-                        fakeOpts.push(nextQ.en || nextQ.answer || nextQ.a || ("Nhiễu " + i));
+                        fakeOpts.push(nextQ.en || nextQ.answer || nextQ.a || nextQ[4] || ("Nhiễu " + i));
                     }
                     fakeOpts.sort(() => Math.random() - 0.5);
                     
@@ -1315,7 +1548,32 @@ window.quick_start_lesson = function(subjectKey, lessonId) {
                     newQ.a = letter; newQ.answer = letter; newQ.type = 'single'; 
                     return newQ;
                 }
-                return q;
+                
+                // 2. BẢO TOÀN DỮ LIỆU CÁC MÔN KHÁC (Quiz, Hotspot, Hình ảnh...)
+                // 🌟 Bổ sung đọc đúng biến 'multimedia' cho dạng bài Hotspot
+                let originalImg = q.img || q.image || q.multimedia || q.image_url || (Array.isArray(q) ? q[3] : "") || "";
+                newQ.img = originalImg;
+                newQ.image = originalImg;
+                newQ.multimedia = originalImg; 
+                
+                // Khôi phục câu hỏi và đáp án để tránh mất dữ liệu gốc
+                newQ.q = q.q || q.question || q[2] || "";
+                newQ.a = q.a || q.answer || q[4] || "";
+
+                // Tái tạo mảng opts để hiển thị 4 nút bấm (chỉ thêm vào nếu thực sự bị thiếu)
+                if (!newQ.opts || newQ.opts.length === 0) {
+                    let oA = q.optA || q.opts_A || q.opt_a || q[5] || q[4] || "";
+                    let oB = q.optB || q.opts_B || q.opt_b || q[6] || q[5] || "";
+                    let oC = q.optC || q.opts_C || q.opt_c || q[7] || q[6] || "";
+                    let oD = q.optD || q.opts_D || q.opt_d || q[8] || q[7] || "";
+                    
+                    let options = [oA, oB, oC, oD].filter(o => o !== null && o !== undefined && String(o).trim() !== "");
+                    if (options.length > 0) {
+                        newQ.opts = options;
+                    }
+                }
+                
+                return newQ;
             });
 
             if(!isStoryLesson) window.questions = [...processedPool].sort(() => Math.random() - 0.5);
@@ -1326,16 +1584,37 @@ window.quick_start_lesson = function(subjectKey, lessonId) {
             
             window.time_left = window.questions.length * 60; window.is_exam_started = true; window.away_seconds = 0; window.start_time = new Date();
             if(typeof window.render_quiz === 'function') window.render_quiz(); 
-            if(typeof window.start_countdown === 'function') window.start_countdown();
+            if(typeof window.start_countdown === 'function') window.start_countdown();  
             
         } else if (mode === 'game') {
             window.is_flashcard_mode = false; 
-            window.questions = [...pool]; 
+            
+            // 🌟 Chuẩn hóa Câu hỏi (q) và Đáp án (a) để tạo thẻ bài Ghép Cặp
+            let processedPool = pool.map((q) => {
+                let newQ = Array.isArray(q) ? [...q] : { ...q };
+                let isPhanXa = String(q.type || q[1] || "").toLowerCase() === 'phanxa';
+                
+                if (isPhanXa) {
+                    newQ.q = q.vi || q.q || q[2] || "Câu hỏi trống";
+                    newQ.a = q.en || q.answer || q.a || q[4] || "Đáp án trống";
+                } else {
+                    newQ.q = q.q || q.question || q[2] || "";
+                    newQ.a = q.a || q.answer || q[4] || "";
+                    newQ.img = q.img || q.image || q.image_url || q[3] || "";
+                }
+                return newQ;
+            }).filter(q => q.q && (q.a || q.img)); // Loại bỏ thẻ rỗng tránh lỗi game
+            
+            window.questions = [...processedPool]; 
             
             // 🌟 Đang ở GAME -> Trỏ tới SINH TỒN
             if(modeTextEl) modeTextEl.innerHTML = '<i class="bi bi-fire text-danger"></i> Sinh Tồn';
             
-            window.time_left = window.questions.length * 60; window.is_exam_started = true; window.away_seconds = 0; window.start_time = new Date();
+            window.time_left = window.questions.length * 60; 
+            window.is_exam_started = true; 
+            window.away_seconds = 0; 
+            window.start_time = new Date();
+            
             if(typeof window.initMatchingGame === 'function') window.initMatchingGame(); 
             else if(typeof window.render_game === 'function') window.render_game();
             if(typeof window.start_countdown === 'function') window.start_countdown();
@@ -1368,7 +1647,7 @@ window.quick_start_lesson = function(subjectKey, lessonId) {
         } else if (mode === 'phanxa') {
             window.is_flashcard_mode = false; 
             
-            // 🌟 Đang ở PHẢN XẠ -> Trỏ vòng lại QUIZ hoặc STORY
+            // 1. Cập nhật nhãn nút chuyển chế độ tiếp theo
             if(modeTextEl) {
                 if (isStoryLesson) modeTextEl.innerHTML = '<i class="bi bi-bezier2"></i> Câu Chuyện';
                 else modeTextEl.innerHTML = '<i class="bi bi-ui-checks"></i> Làm Quiz';
@@ -1376,32 +1655,64 @@ window.quick_start_lesson = function(subjectKey, lessonId) {
             
             if (window.timer_interval) clearInterval(window.timer_interval);
 
-            if(quizArea) {
-                quizArea.innerHTML = `
-                    <div class="text-center mt-5 p-4 animate__animated animate__fadeIn">
-                        <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;"></div>
-                        <h5 class="fw-bold text-primary">Đang tải phòng luyện âm...</h5>
-                        <p class="text-muted small">Đang kết nối đồng bộ dữ liệu với máy chủ</p>
-                    </div>
-                `;
+            // 2. Lấy bộ câu hỏi hiện tại
+            let currentSubjectKey = window.current_subject || "";
+            let currentPool = [...pool];
+
+            if ((!currentPool || currentPool.length === 0) && window.full_data && window.full_data[currentSubjectKey]) {
+                currentPool = [...window.full_data[currentSubjectKey]];
             }
 
-            if (typeof google !== 'undefined' && google.script) { // TODO: chuyển phòng luyện âm sang file HTML tĩnh
-                google.script.run.withSuccessHandler(function() {
-                    google.script.run.withSuccessHandler(function(htmlString) {
-                        if(quizArea) {
-                            quizArea.innerHTML = htmlString;
-                            let scripts = quizArea.getElementsByTagName("script");
-                            for (let i = 0; i < scripts.length; i++) {
-                                let newScript = document.createElement("script");
-                                newScript.text = scripts[i].innerText;
-                                document.body.appendChild(newScript);
-                            }
-                        }
-                    }).getPhanXaHtml(); 
-                }).openPhanXaMode(lessonId, lessonName);
-            } else if (quizArea) {
-                quizArea.innerHTML = `<div class="text-center p-5"><i class="bi bi-tools text-warning" style="font-size:3rem;"></i><h5 class="fw-bold text-warning mt-3">Phòng luyện âm đang được chuyển sang Supabase</h5><p class="text-white-50 small">Tính năng này trước đây chạy bằng Google Apps Script, cần dựng lại thành trang HTML riêng.</p></div>`;
+            // 3. Kiểm tra loại môn học & Lọc Phản Xạ theo User
+            let isPhanXaSubject = currentSubjectKey.includes('phanxa') || currentSubjectKey.includes('tienganh');
+
+            if (isPhanXaSubject) {
+                let user = localStorage.getItem('username') || localStorage.getItem('user_id') || localStorage.getItem('user') || window.current_student_id;
+                let allowedKeys = ['phanxacongdong'];
+                if (user) {
+                    let cleanUser = user.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+                    allowedKeys.push(`phanxa${cleanUser}`);
+                }
+                
+                // Lọc chỉ giữ các câu hỏi cộng đồng hoặc thuộc tài khoản user
+                currentPool = currentPool.filter(q => !q.subject_key || allowedKeys.includes(q.subject_key));
+            }
+
+            // 4. Chuẩn hóa dữ liệu sang định dạng Phản Xạ (VI & EN)
+            let phanXaPool = currentPool.map(q => {
+                let item = { ...q };
+                // Lấy Nội dung câu hỏi
+                item.vi = q.vi || q.q || q.question || q[4] || q[3] || "Câu hỏi";
+                
+                // Lấy Nội dung đáp án đúng
+                let correctOpt = String(q.a || q.answer || q[8] || "").trim().toUpperCase();
+                let ansText = "";
+                if (q.opts && q.opts.length > 0) {
+                    let idx = ['A', 'B', 'C', 'D'].indexOf(correctOpt);
+                    ansText = (idx !== -1 && q.opts[idx]) ? q.opts[idx] : q.opts[0];
+                } else if (q.optA || q.optB || q.optC || q.optD) {
+                    if (correctOpt === 'A') ansText = q.optA;
+                    else if (correctOpt === 'B') ansText = q.optB;
+                    else if (correctOpt === 'C') ansText = q.optC;
+                    else if (correctOpt === 'D') ansText = q.optD;
+                }
+                item.en = ansText || q.en || q.answer || q.a || "Đáp án";
+                return item;
+            });
+
+            // 5. Gán dữ liệu chuẩn bị vào học
+            window.questions = [...phanXaPool];
+            window.px_custom_pool = [...phanXaPool]; 
+
+            // 6. MỞ THẲNG MÀN HÌNH HỌC PHẢN XẠ
+            if (typeof window.openPhanXaModule === 'function') {
+                window.openPhanXaModule(); 
+                
+                setTimeout(() => {
+                    if (typeof window.pxInitExercise === 'function') {
+                        window.pxInitExercise(); 
+                    }
+                }, 200);
             }
         }
     }, lessonName);
@@ -1558,82 +1869,7 @@ window.toggle_q_card = function(idx) {
     }
 };
 
-// =========================================================================
-// 🏢 PHẦN 6: QUẢN TRỊ TRUNG TÂM (ADMIN HUB)
-// =========================================================================
-window.render_admin_hub = function() {
-    const historyArea = document.getElementById('history_view_area');
-    if (historyArea) historyArea.style.display = 'none';
 
-    const container = document.getElementById('dash_subject_cards_container');
-    if (!container) return;
-
-    let isSuper = (window.current_user_role === 'all');
-    let sys = window.currentUserPerms?.system || [];
-    let edt = window.currentUserPerms?.edit || [];
-    
-    let canManageBanks = isSuper || sys.includes('system_banks') || edt.length > 0;
-    let canManageSubjects = isSuper || sys.includes('system_subjects');
-    let canManageUsers = isSuper || sys.includes('system_users');
-    let canManageAdmissions = isSuper || sys.includes('system_admissions');
-
-    const iconStyle = "font-size: 1.2rem; opacity: 0.8;";
-    let hoverEffect = "onmouseover=\"this.style.transform='translateX(4px)'\" onmouseout=\"this.style.transform='translateX(0)'\"";
-    
-    let html = "";
-    if (isSuper) {
-        let invKey = 'mcq_inventory_' + (window.current_student_id || 'guest');
-        let inventoryCount = parseInt(localStorage.getItem(invKey)) || 0;
-        let studentNameDisplay = window.current_student_name || window.current_student_id || "Admin";
-
-        html += `
-        <div class="col-12 px-2 mb-3 animate__animated animate__fadeInDown">
-            <div class="d-flex align-items-center justify-content-center gap-3 w-100" style="background: transparent; border: none; flex-wrap: wrap;">
-                <div class="d-flex align-items-center gap-2">
-                    ${window.get_user_rank_html()}
-                    <div class="text-white-50 fw-bold" style="font-size: 0.85rem; line-height: 1.2;">
-                        <div style="font-size: 0.7rem; text-transform: uppercase;">Xin chào,</div>
-                        <span class="text-danger">${studentNameDisplay}</span>
-                    </div>
-                </div>
-                <div class="text-white-50 opacity-25 d-none d-sm-block">|</div>
-                <div id="dashboard_inventory_badge" class="d-flex align-items-center gap-1 stat-card-hover" title="Bấm để mở Túi Đồ" style="cursor: pointer;" onclick="window.toggle_inventory_popover(event)">
-                    <span style="font-size: 1.1rem; line-height: 1;">🎁</span>
-                    <span class="text-warning fw-bold" style="font-size: 0.95rem;" id="dashboard_inventory_count">${inventoryCount}</span>
-                </div>
-                <div class="text-white-50 opacity-25">|</div>
-                <div class="d-flex align-items-center stat-card-hover text-info" title="Liên kết khuôn mặt (Face ID)" style="cursor: pointer;" onclick="window.setup_face_id()">
-                    <i class="bi bi-person-bounding-box fs-5"></i>
-                </div>
-                <div class="text-white-50 opacity-25">|</div>
-                <div class="d-flex align-items-center stat-card-hover text-danger" title="Đăng xuất" style="cursor: pointer;" onclick="window.logout_user()">
-                    <i class="bi bi-box-arrow-right fs-5"></i>
-                </div>
-            </div>
-        </div>`;
-    } else {
-        html += `
-        <div class="col-12 px-2 mb-3">
-            <div class="d-flex justify-content-between align-items-center w-100" style="background: transparent; border: none;">
-                <button class="btn btn-sm fw-bold text-white-50 p-0 d-flex align-items-center" onclick="window.render_student_subject_list(window.current_user_role)" style="background: transparent; border: none; font-size: 0.9rem; letter-spacing: 0.5px;"><i class="bi bi-arrow-left me-1"></i>Quay lại</button>
-            </div>
-        </div>`;
-    }
-
-    if (canManageBanks) html += `<div class="col-12 mb-1 animate__animated animate__fadeInUp" style="animation-delay: 0.05s;"><div class="p-2 d-flex align-items-center gap-3" style="cursor:pointer; border: none; transition: transform 0.2s; background: transparent;" ${hoverEffect} onclick="window.render_student_subject_list('all')"><div style="width: 35px; text-align: center;"><i class="bi bi-card-checklist text-info" style="${iconStyle}"></i></div><h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">QUẢN LÝ TRẮC NGHIỆM</h6></div></div>`;
-    if (canManageBanks) html += `<div class="col-12 mb-1 animate__animated animate__fadeInUp" style="animation-delay: 0.08s;"><div class="p-2 d-flex align-items-center gap-3" style="cursor:pointer; border: none; transition: transform 0.2s; background: transparent;" ${hoverEffect} onclick="window.render_exam_management()"><div style="width: 35px; text-align: center;"><i class="bi bi-laptop text-warning" style="${iconStyle}"></i></div><h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">QUẢN LÝ PHÒNG THI ONLINE</h6></div></div>`;
-    if (canManageSubjects) html += `<div class="col-12 mb-1 animate__animated animate__fadeInUp" style="animation-delay: 0.1s;"><div class="p-2 d-flex align-items-center gap-3" style="cursor:pointer; border: none; transition: transform 0.2s; background: transparent;" ${hoverEffect} onclick="window.render_subject_management()"><div style="width: 35px; text-align: center;"><i class="bi bi-collection-fill" style="${iconStyle} color: #c084fc;"></i></div><h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">DANH MỤC MÔN HỌC</h6></div></div>`;
-    if (canManageUsers) html += `<div class="col-12 mb-1 animate__animated animate__fadeInUp" style="animation-delay: 0.15s;"><div class="p-2 d-flex align-items-center gap-3" style="cursor:pointer; border: none; transition: transform 0.2s; background: transparent;" ${hoverEffect} onclick="window.render_user_management()"><div style="width: 35px; text-align: center;"><i class="bi bi-people-fill text-success" style="${iconStyle}"></i></div><h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">QUẢN LÝ NGƯỜI DÙNG</h6></div></div>`;
-    if (canManageAdmissions) html += `<div class="col-12 mb-1 animate__animated animate__fadeInUp" style="animation-delay: 0.2s;"><div class="p-2 d-flex align-items-center gap-3" style="cursor:pointer; border: none; transition: transform 0.2s; background: transparent;" ${hoverEffect} onclick="window.render_admission_analytics()"><div style="width: 35px; text-align: center;"><i class="bi bi-person-plus-fill" style="${iconStyle} color: #f472b6;"></i></div><h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">QL TUYỂN SINH</h6></div></div>`;
-    
-    // 🌟 ĐÃ THÊM: Nút mở Nhật Ký Hệ Thống ngay trên menu Thống kê
-    if (typeof window.check_stats_perm === 'function' && window.check_stats_perm()) {
-        html += `<div class="col-12 mb-1 animate__animated animate__fadeInUp" style="animation-delay: 0.23s;"><div class="p-2 d-flex align-items-center gap-3" style="cursor:pointer; border: none; transition: transform 0.2s; background: transparent;" ${hoverEffect} onclick="window.open_admin_history_modal()"><div style="width: 35px; text-align: center;"><i class="bi bi-journal-text text-success" style="${iconStyle}"></i></div><h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">NHẬT KÝ HỆ THỐNG</h6></div></div>`;
-        html += `<div class="col-12 mb-1 animate__animated animate__fadeInUp" style="animation-delay: 0.25s;"><div class="p-2 d-flex align-items-center gap-3" style="cursor:pointer; border: none; transition: transform 0.2s; background: transparent;" ${hoverEffect} onclick="window.render_result_management()"><div style="width: 35px; text-align: center;"><i class="bi bi-bar-chart-line-fill text-danger" style="${iconStyle}"></i></div><h6 class="fw-bold text-white mb-0" style="font-size: 0.85rem;">THỐNG KÊ (BIỂU ĐỒ)</h6></div></div>`;
-    }
-
-    container.innerHTML = html;
-};
 
 // =========================================================================
 // 📝 ADMIN: TRA CỨU NHẬT KÝ ÔN TẬP TOÀN HỆ THỐNG TỪ SUPABASE
@@ -1644,10 +1880,10 @@ window.open_admin_history_modal = function() {
     if(existing) existing.remove();
 
     let html = `
-    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 99999; backdrop-filter: blur(10px); padding: 10px;">
-        <div class="glass-panel p-3 shadow-lg d-flex flex-column w-100 animate__animated animate__zoomIn" style="max-width: 650px; height: 85vh; border-radius: 20px; background: rgba(15, 23, 42, 0.95) !important; border: 1px solid #10b981;">
+    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.9); z-index: 99999;  padding: 10px;">
+        <div class="glass-panel p-3 shadow-lg d-flex flex-column w-100 animate__animated animate__zoomIn" style="max-width: 650px; height: 85vh; border-radius: 20px; background: #1a1a1a !important; border: 1px solid #10b981;">
             
-            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom" style="border-color: rgba(255,255,255,0.1) !important;">
+            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom" style="border-color: #2a2a2a !important;">
                 <h6 class="fw-bold text-success mb-0"><i class="bi bi-journal-check me-2"></i>NHẬT KÝ ÔN TẬP HỆ THỐNG</h6>
                 <button class="btn-close btn-close-white" onclick="document.getElementById('${modalId}').remove()"></button>
             </div>
@@ -1800,60 +2036,139 @@ window.admin_login_process = async function(key) {
     }
 };
 
+
+window.close_bloom_dashboard = function() { document.getElementById('admin_dashboard').style.display = 'none'; document.getElementById('step_1').style.display = 'block'; }
+
+
+
 window.render_bloom_matrix_standard = function() {
     const tbody = document.getElementById('lesson_config_body'); 
     if (!tbody) return;
+    
+    // 🌟 BƠM CSS ẨN MŨI TÊN TĂNG/GIẢM CHO CẢ MA TRẬN VÀ Ô THỜI GIAN
+    if (!document.getElementById('hide_spinner_css')) {
+        let style = document.createElement('style');
+        style.id = 'hide_spinner_css';
+        style.innerHTML = `
+            /* Ẩn mũi tên trên Chrome, Safari, Edge, Opera */
+            .bloom-input::-webkit-outer-spin-button,
+            .bloom-input::-webkit-inner-spin-button,
+            #exam_time_input::-webkit-outer-spin-button,
+            #exam_time_input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+            /* Ẩn mũi tên trên Firefox */
+            .bloom-input[type=number], #exam_time_input[type=number] { -moz-appearance: textfield; }
+            /* Hiệu ứng phát sáng khi Thầy bấm vào ô */
+            .bloom-input:focus { background: #343a40 !important; outline: none; border-color: #0ea5e9 !important; box-shadow: 0 0 10px rgba(14, 165, 233, 0.4); }
+        `;
+        document.head.appendChild(style);
+    }
+
+    // 🌟 Ép ô Thời gian tự động bôi đen khi click vào
+    let timeInput = document.getElementById('exam_time_input');
+    if (timeInput && !timeInput.hasAttribute('onfocus')) {
+        timeInput.setAttribute('onfocus', 'this.select()');
+    }
+
     let data_source = window.full_data[window.current_subject] || [];
     
-    // Lấy danh sách bài và sắp xếp chuẩn theo số (1, 2, 3... 10) thay vì (1, 10, 2)
     const lessons = [...new Set(data_source.map(q => q.lesson))]
                     .filter(l => l !== undefined && l !== null && l !== "")
                     .sort((a, b) => parseInt(a) - parseInt(b));
     
-    tbody.innerHTML = lessons.map(l => {
+    let html = '';
+    
+    lessons.forEach(l => {
         const lesson_qs = data_source.filter(q => String(q.lesson) === String(l));
         
-        // 🌟 KÍNH LÚP NHẬN DIỆN MỌI LOẠI DỮ LIỆU CŨ & MỚI
         const c = (targetType, targetLevel) => { 
             return lesson_qs.filter(q => { 
-                // Chuẩn hóa loại câu hỏi
                 let qType = q.type ? String(q.type).toLowerCase().trim() : 'single';
                 if (qType === 'quiz' || qType === 'mcq' || qType === '') qType = 'single';
                 if (qType === 'tf' || qType === 'đúng sai') qType = 'true_false';
-                
+                if (['hotspot', 'clip', 'clip_listen', 'arrange', 'sắp xếp'].includes(qType)) qType = 'media';
                 if (qType !== targetType) return false; 
                 
-                // Chuẩn hóa mức độ
                 let qLevel = q.level ? String(q.level).trim() : "1"; 
                 if (qLevel === "null" || qLevel === "undefined" || qLevel === "0" || qLevel === "") qLevel = "1";
-                
                 return qLevel === String(targetLevel); 
             }).length; 
         };
-        
-        const inputStyle = `style="width: 100%; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; padding: 2px; text-align: center; font-size: 0.8rem; background: rgba(0,0,0,0.2); color: #fff;"`;
-        let row = `<tr style="border-bottom: 1px solid rgba(255,255,255,0.1);"><td class="ps-2 fw-bold" style="font-size: 0.7rem; color: #e2e8f0;">BÀI ${l}</td>`;
-        for(let i=1; i<=4; i++) row += `<td><input type="number" class="bloom-input" ${inputStyle} placeholder="${c('single',i)}" min="0" max="${c('single',i)}" data-lesson="${l}" data-type="single" data-level="${i}" oninput="window.update_bloom_count()"></td>`;
-        for(let i=1; i<=4; i++) row += `<td><input type="number" class="bloom-input" ${inputStyle} placeholder="${c('true_false',i)}" min="0" max="${c('true_false',i)}" data-lesson="${l}" data-type="true_false" data-level="${i}" oninput="window.update_bloom_count()"></td>`;
-        for(let i=1; i<=4; i++) row += `<td><input type="number" class="bloom-input" ${inputStyle} placeholder="${c('fill',i)}" min="0" max="${c('fill',i)}" data-lesson="${l}" data-type="fill" data-level="${i}" oninput="window.update_bloom_count()"></td>`;
-        row += `</tr>`; 
-        return row;
-    }).join('');
+
+        const buildInput = (type, level) => {
+            let max = c(type, level);
+            let disabled = max === 0 ? 'disabled' : '';
+            let opacity = max === 0 ? 'opacity: 0.2;' : 'opacity: 1;';
+            return `
+            <div class="d-flex flex-column align-items-center" style="${opacity}">
+                <label class="text-white-50 mb-1" style="font-size: 0.65rem; font-weight: bold;">L${level}</label>
+                <input type="number" class="bloom-input form-control p-1 text-center fw-bold"
+                       style="width: 42px; height: 32px; font-size: 0.85rem; background: #2b3035; color: #fff; border: 1px solid #495057; border-radius: 6px; transition: 0.2s;"
+                       placeholder="${max}" min="0" max="${max}"
+                       data-lesson="${l}" data-type="${type}" data-level="${level}"
+                       onfocus="this.select()" 
+                       oninput="window.update_bloom_count()" ${disabled}>
+            </div>`;
+        };
+
+        const buildTypeRow = (type, label, icon, color) => {
+            let totalForType = c(type, 1) + c(type, 2) + c(type, 3) + c(type, 4);
+            if (totalForType === 0) return ''; 
+
+            return `
+            <div class="d-flex justify-content-between align-items-center p-2 rounded mb-2 shadow-sm" style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05);">
+                <div class="d-flex align-items-center" style="width: 85px;">
+                    <i class="${icon} me-1" style="color: ${color}; font-size: 0.9rem;"></i>
+                    <span class="fw-bold" style="color: ${color}; font-size: 0.7rem; letter-spacing: 0.5px;">${label}</span>
+                </div>
+                <div class="d-flex gap-2">
+                    ${buildInput(type, 1)}
+                    ${buildInput(type, 2)}
+                    ${buildInput(type, 3)}
+                    ${buildInput(type, 4)}
+                </div>
+            </div>`;
+        };
+
+        let rowHtml = `
+        <div class="col-12 col-xl-6 mb-3 animate__animated animate__fadeInUp">
+            <div class="card h-100 shadow-sm" style="background: #121416; border: 1px solid #2b3035; border-radius: 12px; overflow: hidden;">
+                <div class="p-2 border-bottom d-flex justify-content-between align-items-center" style="background: #1a1d20; border-color: #2b3035 !important;">
+                    <span class="badge bg-dark border border-secondary text-info fw-bold" style="font-size: 0.8rem;"><i class="bi bi-journal-bookmark-fill me-1"></i>BÀI ${l}</span>
+                    <span class="badge text-white-50" style="background: rgba(255,255,255,0.1); font-size: 0.7rem;">Kho: ${lesson_qs.length} câu</span>
+                </div>
+                <div class="p-2 pb-1">
+                    ${buildTypeRow('single', 'MCQ', 'bi-list-ul', '#38bdf8')}
+                    ${buildTypeRow('true_false', 'ĐÚNG/SAI', 'bi-check2-circle', '#4ade80')}
+                    ${buildTypeRow('fill', 'Đ.KHUYẾT', 'bi-input-cursor-text', '#fb923c')}
+                    ${buildTypeRow('media', 'MEDIA', 'bi-play-btn', '#c084fc')}
+                </div>
+            </div>
+        </div>`;
+
+        html += rowHtml;
+    });
+
+    tbody.innerHTML = `<div class="row m-0">${html}</div>`;
 };
 
 window.update_bloom_count = function() {
-    let total = 0, single = 0, tf = 0, fill = 0;
+    let total = 0, single = 0, tf = 0, fill = 0, media = 0;
     document.querySelectorAll('.bloom-input').forEach(input => {
         let val = parseInt(input.value) || 0; let max = parseInt(input.placeholder) || 0;
         if (val > max) { input.value = max; val = max; }
         total += val;
         const type = input.getAttribute('data-type');
-        if (type === 'single') single += val; else if (type === 'true_false') tf += val; else if (type === 'fill') fill += val;
+        if (type === 'single') single += val; 
+        else if (type === 'true_false') tf += val; 
+        else if (type === 'fill') fill += val;
+        else if (type === 'media') media += val;
     });
     document.getElementById('total_selected_count').innerText = total;
     document.getElementById('count_single').innerText = single;
     document.getElementById('count_true_false').innerText = tf;
     document.getElementById('count_fill').innerText = fill;
+    let countMediaEl = document.getElementById('count_media');
+    if (countMediaEl) countMediaEl.innerText = media;
 };
 
 window.close_bloom_dashboard = function() { document.getElementById('admin_dashboard').style.display = 'none'; document.getElementById('step_1').style.display = 'block'; }
@@ -1869,10 +2184,11 @@ window.process_create_exam = function() {
             let pool = data_source.filter(q => {
                 if (String(q.lesson) !== String(l)) return false;
                 
-                // Đồng bộ chuẩn hóa giống hàm đếm ở trên
                 let qType = q.type ? String(q.type).toLowerCase().trim() : 'single';
                 if (qType === 'quiz' || qType === 'mcq' || qType === '') qType = 'single';
                 if (qType === 'tf' || qType === 'đúng sai') qType = 'true_false';
+                if (['hotspot', 'clip', 'clip_listen', 'arrange', 'sắp xếp'].includes(qType)) qType = 'media';
+                
                 if (qType !== type) return false;
 
                 let qLevel = q.level ? String(q.level).trim() : "1";
@@ -1886,7 +2202,10 @@ window.process_create_exam = function() {
 
     if (exam_list.length === 0) return window.show_alert("Thông báo", "Vui lòng chọn số câu hỏi!", false);
 
-    window.questions = exam_list.sort((a, b) => { const order = { 'single': 1, 'true_false': 2, 'fill': 3 }; return order[a.type] - order[b.type]; });
+    window.questions = exam_list.sort((a, b) => { 
+        const order = { 'single': 1, 'true_false': 2, 'fill': 3, 'hotspot': 4, 'clip': 5, 'clip_listen': 5, 'arrange': 6, 'sắp xếp': 6 }; 
+        return (order[a.type] || 99) - (order[b.type] || 99); 
+    });
     window.questions.forEach(q => { q.done = false; q.ans_user = (q.type === 'fill') ? [] : ""; });
 
     document.getElementById('admin_dashboard').style.display = 'none';
@@ -1907,15 +2226,11 @@ window.process_create_exam = function() {
     if(typeof window.start_countdown === 'function') window.start_countdown();
     window.current_exam_questions = JSON.parse(JSON.stringify(window.questions));
     window.current_subject_key = window.current_subject;
-    document.getElementById('admin_export_section').style.display = 'block';
+    
+    let adminExport = document.getElementById('admin_export_section');
+    if(adminExport) adminExport.style.display = 'block';
 };
 
-// [ĐÃ GỠ BẢN TRÙNG] window.exportExamPackage (dòng cũ 1726-1726) - bản dùng thật nằm ở phía dưới file
-// [ĐÃ GỠ] run_health_check bản Google Apps Script -> xem bản Supabase/offline ở đầu file
-
-// =========================================================================
-// 📝 HÀM MỚI: XỬ LÝ LƯU ĐỀ THI TRỰC TUYẾN TỪ MA TRẬN BLOOM (CÓ REVIEW)
-// =========================================================================
 window.prepare_online_exam = function() {
     let data_source = window.full_data[window.current_subject] || []; 
     let exam_list = [];
@@ -1930,10 +2245,11 @@ window.prepare_online_exam = function() {
             let pool = data_source.filter(q => {
                 if (String(q.lesson) !== String(l)) return false;
                 
-                // Đồng bộ chuẩn hóa giống hàm đếm
                 let qType = q.type ? String(q.type).toLowerCase().trim() : 'single';
                 if (qType === 'quiz' || qType === 'mcq' || qType === '') qType = 'single';
                 if (qType === 'tf' || qType === 'đúng sai') qType = 'true_false';
+                if (['hotspot', 'clip', 'clip_listen', 'arrange', 'sắp xếp'].includes(qType)) qType = 'media';
+                
                 if (qType !== type) return false;
 
                 let qLevel = q.level ? String(q.level).trim() : "1";
@@ -1951,7 +2267,7 @@ window.prepare_online_exam = function() {
     if (exam_list.length === 0) return window.show_alert("Thông báo", "⚠️ Thầy vui lòng nhập số lượng câu hỏi vào ma trận trước khi Lưu đề!", false);
     
     window.temp_online_exam_questions = exam_list.sort((a, b) => { 
-        const order = { 'single': 1, 'true_false': 2, 'fill': 3 }; 
+        const order = { 'single': 1, 'true_false': 2, 'fill': 3, 'hotspot': 4, 'clip': 5, 'clip_listen': 5, 'arrange': 6, 'sắp xếp': 6 }; 
         return (order[a.type] || 99) - (order[b.type] || 99); 
     });
     
@@ -2001,7 +2317,7 @@ window.show_edit_lesson_list = function(subKey) {
     let displayName = subjectConfig[subKey]?.name || subjectNames[subKey] || subKey.toUpperCase();
     let html = `
     <div class="p-3 glass-panel m-2 animate__animated animate__fadeIn">
-        <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2" style="border-color: rgba(255,255,255,0.1) !important;">
+        <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2" style="border-color: #2a2a2a !important;">
             <h5 class="text-info fw-bold mb-0"><i class="bi bi-folder2-open me-2"></i> Chọn bài để sửa: <span class="text-warning">${displayName}</span></h5>
             <button class="btn btn-sm btn-outline-light rounded-pill px-3 shadow-sm" onclick="location.reload();"><i class="bi bi-x-circle"></i> Thoát</button>
         </div>
@@ -2035,7 +2351,7 @@ window.render_admin_panel = function() {
     let html = `
     <div class="p-1 m-1 animate__animated animate__fadeIn" style="max-width: 100%; overflow-x: hidden;">
         
-        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom" style="border-color: rgba(255,255,255,0.1) !important;">
+        <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom" style="border-color: #2a2a2a !important;">
             <button class="btn btn-sm btn-light border-0 rounded-pill px-3 text-dark shadow-sm fw-bold glass-action-btn" style="font-size:0.75rem;" onclick="back_to_subject_select()">
                 <i class="bi bi-arrow-left me-1"></i> Đóng
             </button>
@@ -2102,7 +2418,7 @@ window.render_admin_panel = function() {
             let optC = q.optc || (q.opts && q.opts[2] ? q.opts[2] : '');
             let optD = q.optd || (q.opts && q.opts[3] ? q.opts[3] : '');
             optsHtml = `
-            <div class="mb-3 p-2 rounded border" style="background: rgba(0,0,0,0.25); border-color: rgba(255,255,255,0.1) !important; font-size: 0.85rem; color: rgba(255,255,255,0.9);">
+            <div class="mb-3 p-2 rounded border" style="background: rgba(0,0,0,0.25); border-color: #2a2a2a !important; font-size: 0.85rem; color: rgba(255,255,255,0.9);">
                 <div class="mb-1"><strong class="text-white">A.</strong> ${optA}</div>
                 <div class="mb-1"><strong class="text-white">B.</strong> ${optB}</div>
                 <div class="mb-1"><strong class="text-white">C.</strong> ${optC}</div>
@@ -2138,7 +2454,7 @@ window.render_admin_panel = function() {
                     ${hintHtml}
                 </div>
 
-                <div class="d-flex justify-content-end gap-2 border-top pt-3 mt-3" style="border-color: rgba(255,255,255,0.1) !important;">
+                <div class="d-flex justify-content-end gap-2 border-top pt-3 mt-3" style="border-color: #2a2a2a !important;">
                     <button class="btn glass-action-btn delete" onclick="delete_question_direct(${idx})">
                         <i class="bi bi-trash3 me-1"></i> Xóa
                     </button>
@@ -2191,19 +2507,41 @@ window.refresh_subject_data = async function(subjectKey, iconEl) {
 };
 
 // =========================================================================
-// 📂 PHẦN 7: DANH MỤC MÔN HỌC (SUBJECT MANAGEMENT)
+// 📂 PHẦN 7: DANH MỤC MÔN HỌC (HIỂN THỊ BÌA SÁCH VÀ ĐẾM CÂU HỎI TRỰC TIẾP)
 // =========================================================================
 window.render_subject_management = function() {
     const container = document.getElementById('dash_subject_cards_container');
+    if (!container) return;
     
     let html = `
+    <style>
+        .student-subj-group { cursor: pointer; border: 1px solid #2b3035; background: #1a1d20; border-radius: 12px; transition: 0.2s; }
+        .student-subj-group:hover { border-color: #495057; background: #212529; }
+        
+        .student-subj-card { background: #121416; border: 1px solid #2b3035; border-radius: 16px; transition: 0.3s; cursor: default; display: flex; flex-direction: column; padding: 20px; height: 100%; box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
+        .student-subj-card:hover { border-color: #0ea5e9; transform: translateY(-4px); background: #1e293b; box-shadow: 0 8px 25px rgba(14, 165, 233, 0.2); }
+        
+        .subj-card-header { display: flex; align-items: flex-start; gap: 15px; margin-bottom: 12px; }
+        .subj-icon-box { width: 60px; height: 80px; border-radius: 8px; background: #1a1d20; border: 1px solid #343a40; display: flex; align-items: center; justify-content: center; font-size: 2rem; flex-shrink: 0; box-shadow: 2px 4px 10px rgba(0,0,0,0.3); overflow: hidden; transition: 0.3s; }
+        .student-subj-card:hover .subj-icon-box { transform: scale(1.05) rotate(2deg); box-shadow: 4px 6px 15px rgba(0,0,0,0.4); border-color: #0ea5e9; }
+        
+        .subj-info-box { flex-grow: 1; min-width: 0; }
+        .subj-title { font-size: 1rem; font-weight: 700; color: #f8fafc; text-transform: uppercase; letter-spacing: 0.3px; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .subj-desc { font-size: 0.75rem; color: #94a3b8; line-height: 1.5; }
+        
+        .subj-stats-bar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 12px; }
+        .subj-stat-badge { font-size: 0.7rem; font-weight: 600; padding: 4px 10px; border-radius: 8px; background: rgba(255,255,255,0.05); color: #cbd5e1; display: flex; align-items: center; gap: 4px; border: 1px solid rgba(255,255,255,0.05); }
+    </style>
+    
     <div class="col-12 px-1 animate__animated animate__fadeIn mb-3">
-        <div class="d-flex justify-content-between align-items-center bg-dark p-3 rounded-4 shadow-sm w-100" style="background: transparent !important; border: 1px solid rgba(255,255,255,0.1);">
-            <div style="flex: 1;"><button class="btn btn-sm glass-action-btn fw-bold px-3" onclick="window.render_admin_hub()">Thoát</button></div>
-            <h6 class="fw-bold text-white mb-0 px-2 text-center flex-grow-1 text-truncate" style="font-size: 0.9rem; letter-spacing: 1px;">DANH MỤC MÔN HỌC</h6>
-            <div style="flex: 1;" class="text-end"><button class="btn btn-sm btn-info fw-bold px-3" onclick="window.open_subject_modal()">Tạo mới</button></div>
+        <div class="d-flex justify-content-between align-items-center bg-dark p-3 rounded-4 shadow-sm w-100" style="background: #121416 !important; border: 1px solid #2b3035;">
+            <div style="flex: 1;"><button class="btn btn-sm btn-outline-secondary text-light fw-bold px-3 shadow-sm" style="border-radius: 8px;" onclick="window.render_admin_hub()"><i class="bi bi-arrow-left me-1"></i>Trở về</button></div>
+            <h6 class="fw-bold text-white mb-0 px-2 text-center flex-grow-1 text-truncate" style="font-size: 0.9rem; letter-spacing: 1px;"><i class="bi bi-collection-fill text-info me-2"></i>DANH MỤC MÔN HỌC</h6>
+            <div style="flex: 1;" class="text-end"><button class="btn btn-sm btn-info fw-bold px-3 shadow-sm text-dark" style="border-radius: 8px;" onclick="window.open_subject_modal()"><i class="bi bi-plus-lg me-1"></i> Tạo mới</button></div>
         </div>
-    </div>`;
+    </div>
+    
+    <div class="row w-100 m-0 g-3">`;
 
     let groups = {};
     Object.keys(subjectConfig).forEach(key => {
@@ -2218,10 +2556,7 @@ window.render_subject_management = function() {
         let subjects = groups[groupName];
         let groupId = 'subj_mng_group_' + gIndex;
         
-        // 🌟 BẢNG ÉP THỨ TỰ MÔN HỌC ADMIN
         const subjectOrder = { 'toan': 1, 'van': 2, 'tienganh': 3, 'khtn': 4, 'congnghe': 5, 'tinhoc': 6, 'lichsu': 7, 'dialy': 8, 'gdcd': 9 };
-        
-        // Tiến hành xếp hàng các thẻ môn học
         subjects.sort((a, b) => {
             let rankA = subjectOrder[a.key] || 999;
             let rankB = subjectOrder[b.key] || 999;
@@ -2230,102 +2565,286 @@ window.render_subject_management = function() {
         });
 
         html += `
-        <div class="col-12 px-1 animate__animated animate__fadeInUp" style="animation-delay: ${delay}s;">
-            <div class="glass-panel p-3 mb-2 d-flex justify-content-between align-items-center shadow-sm" 
-                 style="cursor: pointer; border: none !important; background: linear-gradient(90deg, rgba(168, 85, 247, 0.2) 0%, rgba(168, 85, 247, 0.05) 100%); border-radius: 12px;"
+        <div class="col-12 px-0 animate__animated animate__fadeInUp" style="animation-delay: ${delay}s;">
+            <div class="student-subj-group p-3 mb-2 d-flex justify-content-between align-items-center shadow-sm" 
                  onclick="let el = document.getElementById('${groupId}'); el.classList.toggle('d-none'); let icon = document.getElementById('icon_${groupId}'); if(el.classList.contains('d-none')){icon.classList.replace('bi-chevron-up', 'bi-chevron-down')}else{icon.classList.replace('bi-chevron-down', 'bi-chevron-up')}">
-                <div class="d-flex align-items-center"><i class="bi bi-folder-fill" style="color: #c084fc; font-size: 1.5rem; margin-right: 15px;"></i><div><h6 class="fw-bold text-white mb-0 text-uppercase" style="letter-spacing: 0.5px;">${groupName}</h6><small style="color: #c084fc;">${subjects.length} môn học</small></div></div>
-                <i id="icon_${groupId}" class="bi bi-chevron-down text-white fs-5"></i>
+                <div class="d-flex align-items-center"><i class="bi bi-folder-fill" style="color: #c084fc; font-size: 1.4rem; margin-right: 12px;"></i><h6 class="fw-bold text-white mb-0 text-uppercase" style="letter-spacing: 0.5px; font-size:0.9rem;">${groupName}</h6></div>
+                <i id="icon_${groupId}" class="bi bi-chevron-down text-white-50 fs-5"></i>
             </div>
             
-            <div id="${groupId}" class="d-none mb-3 w-100">
-                <div class="row m-0 mt-2">`;
+            <div id="${groupId}" class="d-none w-100">
+                <div class="row m-0 g-3 mt-1 mb-4">`;
         
-        subjects.forEach((c) => {
-            let safeId = String(c.id || c.fileId || c['ID File'] || c[1] || '').trim();
-            let safeSheet = String(c.sheetName || c.sheet || c['Tên Sheet'] || c[2] || '').trim();
+        subjects.forEach((c, sIndex) => {
             let safeRole = String(c.role || c.quyen || c['Quyền'] || c[3] || 'all').trim();
-            let safeIcon = String(c.icon || c['Icon'] || c[4] || '📚').trim();
             let safeName = String(c.name || c['Tên hiển thị'] || c[5] || c.key || 'Chưa có tên').trim();
             let safeUI = String(c.ui_template || c['Mẫu Giao Diện'] || c[6] || '1').trim();
+            let uiText = safeUI === "2" ? "Chuyên sâu (2)" : safeUI === "3" ? "Thực hành (3)" : "Mặc định (1)";
 
-            let uiText = safeUI === "2" ? "UI2" : safeUI === "3" ? "UI3" : "UI1";
-            let displayId = safeId ? safeId.substring(0, 15) + '...' : '<span class="text-danger fw-bold">Trống/Lỗi</span>';
-            let displaySheet = safeSheet ? safeSheet : '<span class="text-danger fw-bold">Trống/Lỗi</span>';
+            let safeIcon = String(c.icon || c['Icon'] || c[4] || '📚').trim();
+            let displayIconHtml = "";
+            if (safeIcon.startsWith('http') || safeIcon.startsWith('data:image')) {
+                displayIconHtml = `<img src="${safeIcon}" style="width: 100%; height: 100%; object-fit: cover;" alt="Bìa sách">`;
+            } else {
+                displayIconHtml = safeIcon;
+            }
 
             html += `
-                    <div class="col-12 px-0 mb-2">
-                        <div class="card glass-panel p-3 d-flex flex-row align-items-center">
-                            <div class="rounded-circle d-flex align-items-center justify-content-center bg-dark text-white fw-bold shadow-inner flex-shrink-0" style="width: 45px; height: 45px; font-size: 1.2rem;">${safeIcon}</div>
-                            <div class="flex-grow-1 px-3 overflow-hidden">
-                                <div class="fw-bold text-white mb-1" style="font-size: 0.95rem;">${safeName}</div>
-                                <div class="text-white-50" style="font-size: 0.75rem; line-height: 1.5;">
-                                    <div class="text-truncate">Mã: <span class="text-info fw-bold">${c.key}</span> | Nhóm: ${safeRole}</div>
-                                    <div class="text-truncate">ID: <span class="text-warning font-monospace">${displayId}</span></div>
-                                    <div class="text-truncate">Sheet: <span class="text-success font-monospace">${displaySheet}</span> | UI: <span class="text-light">${uiText}</span></div>
+                <div class="col-12 col-md-6 px-1 animate__animated animate__fadeInUp" style="animation-delay: ${sIndex * 0.03}s;">
+                    <div class="student-subj-card">
+                        
+                        <div class="subj-card-header">
+                            <div class="subj-icon-box">${displayIconHtml}</div>
+                            <div class="subj-info-box">
+                                <div class="subj-title">${safeName}</div>
+                                <div class="subj-desc">
+                                    <div class="mb-1 text-truncate">Mã môn: <span class="text-info fw-bold">${c.key}</span></div>
+                                    <div class="mb-1 text-truncate">Kho dữ liệu: <span class="text-success fw-bold" id="admin_stats_badge_${c.key}"><i class="bi bi-hourglass-split"></i> Đang đếm...</span></div>
+                                    
+                                    <!-- 🌟 NƠI HIỂN THỊ CÁC BADGE PHÂN LOẠI CÂU -->
+                                    <div id="admin_stats_details_${c.key}" class="d-flex flex-wrap mt-1 mb-1 gap-1"></div>
+                                    
+                                    <div class="text-truncate">Giao diện (UI): <span class="text-light">${uiText}</span></div>
                                 </div>
                             </div>
-                            <div class="d-flex flex-column gap-1 flex-shrink-0">
-                                <button class="btn btn-sm glass-action-btn text-warning py-1 px-3" onclick="window.open_subject_modal('${c.key}')"><i class="bi bi-pencil-square"></i> Sửa</button>
-                                <button class="btn btn-sm glass-action-btn text-danger py-1 px-3" onclick="window.remove_subject('${c.key}')"><i class="bi bi-trash3"></i> Xóa</button>
+                        </div>
+
+                        <div class="subj-stats-bar justify-content-between align-items-center w-100">
+                            <div class="d-flex gap-2">
+                                <span class="subj-stat-badge" title="Nhóm được truy cập"><i class="bi bi-shield-lock text-warning"></i> Role: ${safeRole}</span>
+                            </div>
+                            <div class="d-flex gap-2 align-items-center">
+                                <button class="btn btn-sm btn-outline-warning fw-bold border-0 px-3 rounded-pill d-flex align-items-center" onclick="window.open_subject_modal('${c.key}')" style="background: rgba(245, 158, 11, 0.1);">
+                                    <i class="bi bi-pencil-square me-1"></i> Sửa
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger fw-bold border-0 px-3 rounded-pill d-flex align-items-center" onclick="window.remove_subject('${c.key}')" style="background: rgba(239, 68, 68, 0.1);">
+                                    <i class="bi bi-trash3 me-1"></i> Xóa
+                                </button>
                             </div>
                         </div>
-                    </div>`;
+                        
+                    </div>
+                </div>`;
         });
         html += `       </div>
-            </div>
+                </div>
         </div>`;
         delay += 0.05;
     });
+    
+    html += `</div>`;
     container.innerHTML = html;
+    
+    // 🌟 TỰ ĐỘNG ĐẾM & PHÂN LOẠI SỐ LƯỢNG CÂU HỎI TRỰC TIẾP TỪ SUPABASE (CHO ADMIN)
+    setTimeout(() => {
+        Object.keys(subjectConfig).forEach(async (key) => {
+            let badge = document.getElementById('admin_stats_badge_' + key);
+            let details = document.getElementById('admin_stats_details_' + key);
+            if (!badge) return;
+
+            const renderDetails = (dataArr) => {
+                let single = 0, tf = 0, fill = 0, media = 0;
+                dataArr.forEach(q => {
+                    let t = String(q.type || 'single').toLowerCase().trim();
+                    if (t === 'quiz' || t === 'mcq' || t === '') single++;
+                    else if (t === 'tf' || t === 'true_false' || t === 'đúng sai') tf++;
+                    else if (t === 'fill' || t === 'short' || t === 'điền khuyết') fill++;
+                    else if (['hotspot', 'clip', 'clip_listen', 'arrange', 'sắp xếp'].includes(t)) media++;
+                    else single++;
+                });
+                
+                let h = '';
+                if(single > 0) h += `<span class="badge bg-info text-dark shadow-sm" style="font-size:0.65rem;">MCQ: ${single}</span>`;
+                if(tf > 0) h += `<span class="badge bg-success shadow-sm" style="font-size:0.65rem;">Đ/S: ${tf}</span>`;
+                if(fill > 0) h += `<span class="badge bg-warning text-dark shadow-sm" style="font-size:0.65rem;">Đ/K: ${fill}</span>`;
+                if(media > 0) h += `<span class="badge shadow-sm" style="background:#c084fc; color:#fff; font-size:0.65rem;">Media: ${media}</span>`;
+                
+                if(details) details.innerHTML = h;
+                return dataArr.length;
+            };
+            
+            if (window.full_data && window.full_data[key]) {
+                let total = renderDetails(window.full_data[key]);
+                badge.innerHTML = `<i class="bi bi-database text-warning"></i> ${total} câu`;
+            } else {
+                try {
+                    const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+                    const { data, error } = await clientDb.from('questions').select('type').eq('subject_key', key);
+                    if (!error && data) {
+                        let total = renderDetails(data);
+                        badge.innerHTML = `<i class="bi bi-database text-warning"></i> ${total} câu`;
+                    } else {
+                        badge.innerHTML = `<i class="bi bi-database text-warning"></i> 0 câu`;
+                    }
+                } catch(e) {
+                    badge.innerHTML = `<i class="bi bi-database text-warning"></i> Lỗi`;
+                }
+            }
+        });
+    }, 300);
 };
 
+// =========================================================================
+// 🚀 GIAO DIỆN SỬA / TẠO MÔN HỌC (TÍCH HỢP TẢI ẢNH BÌA SÁCH)
+// =========================================================================
 window.open_subject_modal = function(subjectKey = '') {
     let c = subjectKey ? subjectConfig[subjectKey] : {};
     if (!c) c = {};
 
     let code = subjectKey;
+    
+    // Tương thích ngược: Lấy ID và Sheet name (Nếu hệ thống thầy vẫn dùng để backup)
     let fileId = c.id || c.fileId || c.file_id || c['ID File'] || '';
     let sheetName = c.sheetName || c.sheet || c.sheet_name || c['Tên Sheet'] || '';
-    let role = c.role || c.quyen || c['Quyền'] || '';
+    
+    let role = c.role || c.quyen || c['Quyền'] || 'all';
     let icon = c.icon || c['Icon'] || '';
     let name = c.name || c.ten_hien_thi || c['Tên hiển thị'] || '';
     let ui_template = c.ui_template || c.mau_giao_dien || c['Mẫu Giao Diện'] || '1';
 
     let modalHtml = `
-    <div id="subject_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 28000; backdrop-filter: blur(10px); padding: 10px;">
-        <div class="glass-panel p-3 shadow-lg w-100 d-flex flex-column" style="max-width: 550px; border-radius: 16px; background: rgba(15, 23, 42, 0.95) !important;">
-            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2" style="border-color: rgba(255,255,255,0.1) !important;">
-                <h6 class="fw-bold text-info mb-0"><i class="bi bi-journal-plus me-2"></i>${code ? 'SỬA THÔNG TIN MÔN' : 'TẠO MÔN MỚI'}</h6>
+    <div id="subject_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.9); z-index: 28000; padding: 10px;">
+        <div class="glass-panel p-3 shadow-lg w-100 d-flex flex-column" style="max-width: 550px; border-radius: 16px; background: #1a1a1a !important; border: 1px solid #c084fc;">
+            
+            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2" style="border-color: #2a2a2a !important;">
+                <h6 class="fw-bold text-info mb-0 d-flex align-items-center">
+                    <i class="bi bi-journal-plus me-2" style="color: #c084fc;"></i>
+                    ${code ? 'CẬP NHẬT MÔN HỌC' : 'TẠO MÔN MỚI'}
+                </h6>
                 <button class="btn-close btn-close-white" onclick="document.getElementById('subject_modal').remove()"></button>
             </div>
+            
             <div class="overflow-auto custom-scrollbar pe-2">
-                <div class="row g-2 mb-2">
-                    <div class="col-4"><label class="text-white-50 small fw-bold mb-1" style="font-size: 0.7rem;">Mã môn <span class="text-danger">*</span></label><input type="text" id="modal_s_code" class="form-control form-control-sm text-white glass-input-style text-center" value="${code}" ${code ? 'readonly style="opacity:0.6"' : 'placeholder="vd: toan9"'}></div>
-                    <div class="col-6"><label class="text-white-50 small fw-bold mb-1" style="font-size: 0.7rem;">Tên hiển thị <span class="text-danger">*</span></label><input type="text" id="modal_s_name" class="form-control form-control-sm text-white glass-input-style fw-bold text-info" value="${name}" placeholder="vd: Toán lớp 9"></div>
-                    <div class="col-2"><label class="text-white-50 small fw-bold mb-1" style="font-size: 0.7rem;">Icon</label><input type="text" id="modal_s_icon" class="form-control form-control-sm text-white glass-input-style text-center" value="${icon}" placeholder="📚"></div>
-                </div>
-                <div class="mb-2"><label class="text-white-50 small fw-bold mb-1" style="font-size: 0.7rem;">ID File Google Sheets <span class="text-danger">*</span></label><input type="text" id="modal_s_fileid" class="form-control form-control-sm text-warning glass-input-style font-monospace" value="${fileId}" placeholder="Nhập ID file..."></div>
                 <div class="row g-2 mb-3">
-                    <div class="col-6"><label class="text-white-50 small fw-bold mb-1" style="font-size: 0.7rem;">Tên Sheet <span class="text-danger">*</span></label><input type="text" id="modal_s_sheetname" class="form-control form-control-sm text-success glass-input-style font-monospace" value="${sheetName}" placeholder="vd: Trang tính 1"></div>
-                    <div class="col-6"><label class="text-white-50 small fw-bold mb-1" style="font-size: 0.7rem;">Nhóm (vd: k12)</label><input type="text" id="modal_s_role" class="form-control form-control-sm text-white glass-input-style" value="${role}" placeholder="all"></div>
+                    <div class="col-4">
+                        <label class="text-white-50 small fw-bold mb-1" style="font-size: 0.7rem;">Mã môn <span class="text-danger">*</span></label>
+                        <input type="text" id="modal_s_code" class="form-control form-control-sm text-white glass-input-style text-center fw-bold" value="${code}" ${code ? 'readonly style="opacity:0.6; cursor:not-allowed;"' : 'placeholder="vd: toan9"'}>
+                    </div>
+                    <div class="col-8">
+                        <label class="text-white-50 small fw-bold mb-1" style="font-size: 0.7rem;">Tên hiển thị <span class="text-danger">*</span></label>
+                        <input type="text" id="modal_s_name" class="form-control form-control-sm text-white glass-input-style fw-bold text-info" value="${name}" placeholder="VD: Toán lớp 9">
+                    </div>
                 </div>
-                <div class="mb-3">
+                
+                <!-- 🌟 MỞ RỘNG CỘT ICON: TÍCH HỢP NÚT UPLOAD VÀ TỰ ĐỘNG CHUYỂN LINK G-DRIVE -->
+                <div class="mb-3 p-2 rounded shadow-sm" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);">
+                    <label class="text-white-50 small fw-bold mb-1" style="font-size: 0.7rem;">Ảnh Bìa Sách / Icon (Emoji) / Tải Ảnh Lên</label>
+                    <div class="d-flex gap-2">
+                        <input type="text" id="modal_s_icon" class="form-control form-control-sm text-white glass-input-style flex-grow-1" value="${icon}" placeholder="Dán link ảnh (Drive/Web) hoặc nhập Emoji 📚..." onblur="window.handle_icon_input_change(this)">
+                        <label class="btn btn-sm fw-bold p-0 m-0 d-flex align-items-center justify-content-center rounded flex-shrink-0" style="width: 36px; height: 32px; cursor: pointer; background: linear-gradient(135deg, #0ea5e9, #3b82f6); color: white;" title="Tải ảnh từ máy tính">
+                            <i class="bi bi-cloud-arrow-up-fill fs-5"></i>
+                            <input type="file" class="d-none" accept="image/*" onchange="window.upload_subject_cover(this)">
+                        </label>
+                    </div>
+                    <div class="text-white-50 mt-1" style="font-size: 0.65rem;"><i class="bi bi-info-circle text-info"></i> Mẹo: Dán link Google Drive chia sẻ, hệ thống sẽ tự tối ưu thành ảnh.</div>
+                </div>
+
+                <div class="row g-2 mb-3">
+                    <div class="col-12">
+                        <label class="text-white-50 small fw-bold mb-1" style="font-size: 0.7rem;">Nhóm phân quyền (vd: k12, medical, all)</label>
+                        <input type="text" id="modal_s_role" class="form-control form-control-sm text-white glass-input-style" value="${role}" placeholder="Mặc định: all">
+                    </div>
+                </div>
+
+                <!-- KHU VỰC THÔNG TIN BACKUP GOOGLE SHEETS (Gấp gọn) -->
+                <details class="mb-3">
+                    <summary class="text-white-50 small fw-bold" style="cursor: pointer; font-size: 0.7rem;"><i class="bi bi-braces"></i> Nâng cao: Khóa liên kết Google Sheets (Tùy chọn)</summary>
+                    <div class="row g-2 mt-1 p-2 rounded" style="background: rgba(0,0,0,0.3); border: 1px dashed rgba(255,255,255,0.1);">
+                        <div class="col-12"><label class="text-white-50 small fw-bold mb-1" style="font-size: 0.65rem;">ID File Google Sheets</label><input type="text" id="modal_s_fileid" class="form-control form-control-sm text-warning glass-input-style font-monospace" value="${fileId}" placeholder="Nhập ID file..."></div>
+                        <div class="col-12"><label class="text-white-50 small fw-bold mb-1" style="font-size: 0.65rem;">Tên Sheet</label><input type="text" id="modal_s_sheetname" class="form-control form-control-sm text-success glass-input-style font-monospace" value="${sheetName}" placeholder="vd: Trang tính 1"></div>
+                    </div>
+                </details>
+
+                <div class="mb-2">
                     <label class="text-white-50 small fw-bold mb-2">MẪU GIAO DIỆN (UI)</label>
                     <div class="d-flex gap-2 w-100">
-                        <input type="radio" class="btn-check" name="ui_template_opt" id="ui_opt_1" value="1" ${ui_template === '1' ? 'checked' : ''}><label class="btn btn-outline-info flex-grow-1 py-2 fw-bold" for="ui_opt_1" style="border-radius: 10px; font-size: 0.7rem;">MẶC ĐỊNH</label>
-                        <input type="radio" class="btn-check" name="ui_template_opt" id="ui_opt_2" value="2" ${ui_template === '2' ? 'checked' : ''}><label class="btn btn-outline-success flex-grow-1 py-2 fw-bold" for="ui_opt_2" style="border-radius: 10px; font-size: 0.7rem;">CHUYÊN SÂU</label>
-                        <input type="radio" class="btn-check" name="ui_template_opt" id="ui_opt_3" value="3" ${ui_template === '3' ? 'checked' : ''}><label class="btn btn-outline-warning flex-grow-1 py-2 fw-bold" for="ui_opt_3" style="border-radius: 10px; font-size: 0.7rem;">THỰC HÀNH</label>
+                        <input type="radio" class="btn-check" name="ui_template_opt" id="ui_opt_1" value="1" ${ui_template === '1' ? 'checked' : ''}>
+                        <label class="btn btn-outline-info flex-grow-1 py-2 fw-bold" for="ui_opt_1" style="border-radius: 10px; font-size: 0.7rem;">MẶC ĐỊNH</label>
+                        
+                        <input type="radio" class="btn-check" name="ui_template_opt" id="ui_opt_2" value="2" ${ui_template === '2' ? 'checked' : ''}>
+                        <label class="btn btn-outline-success flex-grow-1 py-2 fw-bold" for="ui_opt_2" style="border-radius: 10px; font-size: 0.7rem;">CHUYÊN SÂU</label>
+                        
+                        <input type="radio" class="btn-check" name="ui_template_opt" id="ui_opt_3" value="3" ${ui_template === '3' ? 'checked' : ''}>
+                        <label class="btn btn-outline-warning flex-grow-1 py-2 fw-bold" for="ui_opt_3" style="border-radius: 10px; font-size: 0.7rem;">THỰC HÀNH</label>
                     </div>
                 </div>
             </div>
-            <div class="d-flex justify-content-end gap-2 pt-2 border-top" style="border-color: rgba(255,255,255,0.1) !important;">
-                <button class="btn btn-sm glass-action-btn px-4" onclick="document.getElementById('subject_modal').remove()">HỦY</button>
-                <button class="btn btn-sm btn-info fw-bold px-4 shadow-sm" onclick="window.save_subject_to_sheet(this)"><i class="bi bi-save2-fill me-1"></i> LƯU MÔN HỌC</button>
+            
+            <div class="d-flex justify-content-end gap-2 pt-2 border-top mt-2" style="border-color: #2a2a2a !important;">
+                <button class="btn btn-sm btn-outline-secondary text-light fw-bold px-4" style="border-radius: 8px;" onclick="document.getElementById('subject_modal').remove()">HỦY</button>
+                <button class="btn btn-sm btn-info fw-bold px-4 shadow-sm" style="border-radius: 8px; color: #000;" onclick="window.save_subject_to_sheet(this)"><i class="bi bi-save2-fill me-1"></i> LƯU MÔN HỌC</button>
             </div>
         </div>
     </div>`;
     document.body.insertAdjacentHTML('beforeend', modalHtml);
+};
+// =========================================================================
+// 🚀 ENGINE XỬ LÝ ẢNH BÌA SÁCH: TỰ ĐỘNG CHUYỂN LINK & UPLOAD LÊN SUPABASE
+// =========================================================================
+
+// Tự động chuyển đổi link Google Drive khi Thầy dán vào và bấm ra ngoài (blur)
+window.handle_icon_input_change = function(el) {
+    let val = el.value.trim();
+    
+    // Nếu là link Google Drive dạng xem (view) -> Chuyển thành link ảnh trực tiếp
+    if (val.includes('drive.google.com/file/d/')) {
+        let match = val.match(/\/d\/([a-zA-Z0-9_-]+)/);
+        if (match && match[1]) {
+            el.value = `https://drive.google.com/uc?export=view&id=${match[1]}`;
+            if(typeof window.show_toast === 'function') window.show_toast("🪄 Đã tự động tối ưu Link Google Drive!");
+        }
+    }
+    
+    if (val.includes('onedrive.live.com') || val.includes('1drv.ms')) {
+        if(typeof window.show_toast === 'function') window.show_toast("⚠️ Lưu ý: Link OneDrive có thể không hiển thị được do Microsoft chặn nhúng!", true);
+    }
+};
+
+// Tải ảnh từ máy tính/điện thoại thẳng lên Supabase
+window.upload_subject_cover = async function(input) {
+    if (!input.files || !input.files[0]) return;
+    let file = input.files[0];
+    
+    // Kiểm tra dung lượng (giới hạn 5MB cho ảnh bìa)
+    if (file.size > 5 * 1024 * 1024) {
+        if(typeof window.show_toast === 'function') window.show_toast("⚠️ Ảnh quá lớn! Vui lòng chọn ảnh dưới 5MB.", true);
+        input.value = ""; return;
+    }
+
+    let iconInput = document.getElementById('modal_s_icon');
+    let originalPlaceholder = iconInput.placeholder;
+    
+    iconInput.value = "⏳ Đang tải ảnh lên máy chủ...";
+    iconInput.disabled = true;
+
+    try {
+        let ext = file.name.split('.').pop();
+        let safeSubjectCode = document.getElementById('modal_s_code').value.trim() || 'new';
+        let fileName = `cover_${safeSubjectCode}_${Date.now()}.${ext}`;
+        
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        
+        // Đẩy lên kho 'media' của Supabase
+        const { data, error } = await clientDb.storage.from('media').upload(fileName, file, {
+            cacheControl: '3600',
+            upsert: false
+        });
+        
+        if (error) throw error;
+        
+        let publicUrl = clientDb.storage.from('media').getPublicUrl(fileName).data.publicUrl;
+        
+        iconInput.value = publicUrl;
+        if(typeof window.show_toast === 'function') window.show_toast("✅ Tải ảnh bìa thành công!");
+        
+    } catch (err) {
+        if(typeof window.show_toast === 'function') window.show_toast("❌ Lỗi tải ảnh: " + err.message, true);
+        iconInput.value = "";
+    } finally {
+        iconInput.disabled = false;
+        iconInput.placeholder = originalPlaceholder;
+        input.value = ""; 
+    }
 };
 
 // =========================================================================
@@ -2337,7 +2856,6 @@ window.render_user_management = async function() {
     container.innerHTML = `<div class="col-12 text-center p-5"><div class="spinner-border text-success"></div><div class="mt-2 text-white-50">Đang tải dữ liệu lớp học...</div></div>`;
     
     try {
-        // Tải song song danh sách Lớp và User
         const [{ data: classes, error: errC }, { data: users, error: errU }] = await Promise.all([
             db.from('classes').select('*').order('class_code', { ascending: true }),
             db.from('users').select('student_id, password, full_name, role, permissions, inventory, class_code')
@@ -2345,113 +2863,640 @@ window.render_user_management = async function() {
         if (errC) throw errC;
         if (errU) throw errU;
 
-        // Header và Nút chức năng
         let html = `
+        <style>
+            /* CSS chuẩn Premium Mobile First */
+            .class-header-card { background: #1a1d20; border: 1px solid #2b3035; border-left: 4px solid #10b981; border-radius: 12px; transition: 0.2s; cursor: pointer; }
+            .class-header-card:hover { background: #212529; border-color: #495057; }
+            
+            .user-card-premium { background: #121416; border: 1px solid #2b3035; border-radius: 16px; transition: 0.3s; padding: 16px; display: flex; flex-direction: column; height: 100%; box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
+            .user-card-premium:hover { border-color: #0ea5e9; transform: translateY(-4px); background: #1e293b; box-shadow: 0 8px 25px rgba(14, 165, 233, 0.2); }
+            
+            .user-avatar-box { width: 45px; height: 45px; border-radius: 12px; background: #1a1d20; border: 1px solid #343a40; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0; box-shadow: inset 0 2px 5px rgba(0,0,0,0.3); color: #cbd5e1; }
+            
+            .user-search-bar { background: #1a1d20; border: 1px solid #2b3035; border-radius: 12px; color: #fff; padding: 10px 15px 10px 40px; font-size: 0.9rem; transition: 0.2s; }
+            .user-search-bar:focus { border-color: #10b981; outline: none; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15); }
+        </style>
+
         <div class="col-12 px-1 animate__animated animate__fadeIn mb-3">
-            <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center bg-dark p-3 rounded-4 shadow-sm w-100" style="background: transparent !important; border: 1px solid rgba(255,255,255,0.1);">
-                <button class="btn btn-sm glass-action-btn fw-bold px-3" onclick="window.render_admin_hub()">Thoát</button>
-                <h6 class="text-white fw-bold mb-0 text-center m-0 text-uppercase flex-grow-1" style="letter-spacing: 1px; font-size: 0.9rem;">QUẢN LÝ LỚP & HỌC VIÊN</h6>
-                <div class="d-flex gap-2 flex-wrap justify-content-end">
-    <button class="btn btn-sm btn-primary fw-bold px-4 shadow-sm text-white" style="background: linear-gradient(45deg, #3b82f6, #8b5cf6); border: none;" onclick="window.open_data_manager('tab_user')">
-        <i class="bi bi-grid-1x2-fill me-2"></i> TRUNG TÂM NHẬP DỮ LIỆU
-    </button>
-</div>
+            <!-- Thanh Header -->
+            <div class="d-flex justify-content-between align-items-center bg-dark p-3 rounded-4 shadow-sm w-100 mb-2" style="background: #121416 !important; border: 1px solid #2b3035;">
+                <div style="flex: 1;"><button class="btn btn-sm btn-outline-secondary text-light fw-bold px-3 shadow-sm" style="border-radius: 8px;" onclick="window.render_admin_hub()"><i class="bi bi-arrow-left me-1"></i>Trở về</button></div>
+                <h6 class="fw-bold text-white mb-0 px-2 text-center flex-grow-1 text-truncate" style="font-size: 0.9rem; letter-spacing: 1px;"><i class="bi bi-people-fill text-success me-2"></i>QL LỚP & HỌC VIÊN</h6>
+                <div style="flex: 1;" class="text-end d-flex gap-2 justify-content-end">
+                    <button class="btn btn-sm fw-bold px-3 shadow-sm text-dark d-none d-md-inline-block" style="background: #10b981; border-radius: 8px;" onclick="window.open_create_class_modal()"><i class="bi bi-cloud-arrow-up-fill me-1"></i> EXCEL</button>
+                    <button class="btn btn-sm btn-info fw-bold px-3 shadow-sm text-dark" style="border-radius: 8px;" onclick="window.open_data_manager('tab_user')"><i class="bi bi-person-plus-fill me-1"></i> THỦ CÔNG</button>
+                </div>
             </div>
-        </div>`;
+            
+            <!-- Thanh Tìm kiếm Live Search -->
+            <div class="position-relative w-100 mb-2">
+                <i class="bi bi-search position-absolute top-50 translate-middle-y text-white-50" style="left: 15px;"></i>
+                <input type="text" class="form-control user-search-bar w-100" placeholder="Nhập tên, mã SV, hoặc lớp để tìm nhanh..." oninput="window.filter_user_management(this.value)" autocomplete="off">
+            </div>
+            
+            <!-- Nút Tạo nhanh trên Mobile -->
+            <div class="d-block d-md-none w-100 text-end">
+                <button class="btn btn-sm fw-bold px-3 shadow-sm text-dark w-100" style="background: #10b981; border-radius: 8px;" onclick="window.open_create_class_modal()"><i class="bi bi-file-earmark-excel-fill me-1"></i> TẠO LỚP TỪ EXCEL</button>
+            </div>
+        </div>
+        
+        <div class="row w-100 m-0 g-3">`;
 
         let delay = 0;
         let usersWithoutClass = [];
         let admins = [];
 
-        // Gom nhóm user theo class_code, admin, và tự do
         let classGroups = {};
         classes.forEach(c => classGroups[c.class_code] = { info: c, users: [] });
 
         users.forEach(u => {
-            if (u.role === 'admin' || u.role === 'all') {
-                admins.push(u);
-            } else if (u.class_code && classGroups[u.class_code]) {
-                classGroups[u.class_code].users.push(u);
-            } else {
-                usersWithoutClass.push(u);
-            }
+            if (u.role === 'admin' || u.role === 'all') admins.push(u);
+            else if (u.class_code && classGroups[u.class_code]) classGroups[u.class_code].users.push(u);
+            else usersWithoutClass.push(u);
         });
 
-        // Hàm render card sinh viên (dùng chung)
+        // Hàm render ID Card người dùng theo chuẩn lưới 2 cột
         const renderUserCard = (u) => {
             let uid = u.student_id; let pwd = u.password; let role = u.role; let fname = u.full_name || 'Chưa cập nhật'; let perms = u.permissions || ''; let cCode = u.class_code || '';
-            let roleBadge = (role === 'all' || role === 'admin') ? `<span class="badge bg-danger shadow-sm">ADMIN</span>` : `<span class="badge bg-primary shadow-sm">USER</span>`;
+            let isSuper = (role === 'all' || role === 'admin');
+            let searchStr = `${fname.toLowerCase()} ${uid.toLowerCase()} ${cCode.toLowerCase()} ${role.toLowerCase()}`;
+            
             return `
-            <div class="col-12 px-0 mb-2">
-                <div class="card glass-panel p-2 p-md-3" style="border-left: 3px solid ${(role === 'all' || role === 'admin') ? '#ef4444' : '#38bdf8'} !important;">
-                    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
-                        <div class="d-flex align-items-center gap-3" style="min-width: 250px;">
-                            <div class="rounded-circle d-flex align-items-center justify-content-center bg-dark text-white fw-bold shadow-inner flex-shrink-0" style="width: 45px; height: 45px; font-size: 1.2rem;">${fname.charAt(0).toUpperCase()}</div>
-                            <div>
-                                <div class="fw-bold text-white fs-6 lh-1 mb-1">${fname} ${roleBadge}</div>
-                                <div class="text-info small fw-bold">ID: ${uid} <span class="text-white-50 mx-1">|</span> Pass: <span class="text-white">${pwd}</span></div>
+            <div class="col-12 col-md-6 px-1 mb-2 user-card-wrapper animate__animated animate__fadeInUp" data-search="${searchStr}">
+                <div class="user-card-premium" style="border-left: 3px solid ${isSuper ? '#ef4444' : '#0ea5e9'};">
+                    <div class="d-flex align-items-start gap-3 mb-3">
+                        <div class="user-avatar-box fw-bold text-white shadow-inner">${fname.charAt(0).toUpperCase()}</div>
+                        <div class="flex-grow-1" style="min-width: 0;">
+                            <div class="fw-bold text-white mb-1 text-truncate" style="font-size: 0.95rem;">${fname}</div>
+                            <div class="text-white-50" style="font-size: 0.75rem; line-height: 1.5;">
+                                <div class="text-truncate">ID: <span class="text-info fw-bold font-monospace">${uid}</span></div>
+                                <div class="text-truncate">Pass: <span class="text-light fw-bold">${pwd}</span></div>
                             </div>
                         </div>
-                        <div class="d-flex flex-row flex-md-column gap-2 flex-shrink-0" style="min-width: 90px;">
-                            <button class="btn btn-sm glass-action-btn w-100 text-warning" onclick="window.open_data_manager('tab_user', '${uid}', '${pwd}', '${role}', '${fname}', '${perms}', '${cCode}')"><i class="bi bi-pencil-square"></i> SỬA</button>
-                            <button class="btn btn-sm glass-action-btn w-100 text-danger" onclick="window.remove_user('${uid}')"><i class="bi bi-trash3"></i> XÓA</button>
-                        </div>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2 mt-auto pt-2 border-top" style="border-color: rgba(255,255,255,0.05) !important;">
+                        <button class="btn btn-sm btn-outline-warning p-1 px-3 border-0 rounded-pill fw-bold d-flex align-items-center" onclick="window.open_data_manager('tab_user', '${uid}', '${pwd}', '${role}', '${fname}', '${perms}', '${cCode}')" style="background: rgba(245, 158, 11, 0.1);"><i class="bi bi-pencil-square me-1"></i> Sửa</button>
+                        <button class="btn btn-sm btn-outline-danger p-1 px-3 border-0 rounded-pill fw-bold d-flex align-items-center" onclick="window.remove_user('${uid}')" style="background: rgba(239, 68, 68, 0.1);"><i class="bi bi-trash3 me-1"></i> Xóa</button>
                     </div>
                 </div>
             </div>`;
         };
 
-        // Render các lớp học
+        // Lặp render từng Lớp
         Object.keys(classGroups).forEach((classCode, gIndex) => {
             let cls = classGroups[classCode];
             let groupId = 'class_mng_group_' + gIndex;
+            let currentName = cls.info.class_name || ''; 
+            
             html += `
-            <div class="col-12 px-1 animate__animated animate__fadeInUp" style="animation-delay: ${delay}s;">
-                <div class="glass-panel p-3 mb-2 d-flex justify-content-between align-items-center shadow-sm" style="cursor: pointer; border: none !important; background: linear-gradient(90deg, rgba(14, 165, 233, 0.2) 0%, rgba(14, 165, 233, 0.05) 100%); border-radius: 12px;" onclick="document.getElementById('${groupId}').classList.toggle('d-none');">
+            <div class="col-12 px-0 mb-3 class-group-wrapper">
+                <div class="class-header-card p-3 d-flex flex-wrap justify-content-between align-items-center shadow-sm gap-2" onclick="document.getElementById('${groupId}').classList.toggle('d-none');">
                     <div class="d-flex align-items-center">
-                        <i class="bi bi-journal-bookmark-fill text-info fs-4 me-3"></i>
+                        <i class="bi bi-journal-bookmark-fill text-info fs-3 me-3"></i>
                         <div>
-                            <h6 class="fw-bold text-white mb-0 text-uppercase" style="letter-spacing: 0.5px;">LỚP ${classCode} <span class="text-white-50 ms-2" style="font-size:0.8rem; text-transform:none;">${cls.info.class_name || ''}</span></h6>
-                            <small class="text-info">${cls.users.length} sinh viên</small>
+                            <h6 class="fw-bold text-white mb-0 text-uppercase" style="letter-spacing: 0.5px; font-size: 0.95rem;">LỚP ${classCode}</h6>
+                            <div class="text-white-50" style="font-size:0.75rem;">${currentName} | <span class="text-info">${cls.users.length} tài khoản</span></div>
                         </div>
                     </div>
-                    <i class="bi bi-chevron-down text-white fs-5"></i>
+                    
+                    <!-- Các nút tính năng gốc của thầy -->
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-sm border-0 text-warning fw-bold rounded-pill px-3" style="background: rgba(245, 158, 11, 0.15);" onclick="event.stopPropagation(); window.open_edit_class_modal('${classCode}', '${currentName.replace(/'/g, "\\'")}')" title="Sửa tên lớp"><i class="bi bi-pencil-square"></i> ĐỔI TÊN</button>
+                        <button class="btn btn-sm border-0 text-success fw-bold rounded-pill px-3" style="background: rgba(16, 185, 129, 0.15);" onclick="event.stopPropagation(); window.export_class_scores_excel('${classCode}')" title="Xuất bảng điểm Excel"><i class="bi bi-file-earmark-excel-fill"></i> XUẤT ĐIỂM</button>
+                        <button class="btn btn-sm border-0 text-danger fw-bold rounded-pill px-3" style="background: rgba(239, 68, 68, 0.1);" onclick="event.stopPropagation(); window.remove_class('${classCode}')" title="Xóa lớp học này"><i class="bi bi-trash3-fill"></i> XÓA LỚP</button>
+                    </div>
                 </div>
-                <div id="${groupId}" class="d-none mb-3 w-100">
-                    <div class="row m-0 mt-2">
+                
+                <!-- Bảng Lưới chứa ID Card -->
+                <div id="${groupId}" class="d-none class-collapse-body w-100 mt-2">
+                    <div class="row m-0">
                         ${cls.users.map(u => renderUserCard(u)).join('')}
-                        ${cls.users.length === 0 ? '<div class="text-white-50 small mb-2">Lớp này chưa có sinh viên nào.</div>' : ''}
+                        ${cls.users.length === 0 ? '<div class="text-white-50 small mb-2 px-2">Lớp này chưa có sinh viên nào.</div>' : ''}
                     </div>
                 </div>
             </div>`;
             delay += 0.05;
         });
 
-        // Render Admin & Sinh viên tự do
+        // Nhóm Tự do & Admin
         const renderExtraGroup = (title, list, icon, color, gid) => {
             if(list.length === 0) return '';
             html += `
-            <div class="col-12 px-1 animate__animated animate__fadeInUp" style="animation-delay: ${delay}s;">
-                <div class="glass-panel p-3 mb-2 d-flex justify-content-between align-items-center shadow-sm" style="cursor: pointer; border: none !important; background: linear-gradient(90deg, rgba(16, 185, 129, 0.2) 0%, rgba(16, 185, 129, 0.05) 100%); border-radius: 12px;" onclick="document.getElementById('${gid}').classList.toggle('d-none');">
+            <div class="col-12 px-0 mb-3 class-group-wrapper">
+                <div class="class-header-card p-3 d-flex justify-content-between align-items-center shadow-sm" style="border-left: 4px solid var(--bs-${color});" onclick="document.getElementById('${gid}').classList.toggle('d-none');">
                     <div class="d-flex align-items-center">
-                        <i class="${icon} text-${color} fs-4 me-3"></i>
-                        <div><h6 class="fw-bold text-white mb-0 text-uppercase">${title}</h6><small class="text-${color}">${list.length} tài khoản</small></div>
+                        <i class="${icon} text-${color} fs-3 me-3"></i>
+                        <div><h6 class="fw-bold text-white mb-0 text-uppercase">${title}</h6><div class="text-${color} small">${list.length} tài khoản</div></div>
                     </div>
-                    <i class="bi bi-chevron-down text-white fs-5"></i>
+                    <i class="bi bi-chevron-down text-white-50 fs-5"></i>
                 </div>
-                <div id="${gid}" class="d-none mb-3 w-100"><div class="row m-0 mt-2">${list.map(u => renderUserCard(u)).join('')}</div></div>
+                <div id="${gid}" class="d-none class-collapse-body w-100 mt-2">
+                    <div class="row m-0">${list.map(u => renderUserCard(u)).join('')}</div>
+                </div>
             </div>`;
-            delay += 0.05;
         };
 
         renderExtraGroup('QUẢN TRỊ VIÊN (ADMIN)', admins, 'bi-shield-lock-fill', 'danger', 'group_admins');
         renderExtraGroup('SINH VIÊN TỰ DO (CHƯA CÓ LỚP)', usersWithoutClass, 'bi-person-lines-fill', 'warning', 'group_free_users');
 
+        html += `</div>`; // Đóng row chính
         container.innerHTML = html;
-    } catch(err) { container.innerHTML = `<div class="col-12 text-center p-5 text-danger">Lỗi tải dữ liệu: ${err.message}</div>`; }
+        
+    } catch(err) { 
+        container.innerHTML = `<div class="col-12 text-center p-5 text-danger">Lỗi tải dữ liệu: ${err.message}</div>`; 
+    }
 };
 
+// 🌟 BỘ LỌC TÌM KIẾM NHANH (LIVE SEARCH)
+window.filter_user_management = function(keyword) {
+    let kw = keyword.toLowerCase().trim();
+    
+    // 1. Quét tìm tất cả các thẻ Sinh viên
+    document.querySelectorAll('.user-card-wrapper').forEach(card => {
+        if(card.getAttribute('data-search').includes(kw)) {
+            card.style.display = '';
+        } else {
+            card.style.display = 'none';
+        }
+    });
 
+    // 2. Nếu đang tìm kiếm, tự động MỞ TẤT CẢ các thư mục Lớp ra để nhìn thấy kết quả
+    document.querySelectorAll('.class-collapse-body').forEach(el => {
+        if (kw.length > 0) el.classList.remove('d-none');
+    });
+};
+
+// =========================================================================
+// 🚀 GIAO DIỆN TẠO LỚP & NHẬP EXCEL (ĐÃ AUTO LOAD CHECKBOX QUYỀN)
+// =========================================================================
+
+window.open_create_class_modal = async function() {
+    let existingModal = document.getElementById('create_class_modal');
+    if (existingModal) existingModal.remove();
+
+    // 🎯 Tự động tải danh sách môn học từ bảng subjects để làm Checkbox Phân quyền
+    let subjectsHtml = `<div class="text-center text-white-50 small py-2"><span class="spinner-border spinner-border-sm"></span> Đang tải môn học...</div>`;
+    
+    try {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        const { data: subjects } = await clientDb.from('subjects').select('subject_key, name');
+        if (subjects && subjects.length > 0) {
+            subjectsHtml = subjects.map(sub => `
+                <div class="col-6 col-md-4 mb-2">
+                    <div class="form-check">
+                        <input class="form-check-input chk-class-perm" type="checkbox" value="${sub.subject_key}_view" id="chk_${sub.subject_key}">
+                        <label class="form-check-label text-white" for="chk_${sub.subject_key}" style="font-size: 0.8rem;">
+                            ${sub.name}
+                        </label>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            subjectsHtml = `<div class="text-white-50 small">Chưa có môn học nào trong hệ thống.</div>`;
+        }
+    } catch (err) {
+        subjectsHtml = `<div class="text-danger small">Lỗi tải môn học!</div>`;
+    }
+
+    let modalHtml = `
+    <div class="modal fade" id="create_class_modal" tabindex="-1" style="z-index: 1055;">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content text-white shadow-lg" style="background: #1e293b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;">
+                <div class="modal-header" style="border-bottom: 1px solid rgba(255,255,255,0.1);">
+                    <h6 class="modal-title fw-bold"><i class="bi bi-file-earmark-spreadsheet text-success me-2"></i>TẠO LỚP & NHẬP DANH SÁCH EXCEL</h6>
+                    <button type="button" class="btn-close btn-close-white" onclick="window.close_create_class_modal()"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-12 col-md-4 mb-3">
+                            <label class="form-label text-white-50 small">Mã lớp học <span class="text-danger">*</span></label>
+                            <input type="text" id="new_class_code" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="VD: XN_K21" oninput="window.check_class_exist(this.value)" style="text-transform: uppercase;">
+                            <small id="class_exist_warning" class="text-warning d-none mt-1" style="font-size: 0.75rem;"><i class="bi bi-exclamation-triangle-fill"></i> Mã tồn tại, sẽ gộp danh sách.</small>
+                        </div>
+                        <div class="col-12 col-md-5 mb-3">
+                            <label class="form-label text-white-50 small">Tên lớp học</label>
+                            <input type="text" id="new_class_name" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="VD: Xét nghiệm y học K21">
+                        </div>
+                        <div class="col-12 col-md-3 mb-3">
+                            <label class="form-label text-white-50 small">Nhóm Role <span class="text-danger">*</span></label>
+                            <select id="new_class_role" class="form-select form-select-sm bg-dark text-white border-secondary" onchange="if(this.value=='other') { document.getElementById('new_class_role_custom').classList.remove('d-none'); } else { document.getElementById('new_class_role_custom').classList.add('d-none'); }">
+                                <option value="medical">medical</option>
+                                <option value="k12">k12</option>
+                                <option value="admin">admin</option>
+                                <option value="other">Khác...</option>
+                            </select>
+                            <input type="text" id="new_class_role_custom" class="form-control form-control-sm bg-dark text-white border-secondary d-none mt-1" placeholder="Nhập Role mới">
+                        </div>
+                    </div>
+
+                    <!-- 🌟 DANH SÁCH CHECKBOX PHÂN QUYỀN TỰ ĐỘNG -->
+                    <div class="mb-3 p-3 rounded" style="background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05);">
+                        <label class="form-label text-info small fw-bold mb-2"><i class="bi bi-shield-check me-1"></i> GÁN QUYỀN MÔN HỌC MẶC ĐỊNH CHO LỚP NÀY</label>
+                        <div class="row" id="class_permissions_container">
+                            ${subjectsHtml}
+                        </div>
+                    </div>
+
+                    <div class="mb-2">
+                        <label class="form-label text-white-50 small">File Excel nhà trường cấp <span class="text-danger">*</span></label>
+                        <input type="file" id="new_class_excel" class="form-control form-control-sm bg-dark text-white border-secondary" accept=".xlsx, .xls">
+                    </div>
+                </div>
+                <div class="modal-footer" style="border-top: 1px solid rgba(255,255,255,0.1);">
+                    <button type="button" class="btn btn-secondary btn-sm px-3" onclick="window.close_create_class_modal()">Hủy</button>
+                    <button type="button" class="btn btn-success btn-sm fw-bold px-3" onclick="window.submit_create_class(this)">
+                        TẠO LỚP & LƯU
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>`;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    let modalEl = document.getElementById('create_class_modal');
+    if (typeof bootstrap !== 'undefined') {
+        new bootstrap.Modal(modalEl).show();
+    } else if (typeof $!== 'undefined' && typeof$.fn.modal !== 'undefined') {
+        $(modalEl).modal('show');
+    } else {
+        modalEl.classList.add('show');
+        modalEl.style.display = 'block';
+        modalEl.style.backgroundColor = 'rgba(0,0,0,0.6)';
+        document.body.classList.add('modal-open');
+    }
+};
+
+window.submit_create_class = async function(btn) {
+    let code = document.getElementById('new_class_code').value.trim().toUpperCase();
+    let name = document.getElementById('new_class_name').value.trim();
+    
+    let roleSelect = document.getElementById('new_class_role').value;
+    let customRole = document.getElementById('new_class_role_custom').value.trim();
+    let finalRole = (roleSelect === 'other' && customRole) ? customRole : roleSelect;
+    
+    // 🌟 QUÉT TẤT CẢ CÁC CHECKBOX ĐÃ TICK VÀ GOM THÀNH CHUỖI
+    let pArr = [];
+    document.querySelectorAll('.chk-class-perm:checked').forEach(c => pArr.push(c.value));
+    let finalPerms = pArr.join(', ');
+
+    let fileInput = document.getElementById('new_class_excel');
+    let file = fileInput.files[0];
+
+    if(!code || !file) return window.show_toast("⚠️ Vui lòng nhập Mã lớp và chọn file Excel!", true);
+
+    let originalHtml = btn.innerHTML;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span> Đang xử lý...`;
+    btn.classList.add('disabled');
+
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+
+            const { error: classErr } = await clientDb.from('classes').upsert([
+                { class_code: code, class_name: name || "Lớp " + code }
+            ], { onConflict: 'class_code' });
+            if (classErr) throw classErr;
+
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+
+            let newUsers = [];
+            for (let row of jsonData) {
+                let maSV = row['Mã sinh viên'];
+                if (!maSV) continue;
+
+                let ho = (row['Họ'] || "").toString().trim();
+                let ten = (row['Tên'] || "").toString().trim();
+                let fullName = ho + " " + ten;
+                let randomPass = Math.random().toString(36).slice(-6);
+
+                newUsers.push({
+                    student_id: String(maSV).trim(),
+                    password: randomPass,
+                    full_name: fullName.trim(),
+                    role: finalRole, 
+                    permissions: finalPerms, // 🌟 GÁN CHUỖI CHECKBOX VÀO ĐÂY
+                    class_code: code,
+                    ngay_sinh: (row['Ngày sinh'] || "").toString().trim(),
+                    khoa_hoc: (row['Khóa học'] || "").toString().trim(),
+                    nganh_hoc: (row['Ngành học'] || "").toString().trim(),
+                    thoi_diem_dang_ky: (row['Thời điểm đăng ký'] || "").toString().trim()
+                });
+            }
+
+            if (newUsers.length === 0) throw new Error("Không tìm thấy sinh viên có cột 'Mã sinh viên'");
+
+            const { error } = await clientDb.from('users').upsert(newUsers, { onConflict: 'student_id' });
+            if (error) throw error;
+
+            window.show_toast(`✅ Đã tạo lớp ${code} và gán quyền cho ${newUsers.length} tài khoản!`);
+            
+            window.close_create_class_modal();
+            
+            if (typeof window.render_user_management === 'function') window.render_user_management();
+        } catch (err) {
+            console.error("Lỗi:", err);
+            window.show_toast("❌ Lỗi: " + err.message, true);
+            btn.innerHTML = originalHtml;
+            btn.classList.remove('disabled');
+        }
+    };
+    reader.readAsArrayBuffer(file);
+};
+
+window.close_create_class_modal = function() {
+    let modalEl = document.getElementById('create_class_modal');
+    if (!modalEl) return;
+    
+    if (typeof bootstrap !== 'undefined') {
+        let inst = bootstrap.Modal.getInstance(modalEl);
+        if (inst) inst.hide();
+    } else if (typeof $!== 'undefined' && typeof$.fn.modal !== 'undefined') {
+        $(modalEl).modal('hide');
+    } else {
+        modalEl.classList.remove('show');
+        modalEl.style.display = 'none';
+        document.body.classList.remove('modal-open');
+    }
+};
+
+window.check_class_exist = async function(code) {
+    if(!code || code.trim() === '') return document.getElementById('class_exist_warning').classList.add('d-none');
+    const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+    const { data } = await clientDb.from('classes').select('class_code').eq('class_code', code.trim().toUpperCase()).single();
+    if(data) document.getElementById('class_exist_warning').classList.remove('d-none');
+    else document.getElementById('class_exist_warning').classList.add('d-none');
+};
+
+// =========================================================================
+// 🚀 ĐỔI TÊN LỚP HỌC (GIAO DIỆN MODAL CHUYÊN NGHIỆP, KHÔNG DÙNG PROMPT)
+// =========================================================================
+window.open_edit_class_modal = function(classCode, currentName) {
+    let existingModal = document.getElementById('edit_class_name_modal');
+    if (existingModal) existingModal.remove();
+
+    let modalHtml = `
+    <div class="modal fade" id="edit_class_name_modal" tabindex="-1" style="z-index: 35000;">
+        <div class="modal-dialog modal-dialog-centered modal-sm">
+            <div class="modal-content text-white shadow-lg" style="background: #1e293b; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;">
+                <div class="modal-header p-3 border-bottom" style="border-color: rgba(255,255,255,0.1) !important;">
+                    <h6 class="modal-title fw-bold text-warning"><i class="bi bi-pencil-square me-2"></i>ĐỔI TÊN LỚP</h6>
+                    <button type="button" class="btn-close btn-close-white" onclick="window.close_edit_class_modal()"></button>
+                </div>
+                <div class="modal-body p-3">
+                    <label class="form-label text-white-50 small mb-1">Mã lớp (Cố định, không đổi)</label>
+                    <input type="text" class="form-control form-control-sm bg-dark text-white-50 border-secondary mb-3 fw-bold" value="${classCode}" readonly disabled>
+                    
+                    <label class="form-label text-white-50 small mb-1">Tên lớp mới</label>
+                    <input type="text" id="edit_c_name_input" class="form-control form-control-sm bg-dark text-white border-info fw-bold" value="${currentName}" placeholder="Nhập tên lớp mới...">
+                </div>
+                <div class="modal-footer p-2 border-top" style="border-color: rgba(255,255,255,0.1) !important;">
+                    <button type="button" class="btn btn-secondary btn-sm px-3" onclick="window.close_edit_class_modal()">Hủy</button>
+                    <button type="button" class="btn btn-warning btn-sm fw-bold px-3 shadow-sm text-dark" onclick="window.submit_edit_class_name('${classCode}', this)">LƯU TÊN MỚI</button>
+                </div>
+            </div>
+        </div>
+    </div>`;
+    
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Khởi chạy Modal tự động bằng Bootstrap hoặc Vanilla JS
+    let modalEl = document.getElementById('edit_class_name_modal');
+    if (typeof bootstrap !== 'undefined') {
+        new bootstrap.Modal(modalEl).show();
+    } else if (typeof $!== 'undefined' && typeof$.fn.modal !== 'undefined') {
+        $(modalEl).modal('show');
+    } else {
+        modalEl.classList.add('show');
+        modalEl.style.display = 'block';
+        modalEl.style.backgroundColor = 'rgba(0,0,0,0.6)';
+        document.body.classList.add('modal-open');
+    }
+};
+
+window.close_edit_class_modal = function() {
+    let modalEl = document.getElementById('edit_class_name_modal');
+    if (!modalEl) return;
+    
+    if (typeof bootstrap !== 'undefined') {
+        let inst = bootstrap.Modal.getInstance(modalEl);
+        if (inst) inst.hide();
+    } else if (typeof $!== 'undefined' && typeof$.fn.modal !== 'undefined') {
+        $(modalEl).modal('hide');
+    } else {
+        modalEl.classList.remove('show');
+        modalEl.style.display = 'none';
+        document.body.classList.remove('modal-open');
+    }
+};
+
+window.submit_edit_class_name = async function(classCode, btn) {
+    let newName = document.getElementById('edit_c_name_input').value.trim();
+    
+    let originalHtml = btn.innerHTML;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>...`;
+    btn.classList.add('disabled');
+    
+    try {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        
+        // 🎯 Lệnh Update chỉ cập nhật duy nhất cột class_name
+        const { error } = await clientDb.from('classes').update({ class_name: newName }).eq('class_code', classCode);
+        
+        if (error) throw error;
+        
+        window.show_toast(`✅ Đã cập nhật tên lớp thành công!`);
+        window.close_edit_class_modal();
+        
+        // Cập nhật lại giao diện để hiện tên mới
+        if (typeof window.render_user_management === 'function') {
+            window.render_user_management();
+        }
+    } catch (err) {
+        console.error("Lỗi đổi tên lớp:", err);
+        window.show_toast("❌ Lỗi: " + err.message, true);
+        btn.innerHTML = originalHtml;
+        btn.classList.remove('disabled');
+    }
+};
+
+// =========================================================================
+// 🚀 XÓA LỚP HỌC (CÓ TÙY CHỌN XÓA SẠCH SINH VIÊN)
+// =========================================================================
+window.remove_class = function(classCode) {
+    window.show_alert(
+        "CẢNH BÁO XÓA LỚP", 
+        `Bạn đang chuẩn bị xóa lớp <b class="text-danger">${classCode}</b>.<br><br>
+        <small class="text-info">Ở bước tiếp theo, hệ thống sẽ hỏi bạn muốn xóa luôn sinh viên hay giữ lại.</small>`, 
+        async function(ans) {
+            if (!ans) return; // Nếu chọn Hủy ở thông báo đầu thì dừng lại
+            
+            // 🎯 Bật thêm 1 hộp thoại hỏi dứt khoát việc xóa sinh viên
+            let deleteStudentsToo = confirm(
+                `⚠️ BẠN CÓ MUỐN XÓA LUÔN SINH VIÊN KHÔNG?\n\n` +
+                `👉 Bấm [OK]: Xóa lớp + XÓA SẠCH toàn bộ tài khoản sinh viên thuộc lớp này khỏi hệ thống.\n` +
+                `👉 Bấm [Cancel]: Chỉ xóa lớp, các sinh viên được giữ lại và chuyển xuống nhóm Tự do.`
+            );
+
+            try {
+                const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+                
+                // 1. NẾU CHỌN OK -> XÓA TOÀN BỘ SINH VIÊN CỦA LỚP NÀY TRƯỚC
+                if (deleteStudentsToo) {
+                    const { error: errUsers } = await clientDb.from('users').delete().eq('class_code', classCode);
+                    if (errUsers) throw errUsers;
+                }
+                
+                // 2. SAU ĐÓ MỚI XÓA LỚP (Bảng classes)
+                const { error: errClass } = await clientDb.from('classes').delete().eq('class_code', classCode);
+                if (errClass) throw errClass;
+                
+                // Báo cáo kết quả theo đúng hành động
+                if (deleteStudentsToo) {
+                    window.show_toast(`✅ Đã xóa lớp ${classCode} VÀ TOÀN BỘ sinh viên trong lớp!`);
+                } else {
+                    window.show_toast(`✅ Đã xóa lớp ${classCode}. Tài khoản sinh viên đã được giữ lại.`);
+                }
+                
+                // Tải lại giao diện
+                if (typeof window.render_user_management === 'function') {
+                    window.render_user_management();
+                }
+            } catch (err) {
+                console.error("Lỗi xóa lớp:", err);
+                window.show_toast("❌ Lỗi khi xóa lớp: " + err.message, true);
+            }
+        }
+    );
+};
+
+// =========================================================================
+// 🚀 TỔNG HỢP VÀ XUẤT ĐIỂM EXCEL (ĐÃ FIX LỖI ÉP KIỂU SỐ VÀ KHỬ KHOẢNG TRẮNG)
+// =========================================================================
+window.export_class_scores_excel = async function(classCode) {
+    window.show_toast("<span class='spinner-border spinner-border-sm me-2'></span> Đang tổng hợp điểm...", false);
+    
+    try {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+
+        // 1. Lấy Sinh viên
+        const { data: students, error: errUsers } = await clientDb.from('users').select('*').eq('class_code', classCode);
+        if (errUsers) throw errUsers;
+        if (!students || students.length === 0) return window.show_toast("⚠️ Lớp này chưa có sinh viên!", true);
+
+        // 2. Lấy Điểm thi (Xóa khoảng trắng ở ID để màng lọc chính xác 100%)
+        const studentIds = students.map(s => String(s.student_id).trim());
+        const { data: examResults, error: errResults } = await clientDb.from('exam_results').select('exam_code, student_id, score').in('student_id', studentIds);
+        if (errResults) throw errResults;
+
+        // Báo nhẹ nếu lớp chưa ai có điểm
+        if (!examResults || examResults.length === 0) {
+            window.show_toast("⚠️ Lớp chưa có điểm thi, hệ thống sẽ xuất form rỗng.", true);
+        }
+
+        // 3. Phân tích Tên đề thi
+        const examCodes = [...new Set((examResults || []).map(r => r.exam_code))];
+        let examTypeMap = {}; 
+        
+        if (examCodes.length > 0) {
+            const { data: exams, error: errExams } = await clientDb.from('online_exams').select('exam_code, exam_name').in('exam_code', examCodes);
+            
+            if (!errExams && exams) {
+                exams.forEach(ex => {
+                    let nameStr = (ex.exam_name || "").toUpperCase();
+                    let loai = 'K1'; 
+                    
+                    if (nameStr.includes('THI') || nameStr.includes('CUỐI KỲ') || nameStr.includes('CUOI KY')) loai = 'THI';
+                    else if (nameStr.includes('K5') || nameStr.includes('KT5') || nameStr.includes('THỰC HÀNH') || nameStr.includes('THUC HANH')) loai = 'K5';
+                    else if (nameStr.includes('K4') || nameStr.includes('KT4')) loai = 'K4';
+                    else if (nameStr.includes('K3') || nameStr.includes('KT3')) loai = 'K3';
+                    else if (nameStr.includes('K2') || nameStr.includes('KT2')) loai = 'K2';
+                    else if (nameStr.includes('K1') || nameStr.includes('KT1')) loai = 'K1';
+                    else if (nameStr.includes('CC') || nameStr.includes('CHUYÊN CẦN') || nameStr.includes('CHUYEN CAN')) loai = 'C';
+                    
+                    examTypeMap[ex.exam_code] = loai;
+                });
+            }
+        }
+
+        // Tách Tên, Sắp xếp ABC
+        students.sort((a, b) => {
+            let nameA = (a.full_name || "").trim().split(' ').pop().toLowerCase();
+            let nameB = (b.full_name || "").trim().split(' ').pop().toLowerCase();
+            if (nameA < nameB) return -1;
+            if (nameA > nameB) return 1;
+            return 0; 
+        });
+
+        // 4. Ghép điểm
+        // 4. Ghép điểm vào form chuẩn theo đúng tiêu đề của nhà trường
+        let exportData = students.map((u, index) => {
+            let parts = (u.full_name || "").trim().split(' ');
+            let ten = parts.length > 0 ? parts.pop() : "";
+            let ho = parts.join(' ');
+
+            // Lọc và ép kiểu điểm
+            let myScores = (examResults || []).filter(r => String(r.student_id).trim() === String(u.student_id).trim());
+            let scoreCols = { 'C': '', 'K1': '', 'K2': '', 'K3': '', 'K4': '', 'K5': '', 'THI': '' };
+            
+            myScores.forEach(r => {
+                let loai = examTypeMap[r.exam_code] || 'K1'; 
+                if (scoreCols[loai] !== undefined) {
+                    let numScore = parseFloat(r.score) || 0;
+                    if (scoreCols[loai] === '' || numScore > parseFloat(scoreCols[loai])) {
+                        scoreCols[loai] = numScore;
+                    }
+                }
+            });
+
+            // TRẢ VỀ ĐÚNG TÊN CỘT THEO ẢNH FORM MẪU
+            return {
+                "STT": index + 1,
+                "Mã sinh viên": String(u.student_id).trim(),
+                "Họ": ho,
+                "Tên": ten,
+                "Ngày sinh": u.ngay_sinh || "",
+                "Khóa học": u.khoa_hoc || "",
+                "Ngành học": u.nganh_hoc || "",
+                "Thời điểm đăng ký": u.thoi_diem_dang_ky || "",
+                "Lần học": 1,
+                "Điểm CC": scoreCols['C'],       // Sửa thành Điểm CC
+                "Điểm KT1": scoreCols['K1'],     // Sửa thành Điểm KT1
+                "Điểm KT2": scoreCols['K2'],     // Sửa thành Điểm KT2
+                "Điểm KT3": scoreCols['K3'],     // Sửa thành Điểm KT3
+                "Điểm KT4": scoreCols['K4'],     // Sửa thành Điểm KT4
+                "Điểm KT5": scoreCols['K5'],     // Sửa thành Điểm KT5
+                "Điểm QTHT": scoreCols['THI'],   // Sửa thành Điểm QTHT (Quá trình học tập / Thi)
+                "Ghi chú": ""
+            };
+        });
+
+        // BỘ LỌC KÝ TỰ CẤM (Lớp tên 1/2)
+        let safeClassCode = classCode.replace(/[\/\\?%*:|"<>]/g, '-');
+        let safeSheetName = ("Diem_" + safeClassCode).substring(0, 31);
+
+        // Xuất file
+        const ws = XLSX.utils.json_to_sheet(exportData);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
+        
+        ws['!cols'] = [
+            { wch: 5 }, { wch: 15 }, { wch: 25 }, { wch: 10 }, 
+            { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 8 }
+        ];
+
+        XLSX.writeFile(wb, `Bang_Diem_${safeClassCode}.xlsx`);
+        window.show_toast("✅ Xuất bảng điểm Excel thành công!");
+
+    } catch (err) {
+        console.error("Lỗi xuất Excel:", err);
+        window.show_toast("❌ Lỗi xuất file: " + err.message, true);
+    }
+};
 
 // Hàm thực hiện lưu dữ liệu lớp học vào Supabase
 window.save_new_class = async function() {
@@ -2582,19 +3627,34 @@ window.switch_dm_tab = function(tabId) {
     }
 };
 
+// =========================================================================
+// 🚀 GIAO DIỆN SỬA TÀI KHOẢN & PHÂN QUYỀN (ĐÃ LƯỢC BỎ TAB THỪA)
+// =========================================================================
 window.open_data_manager = function(activeTab = 'tab_user', uname='', pwd='', role='k12', fname='', perms='', classCode='') {
     let existingModal = document.getElementById('data_manager_modal');
     if (existingModal) existingModal.remove();
 
     let pList = perms === 'all' ? ['all'] : perms.split(',').map(s => s.trim().toLowerCase());
-    let hasP = (key, act) => { if (pList.includes('all')) return true; if (act === 'system') return pList.includes(`system_${key}`); if (act === 'stats') return pList.includes(`${key}_stats`) || pList.includes('stats_view') || pList.includes('stats_all') || pList.includes('stats'); if (act === 'edit') return pList.includes(`${key}_edit`); if (act === 'view') return pList.includes(`${key}_view`) || pList.includes(`${key}_edit`) || pList.includes(key); return false; };
+    let hasP = (key, act) => { 
+        if (pList.includes('all')) return true; 
+        if (act === 'system') return pList.includes(`system_${key}`); 
+        if (act === 'stats') return pList.includes(`${key}_stats`) || pList.includes('stats_view') || pList.includes('stats_all') || pList.includes('stats'); 
+        if (act === 'edit') return pList.includes(`${key}_edit`); 
+        if (act === 'view') return pList.includes(`${key}_view`) || pList.includes(`${key}_edit`) || pList.includes(key); 
+        return false; 
+    };
+    
     let groupedSubjects = {};
-    Object.keys(window.subjectConfig || {}).forEach(k => { let grp = window.subjectConfig[k].role || 'Khác'; if(!groupedSubjects[grp]) groupedSubjects[grp] = []; groupedSubjects[grp].push(k); });
+    Object.keys(window.subjectConfig || {}).forEach(k => { 
+        let grp = window.subjectConfig[k].role || 'Khác'; 
+        if(!groupedSubjects[grp]) groupedSubjects[grp] = []; 
+        groupedSubjects[grp].push(k); 
+    });
 
     let subjectsCheckboxes = "";
     Object.keys(groupedSubjects).forEach(grp => {
         let grpLower = grp.toLowerCase();
-        subjectsCheckboxes += `<div class="mb-3 p-2 rounded shadow-sm" style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.05);"><div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2" style="border-color: rgba(255,255,255,0.1) !important;"><div class="text-warning fw-bold text-uppercase" style="font-size: 0.75rem;"><i class="bi bi-folder-fill me-1"></i> NHÓM: ${grp}</div><div class="d-flex gap-2 text-center"><div style="width: 45px;"><label class="text-white-50 fw-bold m-0 d-block" style="font-size: 0.6rem;">XEM</label><input type="checkbox" class="form-check-input chk-view chk-group custom-switch-view m-0" data-base="${grpLower}" ${hasP(grpLower, 'view')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div><div style="width: 45px;"><label class="text-white-50 fw-bold m-0 d-block" style="font-size: 0.6rem;">SỬA</label><input type="checkbox" class="form-check-input chk-edit chk-group custom-switch-edit m-0" data-base="${grpLower}" ${hasP(grpLower, 'edit')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div><div style="width: 45px;"><label class="text-white-50 fw-bold m-0 d-block" style="font-size: 0.6rem; color: #c084fc !important;">T.KÊ</label><input type="checkbox" class="form-check-input chk-stats chk-group custom-switch-stats m-0" data-base="${grpLower}" ${hasP(grpLower, 'stats')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div></div></div>`;
+        subjectsCheckboxes += `<div class="mb-3 p-2 rounded shadow-sm" style="background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.05);"><div class="d-flex justify-content-between align-items-center border-bottom pb-2 mb-2" style="border-color: #2a2a2a !important;"><div class="text-warning fw-bold text-uppercase" style="font-size: 0.75rem;"><i class="bi bi-folder-fill me-1"></i> NHÓM: ${grp}</div><div class="d-flex gap-2 text-center"><div style="width: 45px;"><label class="text-white-50 fw-bold m-0 d-block" style="font-size: 0.6rem;">XEM</label><input type="checkbox" class="form-check-input chk-view chk-group custom-switch-view m-0" data-base="${grpLower}" ${hasP(grpLower, 'view')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div><div style="width: 45px;"><label class="text-white-50 fw-bold m-0 d-block" style="font-size: 0.6rem;">SỬA</label><input type="checkbox" class="form-check-input chk-edit chk-group custom-switch-edit m-0" data-base="${grpLower}" ${hasP(grpLower, 'edit')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div><div style="width: 45px;"><label class="text-white-50 fw-bold m-0 d-block" style="font-size: 0.6rem; color: #c084fc !important;">T.KÊ</label><input type="checkbox" class="form-check-input chk-stats chk-group custom-switch-stats m-0" data-base="${grpLower}" ${hasP(grpLower, 'stats')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div></div></div>`;
         groupedSubjects[grp].forEach(subjKey => {
             subjectsCheckboxes += `<div class="d-flex justify-content-between align-items-center px-1 py-1 mb-1 rounded" style="background: rgba(255,255,255,0.02);"><div class="text-white text-truncate pe-2" style="font-size: 0.8rem;"><i class="bi bi-dot text-info"></i> ${window.subjectNames ? window.subjectNames[subjKey] : subjKey}</div><div class="d-flex gap-2 text-center flex-shrink-0"><div style="width: 45px;"><input type="checkbox" class="form-check-input chk-view custom-switch-view m-0" data-base="${subjKey.toLowerCase()}" data-group="${grpLower}" ${hasP(subjKey.toLowerCase(), 'view')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div><div style="width: 45px;"><input type="checkbox" class="form-check-input chk-edit custom-switch-edit m-0" data-base="${subjKey.toLowerCase()}" data-group="${grpLower}" ${hasP(subjKey.toLowerCase(), 'edit')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div><div style="width: 45px;"><input type="checkbox" class="form-check-input chk-stats custom-switch-stats m-0" data-base="${subjKey.toLowerCase()}" data-group="${grpLower}" ${hasP(subjKey.toLowerCase(), 'stats')?'checked':''} onchange="window.handle_perm_change(this)" style="cursor:pointer;"></div></div></div>`;
         });
@@ -2602,88 +3662,60 @@ window.open_data_manager = function(activeTab = 'tab_user', uname='', pwd='', ro
     });
 
     let modalHtml = `
-    <div id="data_manager_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 28000; backdrop-filter: blur(10px); padding: 10px;">
+    <div id="data_manager_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.9); z-index: 28000; padding: 10px;">
         <style>.form-check-input { width: 2rem; height: 1.1rem; } .custom-switch-view:checked { background-color: #10b981 !important; border-color: #10b981 !important; } .custom-switch-edit:checked { background-color: #f59e0b !important; border-color: #f59e0b !important; } .custom-switch-stats:checked { background-color: #a855f7 !important; border-color: #a855f7 !important; } .custom-switch-admin:checked { background-color: #ef4444 !important; border-color: #ef4444 !important; } .chk-system:checked { background-color: #0ea5e9 !important; border-color: #0ea5e9 !important; }</style>
         
-        <div class="glass-panel shadow-lg w-100 d-flex flex-column p-0" style="max-width: 650px; max-height: 95vh; border-radius: 16px; background: rgba(15, 23, 42, 0.95) !important; overflow: hidden;">
-            <div class="d-flex justify-content-between align-items-center p-3 border-bottom" style="border-color: rgba(255,255,255,0.1) !important; background: rgba(0,0,0,0.2);">
-                <h6 class="fw-bold text-white mb-0"><i class="bi bi-database-fill me-2 text-primary"></i>TRUNG TÂM DỮ LIỆU</h6>
+        <div class="glass-panel shadow-lg w-100 d-flex flex-column p-0" style="max-width: 650px; max-height: 95vh; border-radius: 16px; background: #1a1a1a !important; overflow: hidden;">
+            <div class="d-flex justify-content-between align-items-center p-3 border-bottom" style="border-color: #2a2a2a !important; background: rgba(0,0,0,0.2);">
+                <h6 class="fw-bold text-white mb-0"><i class="bi bi-person-gear me-2 text-primary"></i>THÔNG TIN TÀI KHOẢN & PHÂN QUYỀN</h6>
                 <button class="btn-close btn-close-white" onclick="document.getElementById('data_manager_modal').remove()"></button>
             </div>
 
-            <div class="d-flex border-bottom" style="border-color: rgba(255,255,255,0.1) !important; background: rgba(255,255,255,0.02);">
-                <button class="flex-fill btn rounded-0 border-0 p-2 dm-tab-btn" data-target="tab_user" onclick="window.switch_dm_tab('tab_user')"><i class="bi bi-person-vcard me-1"></i> USER & QUYỀN</button>
-                <button class="flex-fill btn rounded-0 border-0 p-2 dm-tab-btn" data-target="tab_class" onclick="window.switch_dm_tab('tab_class')"><i class="bi bi-folder-plus me-1"></i> TẠO LỚP</button>
-                <button class="flex-fill btn rounded-0 border-0 p-2 dm-tab-btn" data-target="tab_import" onclick="window.switch_dm_tab('tab_import')"><i class="bi bi-file-earmark-spreadsheet me-1"></i> IMPORT EXCEL</button>
-            </div>
-
             <div class="p-3 overflow-auto custom-scrollbar flex-grow-1">
-                
-                <div id="tab_user" class="dm-tab-pane animate__animated animate__fadeIn">
+                <div class="animate__animated animate__fadeIn">
                     <div class="row g-2 mb-2">
-                        <div class="col-6"><label class="text-white-50 small fw-bold mb-1">ID <span class="text-danger">*</span></label><input type="text" id="modal_u_id" class="form-control form-control-sm text-white glass-input-style" value="${uname}" ${uname ? 'readonly style="opacity:0.6"' : 'placeholder="VD: SV01"'}></div>
+                        <div class="col-6"><label class="text-white-50 small fw-bold mb-1">ID Sinh viên <span class="text-danger">*</span></label><input type="text" id="modal_u_id" class="form-control form-control-sm text-white glass-input-style" value="${uname}" ${uname ? 'readonly style="opacity:0.6"' : 'placeholder="VD: 241030..."'}></div>
                         <div class="col-6"><label class="text-white-50 small fw-bold mb-1">Mật khẩu <span class="text-danger">*</span></label><input type="text" id="modal_u_pass" class="form-control form-control-sm text-white glass-input-style" value="${pwd}" placeholder="Mật khẩu"></div>
                     </div>
-                    <div class="row g-2 mb-3">
-                        <div class="col-7"><label class="text-white-50 small fw-bold mb-1">Họ và Tên</label><input type="text" id="modal_u_name" class="form-control form-control-sm text-white glass-input-style fw-bold text-info" value="${fname}" placeholder="Nhập họ tên..."></div>
-                        <div class="col-5"><label class="text-white-50 small fw-bold mb-1">Mã Lớp</label><input type="text" id="modal_u_class" class="form-control form-control-sm text-white glass-input-style fw-bold text-warning" value="${classCode}" placeholder="VD: DD21F"></div>
+                    
+                    <div class="row g-2 mb-2">
+                        <div class="col-12"><label class="text-white-50 small fw-bold mb-1">Họ và Tên</label><input type="text" id="modal_u_name" class="form-control form-control-sm text-white glass-input-style fw-bold text-info" value="${fname}" placeholder="Nhập họ tên..."></div>
                     </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-7">
+                            <label class="text-white-50 small fw-bold mb-1">Nhóm Role</label>
+                            <select id="modal_u_role" class="form-select form-select-sm text-white glass-input-style fw-bold" style="background: rgba(0,0,0,0.5);">
+                                <option value="medical" ${role==='medical'?'selected':''}>medical</option>
+                                <option value="k12" ${role==='k12'?'selected':''}>k12</option>
+                                <option value="admin" ${role==='admin'?'selected':''}>admin</option>
+                                ${(role !== 'medical' && role !== 'k12' && role !== 'admin' && role !== 'all') ? `<option value="${role}" selected>${role}</option>` : ''}
+                            </select>
+                        </div>
+                        <div class="col-5"><label class="text-white-50 small fw-bold mb-1">Mã Lớp</label><input type="text" id="modal_u_class" class="form-control form-control-sm text-white glass-input-style fw-bold text-warning" value="${classCode}" placeholder="VD: XN_K21"></div>
+                    </div>
+                    
                     <div class="d-flex justify-content-between align-items-center p-2 mb-3 rounded shadow-sm" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3);">
                         <div class="text-danger fw-bold" style="font-size: 0.8rem;"><i class="bi bi-star-fill me-1"></i> QUYỀN ADMIN TỐI CAO</div>
                         <div class="form-check form-switch m-0 p-0"><input class="form-check-input custom-switch-admin ms-0 mt-0" type="checkbox" id="modal_u_isadmin" ${role==='all'||role==='admin'?'checked':''} onchange="document.getElementById('matrix_wrapper').style.display = this.checked ? 'none' : 'block'" style="cursor: pointer;"></div>
                     </div>
+                    
                     <div id="matrix_wrapper" style="display: ${role==='all'||role==='admin'?'none':'block'};">
                         <div class="text-success fw-bold mb-2 text-uppercase" style="font-size: 0.8rem;"><i class="bi bi-ui-checks-grid me-1"></i> Phân quyền theo Môn học</div>
                         ${subjectsCheckboxes}
                     </div>
-                    <div class="d-flex justify-content-end pt-2 border-top mt-3" style="border-color: rgba(255,255,255,0.1) !important;">
+                    
+                    <div class="d-flex justify-content-end pt-2 border-top mt-3" style="border-color: #2a2a2a !important;">
                         <button class="btn btn-sm btn-success fw-bold px-4 shadow-sm" onclick="window.save_user_to_sheet(this)"><i class="bi bi-save2-fill me-1"></i> LƯU USER NÀY</button>
                     </div>
                 </div>
-
-                <div id="tab_class" class="dm-tab-pane animate__animated animate__fadeIn" style="display:none;">
-                    <div class="p-4 text-center mb-3">
-                        <i class="bi bi-folder-plus text-info mb-2" style="font-size: 3rem;"></i>
-                        <h6 class="text-white fw-bold">KHỞI TẠO LỚP RỖNG</h6>
-                        <small class="text-white-50">Tạo lớp học trước, sau đó thêm Sinh viên hoặc Import danh sách vào lớp này.</small>
-                    </div>
-                    <div class="mb-3">
-                        <label class="text-white-50 small fw-bold mb-1">Mã Lớp (Bắt buộc) <span class="text-danger">*</span></label>
-                        <input type="text" id="modal_c_code" class="form-control text-white glass-input-style fw-bold text-warning form-control-lg" placeholder="VD: DD21F (Viết liền, không dấu)">
-                    </div>
-                    <div class="mb-4">
-                        <label class="text-white-50 small fw-bold mb-1">Tên Lớp (Không bắt buộc)</label>
-                        <input type="text" id="modal_c_name" class="form-control text-white glass-input-style fw-bold text-info form-control-lg" placeholder="VD: Điều dưỡng 21F">
-                    </div>
-                    <div class="d-flex justify-content-end pt-2 border-top" style="border-color: rgba(255,255,255,0.1) !important;">
-                        <button class="btn btn-info fw-bold px-4 shadow-sm text-dark w-100" onclick="window.save_new_class()"><i class="bi bi-plus-circle-fill me-1"></i> TẠO LỚP MỚI</button>
-                    </div>
-                </div>
-
-                <div id="tab_import" class="dm-tab-pane animate__animated animate__fadeIn" style="display:none;">
-                    <div class="p-4 text-center">
-                        <i class="bi bi-file-earmark-excel-fill text-success mb-2" style="font-size: 3.5rem;"></i>
-                        <h5 class="text-white fw-bold">IMPORT DỮ LIỆU HÀNG LOẠT</h5>
-                        <p class="text-white-50 small mb-4">Nhập tự động sinh viên và lớp học cùng lúc thông qua file Excel. Hệ thống sẽ tự động tạo Lớp nếu mã lớp chưa tồn tại.</p>
-                        <div class="d-grid gap-3">
-                            <button class="btn btn-outline-info fw-bold py-2" onclick="window.download_excel_template()">
-                                <i class="bi bi-cloud-arrow-down-fill me-2"></i> 1. TẢI FILE EXCEL MẪU
-                            </button>
-                            <button class="btn btn-success fw-bold py-2" onclick="document.getElementById('excel_upload_input').click()">
-                                <i class="bi bi-cloud-arrow-up-fill me-2"></i> 2. CHỌN FILE ĐỂ IMPORT
-                            </button>
-                            <input type="file" id="excel_upload_input" accept=".xlsx, .xls" class="d-none" onchange="window.import_excel_students(event)">
-                        </div>
-                    </div>
-                </div>
-
             </div>
         </div>
     </div>`;
     
     document.body.insertAdjacentHTML('beforeend', modalHtml);
-    window.switch_dm_tab(activeTab);
 };
+
 window.handle_perm_change = function(el) {
     let base = el.getAttribute('data-base');
     if (el.classList.contains('chk-edit') && el.checked) { let v = document.querySelector(`.chk-view[data-base="${base}"]`); if(v) v.checked = true; }
@@ -3069,7 +4101,7 @@ window.render_media_for_card = function(q) {
 window.openMediaModal = function(id, type) {
     var modal = document.createElement("div");
     modal.className = "media-modal-overlay position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn";
-    modal.style.cssText = "background: rgba(0,0,0,0.85); z-index: 99999; backdrop-filter: blur(10px);";
+    modal.style.cssText = "background: rgba(0,0,0,0.9); z-index: 99999; ";
     
     var content = "";
     if (type === "clip") {
@@ -3086,7 +4118,7 @@ window.openMediaModal = function(id, type) {
 window.openMediaModalGame = function(id, type, rawUrl) {
     var modal = document.createElement("div");
     modal.className = "media-modal-overlay position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn";
-    modal.style.cssText = "background: rgba(0,0,0,0.85); z-index: 99999; backdrop-filter: blur(10px);";
+    modal.style.cssText = "background: rgba(0,0,0,0.9); z-index: 99999; ";
     
     var content = "";
     if (type === "clip") content = "<iframe src=\"https://drive.google.com/file/d/" + id + "/preview\" width=\"100%\" height=\"300\" frameborder=\"0\" allow=\"autoplay\" allowfullscreen style=\"border-radius: 12px; background:#000;\"></iframe>";
@@ -3254,12 +4286,12 @@ window.open_link_in_modal = function(url, title) {
     document.body.style.overflow = 'hidden';
 
     let modalHtml = `
-    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 99999; backdrop-filter: blur(10px); padding: 15px;">
+    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.9); z-index: 99999;  padding: 15px;">
         
-        <div class="glass-panel p-0 shadow-lg d-flex flex-column w-100 h-100 animate__animated animate__zoomIn" style="max-width: 1200px; border-radius: 16px; background: rgba(15, 23, 42, 0.95) !important; border: 1px solid rgba(56, 189, 248, 0.5); overflow: hidden;">
+        <div class="glass-panel p-0 shadow-lg d-flex flex-column w-100 h-100 animate__animated animate__zoomIn" style="max-width: 1200px; border-radius: 16px; background: #1a1a1a !important; border: 1px solid rgba(56, 189, 248, 0.5); overflow: hidden;">
             
             <!-- 🌟 HEADER -->
-            <div class="d-flex justify-content-between align-items-center p-3 border-bottom flex-shrink-0" style="border-color: rgba(255,255,255,0.1) !important; background: rgba(0,0,0,0.2);">
+            <div class="d-flex justify-content-between align-items-center p-3 border-bottom flex-shrink-0" style="border-color: #2a2a2a !important; background: rgba(0,0,0,0.2);">
                 <h6 class="fw-bold text-info mb-0 text-truncate pe-3" style="font-size: 1.1rem;">
                     <i class="bi bi-window-fullscreen me-2"></i>${title}
                 </h6>
@@ -3383,7 +4415,7 @@ window.toggle_inventory_popover = function(event) {
                     <div class="mb-1" style="font-size: 1.8rem; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.5)); line-height: 1;">${cfg.icon}</div>
                     <div class="fw-bold text-center w-100 text-truncate" style="font-size: 0.55rem; color: rgba(255,255,255,0.7);">${cfg.shortName}</div>
                     
-                    <div class="mt-auto w-100 pt-1 border-top d-flex align-items-center justify-content-center gap-1" style="border-color: rgba(255,255,255,0.1) !important; color: ${cfg.color};">
+                    <div class="mt-auto w-100 pt-1 border-top d-flex align-items-center justify-content-center gap-1" style="border-color: #2a2a2a !important; color: ${cfg.color};">
                         <span style="font-size: 0.7rem;">${cfg.rewardIcon}</span>
                         <span class="fw-bold" style="font-size: 0.65rem;">${displayVal}</span>
                     </div>
@@ -3408,7 +4440,7 @@ window.toggle_inventory_popover = function(event) {
                 border: 1px solid rgba(56, 189, 248, 0.5); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.6);">
         
         <div style="position: absolute; top: -8px; right: 15px; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 8px solid rgba(56, 189, 248, 0.5);"></div>
-        <div class="p-2 d-flex justify-content-between align-items-center border-bottom" style="border-color: rgba(255,255,255,0.1) !important;">
+        <div class="p-2 d-flex justify-content-between align-items-center border-bottom" style="border-color: #2a2a2a !important;">
             <h6 class="fw-bold text-info mb-0" style="font-size: 0.8rem;"><i class="bi bi-backpack me-1"></i> TÚI ĐỒ CỦA ${shortName}</h6>
             <button class="btn-close btn-close-white" style="font-size: 0.6rem;" onclick="document.getElementById('${popoverId}').remove()"></button>
         </div>
@@ -3506,7 +4538,7 @@ window.redeem_item = function(itemName, count) {
                 <div class="text-warning mt-1" style="font-size: 0.7rem;"><i class="bi bi-info-circle"></i> Hôm nay còn ${10 - limitData.count} lượt gửi iMessage</div>
             </div>
             
-            <div class="mb-3 border-top pt-3" style="border-color: rgba(255,255,255,0.1) !important;">
+            <div class="mb-3 border-top pt-3" style="border-color: #2a2a2a !important;">
                 <div class="text-center text-white-50 mb-2 fw-bold" style="font-size: 0.7rem; text-transform: uppercase;">Chọn số lượng quy đổi (x10 trở lên):</div>
                 ${tierHtml}
             </div>
@@ -3554,7 +4586,7 @@ window.open_gacha = function() {
     let old = document.getElementById(overlayId); if(old) old.remove();
     
     let html = `
-    <div id="${overlayId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style="background: rgba(15, 23, 42, 0.95); z-index: 9999999; backdrop-filter: blur(10px);">
+    <div id="${overlayId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style="background: rgba(15, 23, 42, 0.95); z-index: 9999999; ">
         <div id="${overlayId}_box" class="text-center animate__animated animate__shakeX animate__infinite" style="animation-duration: 0.3s;">
             <div style="font-size: 7rem; filter: drop-shadow(0 0 25px #f43f5e);">🎟️</div>
             <h3 class="text-white fw-bold mt-3 text-uppercase" style="letter-spacing: 2px;">Đang giải mã...</h3>
@@ -3624,7 +4656,7 @@ window.execute_redeem = function(itemName, qty, totalRewardText, colorCode) {
     let old = document.getElementById(toastId); if(old) old.remove();
 
     let toastHtml = `
-    <div id="${toastId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 9999999;">
+    <div id="${toastId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.9); z-index: 9999999;">
         <div class="badge rounded-4 px-4 py-4 shadow-lg d-flex flex-column align-items-center gap-3 animate__animated animate__zoomIn" style="background: rgba(15, 23, 42, 0.95); border: 2px solid ${colorCode}; box-shadow: 0 10px 40px rgba(0,0,0,0.8); max-width: 320px; white-space: normal;">
             <div style="font-size: 4rem; line-height: 1; filter: drop-shadow(0 0 15px ${colorCode});">🎉</div>
             <div class="text-center w-100">
@@ -3781,14 +4813,14 @@ window.open_esport_hub = function() {
     let q3_btn = qData.q3 ? 'disabled class="btn btn-sm btn-secondary py-0"' : (q3_ready ? 'class="btn btn-sm btn-success py-0" onclick="window.claim_quest(3, 0, \'Giáp 3 Mũ 3 🛡️\', \'🛡️\')"' : 'disabled class="btn btn-sm btn-outline-warning py-0"');
 
     let html = `
-    <div id="esport_hub_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style="background: rgba(0,0,0,0.85); z-index: 9999999; backdrop-filter: blur(5px);">
+    <div id="esport_hub_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center" style="background: rgba(0,0,0,0.9); z-index: 9999999; backdrop-filter: blur(5px);">
         <div class="glass-panel p-3 animate__animated animate__zoomIn shadow-lg" style="width: 300px; border-radius: 20px; border: 1px solid rgba(56, 189, 248, 0.4); background: rgba(15, 23, 42, 0.95);">
             <div class="d-flex justify-content-between align-items-center mb-1">
                 <h6 class="fw-bold text-info mb-0" style="font-size: 0.9rem;"><i class="bi bi-shield-shaded"></i> KỸ NĂNG & NHIỆM VỤ</h6>
                 <button class="btn-close btn-close-white" style="font-size: 0.7rem;" onclick="document.getElementById('esport_hub_modal').remove()"></button>
             </div>
             ${radarHtml}
-            <div class="mt-3 border-top pt-2" style="border-color: rgba(255,255,255,0.1) !important;">
+            <div class="mt-3 border-top pt-2" style="border-color: #2a2a2a !important;">
                 <div class="d-flex justify-content-between align-items-center p-1 px-2 mb-1 rounded" style="background: rgba(255,255,255,0.05);">
                     <span class="text-white fw-bold" style="font-size: 0.75rem;">1. Điểm danh</span>
                     <button ${q1_done} style="border-radius: 6px; font-size: 0.75rem; padding: 2px 8px;">+5 🎁</button>
@@ -3936,128 +4968,397 @@ window.update_modal_close_time = function(prefix) {
 };
 
 
-window.show_online_exam_modal = async function(defaultTime) {
-    // --- NẠP DANH SÁCH LỚP TỪ DATABASE TRƯỚC KHI MỞ ---
-    try {
-        const { data: classData, error: classErr } = await db.from('classes').select('class_code').order('class_code', { ascending: true });
-        window.available_classes = (!classErr && classData) ? classData.map(c => c.class_code) : [];
-    } catch (err) {
-        console.error("Lỗi tải danh sách lớp:", err);
-        window.available_classes = [];
-    }
-    // ------------------------------------------------
-
-    let oldModal = document.getElementById('online_exam_modal'); if (oldModal) oldModal.remove();
-    let examCount = window.temp_online_exam_questions.length;
-    let autoCode = "DE_" + Math.floor(Date.now() / 1000).toString().slice(-6);
-    
-    let tz = (new Date()).getTimezoneOffset() * 60000;
-    let localISOTimeOpen = (new Date(Date.now() - tz)).toISOString().slice(0,16);
-    let localISOTimeClose = (new Date(Date.now() - tz + defaultTime*60000)).toISOString().slice(0,16);
-
-    let modalHtml = `
-    <div id="online_exam_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 30000; backdrop-filter: blur(10px); padding: 10px;">
-        <div class="glass-panel p-3 shadow-lg w-100 d-flex flex-column" style="max-width: 600px; border-radius: 16px; background: rgba(15, 23, 42, 0.95) !important; border: 1px solid #f59e0b;">
-            <div class="d-flex justify-content-between align-items-center mb-2 border-bottom pb-2" style="border-color: rgba(255,255,255,0.1) !important;">
-                <h6 class="fw-bold text-warning mb-0"><i class="bi bi-cloud-arrow-up-fill me-2"></i>TẠO PHÒNG THI ONLINE (Gom ${examCount} câu)</h6>
-                <button class="btn-close btn-close-white" onclick="document.getElementById('online_exam_modal').remove()"></button>
-            </div>
-            
-            <div class="row g-2 mb-2">
-                <div class="col-3"><label class="text-white-50 fw-bold mb-0" style="font-size: 0.65rem;">Mã Đề *</label><input type="text" id="create_ex_code" class="form-control form-control-sm text-warning fw-bold glass-input-style text-center font-monospace" value="${autoCode}"></div>
-                <div class="col-5"><label class="text-white-50 fw-bold mb-0" style="font-size: 0.65rem;">Tên Kỳ Thi *</label><input type="text" id="create_ex_name" class="form-control form-control-sm text-info glass-input-style fw-bold" placeholder="VD: Thi giữa kỳ..."></div>
-                <div class="col-2"><label class="text-white-50 fw-bold mb-0" style="font-size: 0.65rem;">Phút *</label><input type="number" id="create_ex_time" class="form-control form-control-sm text-white glass-input-style text-center fw-bold" value="${defaultTime}" onchange="window.update_modal_close_time('create_ex')"></div>
-                <div class="col-2"><label class="text-white-50 fw-bold mb-0" style="font-size: 0.65rem;">Trạng thái</label><select id="create_ex_status" class="form-select form-select-sm text-white fw-bold glass-input-style px-1" style="background-color: rgba(0,0,0,0.5);"><option value="MỞ">🟢 MỞ</option><option value="ĐÓNG">🔴 ĐÓNG</option></select></div>
-            </div>
-
-            <div class="row g-2 mb-2">
-                <div class="col-3"><label class="text-white-50 fw-bold mb-0" style="font-size: 0.65rem;">Pass (Tùy chọn)</label><input type="text" id="create_ex_pass" class="form-control form-control-sm text-danger glass-input-style text-center fw-bold" placeholder="Tắt"></div>
-                <div class="col-4"><label class="text-white-50 fw-bold mb-0" style="font-size: 0.65rem;">Hẹn giờ MỞ</label><input type="datetime-local" id="create_ex_open" class="form-control form-control-sm text-white glass-input-style px-1" value="${localISOTimeOpen}" onchange="window.update_modal_close_time('create_ex')"></div>
-                <div class="col-5"><label class="text-white-50 fw-bold mb-0" style="font-size: 0.65rem;">Hẹn giờ ĐÓNG (Cộng tự động)</label><input type="datetime-local" id="create_ex_close" class="form-control form-control-sm text-white glass-input-style px-1" value="${localISOTimeClose}"></div>
-            </div>
-
-            ${window.get_smart_user_selection_html("", "create_ex")}
-
-            <div class="d-flex justify-content-end gap-2 pt-2 border-top" style="border-color: rgba(255,255,255,0.1) !important;">
-                <button class="btn btn-sm glass-action-btn px-4 fw-bold" onclick="document.getElementById('online_exam_modal').remove()">HỦY</button>
-                <button id="btn_submit_online_exam" class="btn btn-sm btn-warning fw-bold px-4 shadow-sm" onclick="window.submit_online_exam_to_server()"><i class="bi bi-save2-fill me-1"></i> LƯU ĐỀ THI</button>
-            </div>
-        </div>
-    </div>`;
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
-};
-
-// [ĐÃ GỠ BẢN TRÙNG] window.submit_online_exam_to_server (dòng cũ 3540-3574) - bản dùng thật nằm ở phía dưới file
 
 
-window.open_edit_exam_modal = async function(encodedEx) {
-    // --- NẠP DANH SÁCH LỚP TỪ DATABASE TRƯỚC KHI MỞ ---
-    try {
-        const { data: classData, error: classErr } = await db.from('classes').select('class_code').order('class_code', { ascending: true });
-        window.available_classes = (!classErr && classData) ? classData.map(c => c.class_code) : [];
-    } catch (err) {
-        console.error("Lỗi tải danh sách lớp:", err);
-        window.available_classes = [];
-    }
-    // ------------------------------------------------
 
-    let ex = JSON.parse(decodeURIComponent(encodedEx));
-    let isMo = ex.status === "MỞ" || ex.status.includes("MỞ");
+// =========================================================================
+// 📝 ADMIN: FORM CẬP NHẬT PHÒNG THI (TÍCH HỢP TÌM KIẾM SINH VIÊN THÔNG MINH)
+// =========================================================================
+window.open_edit_exam_modal = function(examJsonStr) {
+    let ex = JSON.parse(decodeURIComponent(examJsonStr));
+    let modalId = 'edit_exam_modal';
+    let existing = document.getElementById(modalId);
+    if (existing) existing.remove();
 
-    // 🌟 BỘ LỌC CHUYỂN ĐỔI NGÀY GIỜ CHUẨN HTML5
-    let formatTime = function(dateStr) {
-        if (!dateStr) return "";
+    const toDatetimeLocal = (dateStr) => {
+        if (!dateStr) return '';
         let d = new Date(dateStr);
-        if (isNaN(d.getTime())) return dateStr;
-        let tz = d.getTimezoneOffset() * 60000;
-        return (new Date(d.getTime() - tz)).toISOString().slice(0,16);
+        if (isNaN(d.getTime())) return '';
+        let pad = (n) => n < 10 ? '0' + n : n;
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
     };
 
-    let safeOpen = formatTime(ex.auto_open);
-    let safeClose = formatTime(ex.auto_close);
+    let openVal = toDatetimeLocal(ex.auto_open);
+    let closeVal = toDatetimeLocal(ex.auto_close);
 
-    let modalHtml = `
-    <div id="edit_exam_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 30000; backdrop-filter: blur(10px); padding: 10px;">
-        <div class="glass-panel p-3 shadow-lg w-100 d-flex flex-column" style="max-width: 600px; border-radius: 16px; background: rgba(15, 23, 42, 0.95) !important; border: 1px solid #0ea5e9;">
-            <div class="d-flex justify-content-between align-items-center mb-2 border-bottom pb-2" style="border-color: rgba(255,255,255,0.1) !important;">
-                <h6 class="fw-bold text-info mb-0"><i class="bi bi-gear-fill me-2"></i>CẬP NHẬT ĐỀ THI: ${ex.code}</h6>
-                <button class="btn-close btn-close-white" onclick="document.getElementById('edit_exam_modal').remove()"></button>
+    let html = `
+    <style>
+        @media (max-width: 768px) {
+            .edit-mobile-sheet { height: auto !important; max-height: 95vh !important; border-radius: 16px 16px 0 0 !important; border: none !important; border-top: 1px solid #495057 !important; margin-top: auto; }
+            .edit-sheet-wrapper { align-items: flex-end !important; padding: 0 !important; }
+        }
+        .edit-mobile-sheet { max-height: 90vh; }
+        .edit-action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        
+        .dark-input { background: #2b3035 !important; color: #fff !important; border: 1px solid #495057 !important; border-radius: 8px; font-size: 0.9rem; padding: 8px 12px; }
+        .dark-input:focus { border-color: #ffc107 !important; box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.2) !important; outline: none; }
+        .dark-label { font-size: 0.7rem; font-weight: 700; color: #adb5bd; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        .class-pill { transition: 0.2s; user-select: none; border: 1px solid #495057; background: #2b3035; }
+        .class-pill:has(input:checked) { background: rgba(255, 193, 7, 0.15) !important; border-color: #ffc107 !important; }
+        .class-pill:has(input:checked) span { color: #ffc107 !important; font-weight: bold; }
+        
+        /* CSS cho danh sách gợi ý tìm kiếm */
+        .suggestion-item:hover { background: #343a40 !important; }
+    </style>
+
+    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center edit-sheet-wrapper animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.65); z-index: 99999; padding: 10px;">
+        <div class="d-flex flex-column w-100 edit-mobile-sheet shadow-lg animate__animated animate__slideInUp" style="max-width: 500px; border-radius: 16px; background: #212529 !important; border: 1px solid #343a40; overflow: hidden;">
+            
+            <div class="p-3 border-bottom flex-shrink-0" style="border-color: #343a40 !important; background: #212529;">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold text-white mb-0 d-flex align-items-center" style="font-size: 0.95rem;">
+                        <i class="bi bi-pencil-square text-warning me-2"></i>CẬP NHẬT: <span class="text-warning ms-1 font-monospace px-2 py-1 bg-dark rounded border border-secondary" style="font-size: 0.9rem;">${ex.code}</span>
+                    </h6>
+                    <button class="btn-close btn-close-white opacity-50" style="font-size: 0.75rem;" onclick="document.getElementById('${modalId}').remove()"></button>
+                </div>
+            </div>
+
+            <div class="flex-grow-1 p-3 custom-scrollbar" style="overflow-y: auto; background: #121416;">
+                <form id="edit_exam_form" onsubmit="event.preventDefault(); window.submit_edit_exam_form('${ex.code}')">
+                    
+                    <div class="mb-3">
+                        <label class="dark-label">Tên kỳ thi / Đề thi <span class="text-danger">*</span></label>
+                        <input type="text" id="edit_ex_name" class="form-control dark-input" value="${ex.name}" required>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="dark-label">Thời lượng (Phút) <span class="text-danger">*</span></label>
+                            <input type="number" id="edit_ex_time" class="form-control dark-input text-warning fw-bold" value="${ex.time}" min="1" required>
+                        </div>
+                        <div class="col-6">
+                            <label class="dark-label">Mật khẩu (Trống = Tắt)</label>
+                            <input type="text" id="edit_ex_pass" class="form-control dark-input text-danger fw-bold" value="${ex.pass || ''}" placeholder="Không yêu cầu">
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="dark-label">Giờ mở cửa (Tự động)</label>
+                            <input type="datetime-local" id="edit_ex_open" class="form-control dark-input" value="${openVal}">
+                        </div>
+                        <div class="col-6">
+                            <label class="dark-label">Giờ đóng cửa (Tự động)</label>
+                            <input type="datetime-local" id="edit_ex_close" class="form-control dark-input" value="${closeVal}">
+                        </div>
+                    </div>
+
+                    <!-- CHỌN LỚP -->
+                    <div class="mb-3">
+                        <label class="dark-label">1. CHỌN LỚP ĐƯỢC THI <span class="text-danger">*</span></label>
+                        <div class="position-relative mb-2">
+                            <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-2 text-white-50" style="font-size: 0.8rem;"></i>
+                            <input type="text" id="edit_class_search" class="form-control dark-input ps-4" placeholder="Nhập để tìm nhanh lớp học..." onkeyup="window.filter_edit_classes(this.value)" style="font-size: 0.85rem; padding: 6px 12px;" autocomplete="off">
+                        </div>
+                        <div id="edit_class_list" class="d-flex flex-wrap align-content-start gap-2 p-2 rounded custom-scrollbar" style="background: #212529; border: 1px solid #495057; height: 180px; overflow-y: auto;">
+                            <div class="text-white-50 small w-100 text-center mt-3"><span class="spinner-border spinner-border-sm"></span> Đang tải danh sách lớp...</div>
+                        </div>
+                    </div>
+
+                    <!-- 🌟 TÌM KIẾM SINH VIÊN THI BÙ THÔNG MINH -->
+                    <div class="mb-2">
+                        <label class="dark-label text-warning">2. THÊM SINH VIÊN THI BÙ / ĐẶC CÁCH</label>
+                        
+                        <!-- Nơi chứa các thẻ Badge sinh viên đã chọn -->
+                        <div id="extra_users_tags" class="d-flex flex-wrap gap-1 mb-2"></div>
+                        
+                        <!-- Ô Input Search -->
+                        <div class="position-relative">
+                            <i class="bi bi-person-plus position-absolute top-50 start-0 translate-middle-y ms-2 text-warning" style="font-size: 0.9rem;"></i>
+                            <input type="text" id="search_extra_user" class="form-control dark-input border-warning ps-4" placeholder="Nhập Mã SV hoặc Tên để thêm..." oninput="window.handle_extra_user_search(this.value)" autocomplete="off" style="font-size: 0.85rem;">
+                            
+                            <!-- Bảng thả xuống (Dropdown) -->
+                            <div id="extra_user_suggestions" class="position-absolute w-100 bg-dark rounded shadow-lg" style="display: none; max-height: 180px; overflow-y: auto; z-index: 1000; border: 1px solid #495057; top: 100%; left: 0;"></div>
+                        </div>
+                        
+                        <div class="text-white-50 mt-1" style="font-size: 0.7rem;"><i class="bi bi-info-circle me-1"></i>Gõ một phần tên hoặc mã, hệ thống sẽ tự động tìm kiếm.</div>
+                    </div>
+
+                </form>
+            </div>
+
+            <div class="p-2 border-top flex-shrink-0" style="border-color: #343a40 !important; background: #212529;">
+                <div class="edit-action-grid">
+                    <button class="btn btn-outline-secondary text-light fw-bold py-2" style="border-radius: 8px; font-size: 0.8rem;" onclick="document.getElementById('${modalId}').remove()">
+                        <i class="bi bi-x-lg me-1"></i> HỦY
+                    </button>
+                    <button class="btn btn-warning text-dark fw-bold py-2 shadow-sm" style="border-radius: 8px; font-size: 0.8rem;" onclick="window.submit_edit_exam_form('${ex.code}')">
+                        <i class="bi bi-floppy-fill me-1"></i> LƯU ĐỀ THI
+                    </button>
+                </div>
             </div>
             
-            <div class="row g-2 mb-2">
-                <div class="col-7"><label class="text-white-50 fw-bold mb-0" style="font-size: 0.65rem;">Tên Kỳ Thi *</label><input type="text" id="edit_ex_name" class="form-control form-control-sm text-info fw-bold glass-input-style" value="${ex.name}"></div>
-                <div class="col-2"><label class="text-white-50 fw-bold mb-0" style="font-size: 0.65rem;">Phút *</label><input type="number" id="edit_ex_time" class="form-control form-control-sm text-white glass-input-style text-center fw-bold" value="${ex.time}" onchange="window.update_modal_close_time('edit_ex')"></div>
-                <div class="col-3"><label class="text-white-50 fw-bold mb-0" style="font-size: 0.65rem;">Trạng thái</label><select id="edit_ex_status" class="form-select form-select-sm text-white fw-bold glass-input-style px-1" style="background-color: rgba(0,0,0,0.5);"><option value="ĐÓNG" class="text-danger" ${!isMo ? 'selected' : ''}>🔴 ĐÓNG</option><option value="MỞ" class="text-success" ${isMo ? 'selected' : ''}>🟢 MỞ</option></select></div>
-            </div>
-
-            <div class="row g-2 mb-2">
-                <div class="col-3"><label class="text-white-50 fw-bold mb-0" style="font-size: 0.65rem;">Pass (Tùy chọn)</label><input type="text" id="edit_ex_pass" class="form-control form-control-sm text-danger glass-input-style text-center fw-bold" value="${ex.pass}" placeholder="Tắt"></div>
-                <div class="col-4"><label class="text-white-50 fw-bold mb-0" style="font-size: 0.65rem;">Hẹn giờ MỞ</label><input type="datetime-local" id="edit_ex_open" class="form-control form-control-sm text-white glass-input-style px-1" value="${safeOpen}" onchange="window.update_modal_close_time('edit_ex')"></div>
-                <div class="col-5"><label class="text-white-50 fw-bold mb-0" style="font-size: 0.65rem;">Hẹn giờ ĐÓNG (Cộng tự động)</label><input type="datetime-local" id="edit_ex_close" class="form-control form-control-sm text-white glass-input-style px-1" value="${safeClose}"></div>
-            </div>
-
-            ${window.get_smart_user_selection_html(ex.users, "edit_ex")}
-
-            <div class="d-flex justify-content-end gap-2 pt-2 border-top" style="border-color: rgba(255,255,255,0.1) !important;">
-                <button class="btn btn-sm glass-action-btn px-4 fw-bold" onclick="document.getElementById('edit_exam_modal').remove()">HỦY</button>
-                <button id="btn_save_edit_exam" class="btn btn-sm btn-info fw-bold px-4 shadow-sm" onclick="window.save_edit_exam('${ex.code}')"><i class="bi bi-save2-fill me-1"></i> CẬP NHẬT NGAY</button>
-            </div>
         </div>
     </div>`;
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    document.body.insertAdjacentHTML('beforeend', html);
+
+    // Kéo dữ liệu Lớp và Sinh viên
+    window.all_users_for_search = []; // Biến toàn cục chứa sinh viên
+    window.current_extra_users = [];  // Biến chứa ID các sinh viên thi bù đã chọn
+
+    (async function fetchDataForEdit() {
+        try {
+            const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+            const { data: users } = await clientDb.from('users').select('student_id, full_name, class_code, role');
+            
+            if (users) {
+                window.all_users_for_search = users; // Lưu lại để tý nữa Search
+            }
+            
+            let cSet = new Set();
+            users.forEach(u => {
+                let c = u.class_code || u.role;
+                if (c && c.trim() !== '') {
+                    let cleanC = c.trim().toUpperCase();
+                    if (cleanC !== 'ALL') cSet.add(cleanC); 
+                }
+            });
+            let classList = Array.from(cSet).sort();
+            
+            let allowedArr = (ex.users || "").split(',').map(s => s.trim().toUpperCase()).filter(s => s !== "");
+            let listHtml = '';
+            
+            classList.forEach(c => {
+                let isChecked = allowedArr.includes(c);
+                listHtml += `
+                <label class="d-flex align-items-center gap-2 p-1 px-2 rounded class-pill class-filter-item" data-name="${c.toLowerCase()}">
+                    <input type="checkbox" class="form-check-input m-0 chk-class-item" value="${c}" ${isChecked ? 'checked' : ''}>
+                    <span class="text-white" style="font-size: 0.8rem;">${c}</span>
+                </label>`;
+                
+                let idx = allowedArr.indexOf(c);
+                if (idx > -1) allowedArr.splice(idx, 1);
+            });
+            
+            // Những ID còn dư trong allowedArr chính là Sinh viên thi bù
+            window.current_extra_users = allowedArr.filter(x => x !== 'ALL');
+            window.render_extra_user_tags(); // Vẽ các Badge màu vàng ra màn hình
+            
+            document.getElementById('edit_class_list').innerHTML = listHtml || '<div class="text-white-50 small w-100 text-center mt-3">Không tìm thấy dữ liệu lớp học</div>';
+
+        } catch(e) {
+            document.getElementById('edit_class_list').innerHTML = '<div class="text-danger small w-100 text-center mt-3">Lỗi tải dữ liệu từ máy chủ!</div>';
+        }
+    })();
+};
+// =========================================================================
+// 🔍 ADMIN: BỘ MÁY TÌM KIẾM SINH VIÊN & QUẢN LÝ TAG THI BÙ
+// =========================================================================
+
+// 1. Hàm tìm kiếm khi thầy gõ phím
+window.handle_extra_user_search = function(q) {
+    let box = document.getElementById('extra_user_suggestions');
+    if(!q || q.length < 2) { box.style.display = 'none'; return; } // Gõ từ 2 chữ cái trở lên mới tìm
+    
+    // Loại bỏ dấu tiếng việt để tìm kiếm mượt mà (VD: gõ "hai" ra "Hải")
+    let qLow = q.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    
+    let matches = window.all_users_for_search.filter(u => {
+        let nameMatch = u.full_name ? u.full_name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').includes(qLow) : false;
+        let idMatch = u.student_id ? u.student_id.toLowerCase().includes(qLow) : false;
+        let notSelectedYet = !window.current_extra_users.includes(u.student_id.toUpperCase());
+        
+        return (nameMatch || idMatch) && notSelectedYet;
+    }).slice(0, 15); // Chỉ hiển thị tối đa 15 người để không bị lag
+
+    if(matches.length === 0) {
+        box.innerHTML = '<div class="p-2 text-white-50 small text-center">Không tìm thấy sinh viên phù hợp</div>';
+    } else {
+        box.innerHTML = matches.map(u => `
+            <div class="p-2 border-bottom border-secondary suggestion-item d-flex justify-content-between align-items-center" style="cursor: pointer; background: #212529;" onclick="window.add_extra_user('${u.student_id.toUpperCase()}', '${u.full_name}')">
+                <div>
+                    <div class="fw-bold text-info" style="font-size: 0.85rem;">${u.student_id}</div>
+                    <div class="text-white" style="font-size: 0.8rem;">${u.full_name || 'Chưa cập nhật'}</div>
+                </div>
+                <span class="badge bg-secondary">${u.class_code || '?'}</span>
+            </div>
+        `).join('');
+    }
+    box.style.display = 'block';
+};
+
+// 2. Hàm khi thầy bấm chọn 1 người từ danh sách
+window.add_extra_user = function(id, name) {
+    if(!window.current_extra_users.includes(id)) {
+        window.current_extra_users.push(id);
+        window.render_extra_user_tags();
+    }
+    // Xóa nội dung ô tìm kiếm và ẩn bảng thả xuống
+    document.getElementById('search_extra_user').value = '';
+    document.getElementById('extra_user_suggestions').style.display = 'none';
+};
+
+// 3. Hàm khi thầy bấm dấu X để xóa người đó khỏi danh sách thi bù
+window.remove_extra_user = function(id) {
+    window.current_extra_users = window.current_extra_users.filter(x => x !== id);
+    window.render_extra_user_tags();
+};
+
+// 4. Hàm vẽ lại giao diện các cục Badge (Đã tối ưu giao diện Dark Mode)
+window.render_extra_user_tags = function() {
+    let container = document.getElementById('extra_users_tags');
+    if (window.current_extra_users.length === 0) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    container.innerHTML = window.current_extra_users.map(id => {
+        // Tìm tên để hiển thị cho đẹp
+        let userObj = window.all_users_for_search.find(u => u.student_id.toUpperCase() === id);
+        let displayName = userObj && userObj.full_name ? `${id} - ${userObj.full_name.split(' ').pop()}` : id;
+        
+        return `
+        <span class="badge d-flex align-items-center gap-2 py-1 px-2 shadow-sm" style="background: rgba(255, 193, 7, 0.15); border: 1px solid #ffc107; color: #ffc107 !important; font-size: 0.75rem; font-weight: 700; border-radius: 6px; letter-spacing: 0.3px;">
+            ${displayName}
+            <i class="bi bi-x-circle-fill text-danger" style="cursor:pointer; font-size: 0.95rem; filter: brightness(1.2);" onclick="window.remove_extra_user('${id}')" title="Xóa"></i>
+        </span>`;
+    }).join('');
+};
+
+// =========================================================================
+// 🔍 ADMIN: BỘ LỌC TÌM KIẾM LỚP HỌC (LIVE SEARCH)
+// =========================================================================
+window.filter_edit_classes = function(query) {
+    let q = query.toLowerCase().trim();
+    let items = document.querySelectorAll('.class-filter-item');
+    
+    items.forEach(item => {
+        let className = item.getAttribute('data-name');
+        if (className.includes(q)) {
+            // Hiện lại nếu tìm thấy
+            item.style.setProperty('display', 'flex', 'important'); 
+        } else {
+            // Ẩn đi nếu không khớp
+            item.style.setProperty('display', 'none', 'important'); 
+        }
+    });
+};
+
+// Hàm trợ giúp: Chọn tất cả các lớp
+window.toggle_all_classes = function(chk) {
+    let items = document.querySelectorAll('.chk-class-item');
+    items.forEach(i => i.checked = chk.checked);
+};
+
+// =========================================================================
+// 📝 ADMIN: HÀM LƯU THÔNG TIN CẬP NHẬT LÊN SUPABASE
+// =========================================================================
+window.submit_edit_exam_form = async function(examCode) {
+    let btn = document.querySelector('#edit_exam_modal .btn-warning');
+    let originalText = btn.innerHTML;
+    
+    let nameVal = document.getElementById('edit_ex_name').value.trim();
+    let timeVal = parseInt(document.getElementById('edit_ex_time').value);
+    if (!nameVal || !timeVal) return alert("Vui lòng nhập Tên kỳ thi và Thời lượng hợp lệ!");
+
+    // Gom danh sách lớp đã tick
+    let classList = [];
+    let checkedClasses = document.querySelectorAll('.chk-class-item:checked');
+    checkedClasses.forEach(c => classList.push(c.value));
+    
+    // Gom danh sách Sinh viên thi bù từ mảng Tags (Biến toàn cục)
+    let extraArr = window.current_extra_users || [];
+    
+    // Gộp chung lại thành 1 chuỗi an toàn
+    let finalAllowed = Array.from(new Set([...classList, ...extraArr])).join(',');
+
+    if (btn) btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> ĐANG LƯU...`;
+
+    try {
+        let updateData = {
+            exam_name: nameVal,
+            time_limit: timeVal,
+            password: document.getElementById('edit_ex_pass').value.trim() || null,
+            allowed_users: finalAllowed, 
+            auto_open: document.getElementById('edit_ex_open').value ? new Date(document.getElementById('edit_ex_open').value).toISOString() : null,
+            auto_close: document.getElementById('edit_ex_close').value ? new Date(document.getElementById('edit_ex_close').value).toISOString() : null,
+        };
+
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        const { error } = await clientDb.from('online_exams').update(updateData).eq('exam_code', examCode);
+        
+        if (error) throw error;
+        
+        let modal = document.getElementById('edit_exam_modal');
+        if(modal) modal.remove();
+        
+        if(typeof window.render_exam_management === 'function') {
+            window.render_exam_management();
+        }
+        
+        if(typeof window.show_toast === 'function') {
+            window.show_toast("✅ Cập nhật phòng thi thành công!", false);
+        }
+
+    } catch (err) {
+        alert("Lỗi cập nhật Supabase: " + err.message);
+        if (btn) btn.innerHTML = originalText;
+    }
 };
 
 // [ĐÃ GỠ BẢN TRÙNG] window.save_edit_exam (dòng cũ 3590-3620) - bản dùng thật nằm ở phía dưới file
 
 
-window.start_online_exam = function(ex) {
+window.start_online_exam = async function(ex) {
     let qs = [];
-    // Cột jsonb của Supabase trả về MẢNG sẵn, chỉ parse khi là chuỗi
     try {
         let raw = ex.questionsJSON;
         qs = Array.isArray(raw) ? raw : (typeof raw === 'string' ? JSON.parse(raw) : (raw ? [].concat(raw) : []));
     } catch(e) { return window.show_toast("❌ Lỗi dữ liệu đề thi từ máy chủ!", true); }
     if (!qs || qs.length === 0) return window.show_toast("❌ Đề thi này chưa có câu hỏi nào!", true);
+
+    // =========================================================================
+    // 🛡️ TRẠM KIỂM SOÁT VÉ: CHẶN CỬA NẾU BỊ KHÓA / ĐÌNH CHỈ / ĐÃ NỘP
+    // =========================================================================
+    try {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        const { data: checkData, error: checkErr } = await clientDb.from('exam_results')
+            .select('is_locked, is_absent, is_submitted')
+            .eq('exam_code', ex.examCode)
+            .eq('student_id', window.current_student_id)
+            .single();
+
+        if (checkData) {
+            // Án tử 1: Bị cấm thi
+            if (checkData.is_absent === true) {
+                if (typeof window.force_kick_student === 'function') {
+                    window.force_kick_student("🚫 TỪ CHỐI TRUY CẬP", "Bạn đã bị Giám thị đình chỉ thi. Bài làm đã bị vô hiệu hóa.", true);
+                } else {
+                    alert("🚫 TỪ CHỐI TRUY CẬP: Bạn đã bị đình chỉ và cấm thi!");
+                }
+                return; // 🛑 Chặn cửa!
+            }
+            // Án phạt 2: Đang bị khóa máy
+            if (checkData.is_locked === true) {
+                if (typeof window.force_kick_student === 'function') {
+                    window.force_kick_student("🔒 TÀI KHOẢN BỊ KHÓA", "Tài khoản của bạn đang bị khóa do vi phạm hoặc Giám thị mời ra khỏi phòng.<br><br><b>Vui lòng giơ tay báo cáo Giám thị để được MỞ KHÓA!</b>", false);
+                } else {
+                    alert("🔒 TÀI KHOẢN BỊ KHÓA: Vui lòng báo cáo Giám thị để được mở khóa!");
+                }
+                return; // 🛑 Chặn cửa!
+            }
+            // Báo lỗi nếu nộp rồi mà F5 đòi thi lại
+            if (checkData.is_submitted === true) {
+                alert("✅ Bạn đã nộp bài thi này rồi, không thể vào thi lại!");
+                return; // 🛑 Chặn cửa!
+            }
+        }
+    } catch (e) {
+        // Sinh viên mới tinh, chưa báo danh lần nào -> Bỏ qua cho đi tiếp
+    }
+    // =========================================================================
 
     // THIẾT LẬP MÔI TRƯỜNG THI THẬT
     window.current_subject = ex.subjectKey;
@@ -4066,9 +5367,7 @@ window.start_online_exam = function(ex) {
     window.is_eligible_for_reward = false; 
     window.current_attempt_count = 1;
 
-    // ========================================================
-    // 🌟 XÁO TRỘN ĐÁP ÁN VÀ CÂU HỎI MỖI LẦN VÀO THI
-    // ========================================================
+    // XÁO TRỘN ĐÁP ÁN VÀ CÂU HỎI AN TOÀN
     qs.forEach((q, index) => {
         q.id = q.id || (index + 1);
         q.visited = false;
@@ -4076,25 +5375,21 @@ window.start_online_exam = function(ex) {
         q.ans_user = (q.type === 'fill' || q.type === 'short') ? [] : "";
 
         let cType = q.type ? String(q.type).toLowerCase().trim() : '';
-        // 1. Chỉ xáo trộn đáp án nếu là câu hỏi Trắc nghiệm ABCD
-        if ((cType === 'single' || cType === 'mcq') && q.opts && q.opts.length > 0) {
-            
-            // Xác định chính xác "Nội dung chữ" của đáp án đúng trước khi xáo trộn
+        if ((cType === 'single' || cType === 'mcq') && Array.isArray(q.opts) && q.opts.length > 0) {
             let rawAns = String(q.a || q.answer || "").trim();
             let isLetter = /^[A-D]$/i.test(rawAns);
             let correctText = "";
 
             if (isLetter) {
-                let idx = rawAns.toUpperCase().charCodeAt(0) - 65; // A=0, B=1...
+                let idx = rawAns.toUpperCase().charCodeAt(0) - 65; 
                 if (q.opts[idx]) correctText = q.opts[idx];
             } else {
                 correctText = rawAns;
             }
 
-            // Thực hiện xáo trộn mảng các lựa chọn (A, B, C, D)
-            q.opts = q.opts.sort(() => Math.random() - 0.5);
+            // Đảo vị trí các đáp án (đã lọc rỗng)
+            q.opts = q.opts.filter(o => o !== null && o !== undefined && String(o).trim() !== '').sort(() => Math.random() - 0.5);
 
-            // Gán lại phao đáp án đúng (A, B, C hoặc D) theo vị trí mới
             if (correctText) {
                 let newIdx = q.opts.findIndex(o => o === correctText);
                 if (newIdx !== -1 && isLetter) {
@@ -4105,17 +5400,16 @@ window.start_online_exam = function(ex) {
         }
     });
 
-    // 2. Xáo trộn vị trí tất cả các câu hỏi trong đề
     window.questions = qs.sort(() => Math.random() - 0.5);
 
-    // Mở giao diện phòng thi
+    // MỞ GIAO DIỆN
     document.getElementById('step_1').style.display = 'none';
     document.getElementById('step_3').style.display = 'block';
 
     let qHeader = document.querySelector('.sticky-quiz-header') || document.querySelector('#step_3 .header-fixed-wrapper');
     if(qHeader) qHeader.style.display = '';
 
-    // KHÓA GIAN LẬN: Tàng hình nút kỹ năng
+    // KHÓA KỸ NĂNG VÀ CHẾ ĐỘ RẢNH TAY
     let skill5050 = document.querySelector('button[onclick="window.use_skill_5050()"]');
     let skillTime = document.querySelector('button[onclick="window.use_skill_time()"]');
     let invBadge = document.getElementById('mini_inventory_badge');
@@ -4126,7 +5420,6 @@ window.start_online_exam = function(ex) {
     if(invBadge) invBadge.style.display = 'none';
     if(modeToggle && modeToggle.parentElement) modeToggle.parentElement.style.display = 'none';
 
-    // ẨN NÚT CỨU SAI BẰNG CSS ĐỘNG
     let examStyle = document.getElementById('exam_mode_style');
     if(!examStyle) {
         examStyle = document.createElement('style');
@@ -4149,7 +5442,6 @@ window.start_online_exam = function(ex) {
     let submitBtn = document.getElementById('submit_btn');
     if(submitBtn) submitBtn.style.display = 'none';
 
-    // KÍCH HOẠT PROCTORING: BẢO MẬT & LƯU NHÁP HỒI SINH
     window.proctoring_state = window.proctoring_state || {};
     window.proctoring_state.is_active = true;
     window.proctoring_state.exam_code = ex.examCode;
@@ -4159,16 +5451,19 @@ window.start_online_exam = function(ex) {
     window.offense_count = 0; 
     window.start_time = new Date();
 
-    // 🌟 ĐÃ FIX: Ghi nhận trạng thái "Đang thi" lên Supabase ngay lập tức để Admin thấy
+    // 🌟 BẢN VÁ LỖI TÍCH HỢP: Gắn luôn cờ client_status: 'ONLINE' khi báo danh
     try {
-        db.from('exam_results').upsert({
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        clientDb.from('exam_results').upsert({
             exam_code: ex.examCode,
             student_id: window.current_student_id,
-            is_started: true
-        }, { onConflict: 'exam_code,student_id' });
+            is_submitted: false,
+            score: 0,
+            client_status: 'ONLINE' // Bắn radar tức thì
+        }, { onConflict: 'exam_code,student_id' }).then(() => console.log('Đã báo danh thi!'));
     } catch(e) {}
 
-    // 🌟 KHỞI ĐỘNG NHỊP TIM GIÁM SÁT THỜI GIAN THỰC (GIÃN CÁCH 60S CHỐNG SẬP NGUỒN)
+    // KHỞI ĐỘNG NHỊP TIM CHỐNG SẬP NGUỒN
     if (window.realtime_exam_monitor) clearInterval(window.realtime_exam_monitor);
     window.realtime_exam_monitor = setInterval(() => {
         if (window.is_exam_started && window.proctoring_state && window.proctoring_state.is_active) {
@@ -4180,9 +5475,8 @@ window.start_online_exam = function(ex) {
                 }
             });
         }
-    }, 60000); // Đã đổi thành 60000 (1 phút/lần) để tối ưu hiệu năng
+    }, 60000); 
 
-    // KIỂM TRA BẢN NHÁP CŨ
     let isResumed = false;
     if (typeof window.restore_exam_draft === 'function') {
         isResumed = window.restore_exam_draft(ex.examCode);
@@ -4194,12 +5488,10 @@ window.start_online_exam = function(ex) {
 
     if(typeof window.render_quiz === 'function') window.render_quiz();
     
-    // TÔ LẠI MÀU VÀ GIAO DIỆN CHO CÁC ĐÁP ÁN TỪ BẢN NHÁP CŨ
     if (isResumed && typeof window.re_apply_visual_answers === 'function') {
         window.re_apply_visual_answers();
     }
     
-    // ÉP TOÀN MÀN HÌNH CHỐNG GIAN LẬN
     if (typeof window.enable_fullscreen === 'function') window.enable_fullscreen();
     
     if(typeof window.start_countdown === 'function') {
@@ -4210,14 +5502,14 @@ window.start_online_exam = function(ex) {
     window.scrollTo({ top: 0, behavior: 'instant' });
     
     if (isResumed) {
-        window.show_toast(`♻️ ĐÃ KHÔI PHỤC BÀI THI: Hệ thống đã tải lại các đáp án bạn đang chọn dang dở!`);
+        window.show_toast(`♻️ ĐÃ KHÔI PHỤC BÀI THI: Hệ thống tải lại đáp án dang dở!`);
     } else {
         window.show_toast(`🚀 BẮT ĐẦU THI: ${ex.examName} (${ex.timeLimit} phút)`);
     }
 };
 
 // =========================================================================
-// 🛠️ GIAO DIỆN RÀ SOÁT CÂU HỎI TRƯỚC KHI XUẤT ĐỀ THI ONLINE
+// 🛠️ GIAO DIỆN RÀ SOÁT CÂU HỎI TRƯỚC KHI XUẤT ĐỀ THI ONLINE (PREMIUM UI)
 // =========================================================================
 window.show_exam_review_modal = function(questionList, onConfirmCallback) {
     let modalId = 'exam_review_modal';
@@ -4225,25 +5517,38 @@ window.show_exam_review_modal = function(questionList, onConfirmCallback) {
     if (existing) existing.remove();
 
     let html = `
-    <div id="${modalId}" class="animate__animated animate__fadeIn" style="position: fixed; inset: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 100000; display: flex; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
-        <div class="glass-panel d-flex flex-column" style="width: 95%; max-width: 900px; height: 90vh; background: rgba(15, 23, 42, 0.95); border-radius: 16px; border: 1px solid #38bdf8; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.5);">
+    <style>
+        @media (max-width: 768px) {
+            .review-mobile-sheet { height: auto !important; max-height: 95vh !important; border-radius: 16px 16px 0 0 !important; border: none !important; border-top: 1px solid #495057 !important; margin-top: auto; }
+            .review-sheet-wrapper { align-items: flex-end !important; padding: 0 !important; }
+        }
+        .review-mobile-sheet { max-height: 90vh; }
+        .review-q-card { transition: 0.2s; border: 1px solid #343a40; background: #1a1d20; cursor: pointer; }
+        .review-q-card:hover { border-color: #495057; }
+        .review-q-card:has(.review-q-checkbox:checked) { background: rgba(56, 189, 248, 0.08) !important; border-color: #0ea5e9 !important; }
+    </style>
+
+    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center review-sheet-wrapper animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.65); z-index: 100000; padding: 10px;">
+        <div class="d-flex flex-column w-100 review-mobile-sheet shadow-lg animate__animated animate__slideInUp" style="max-width: 800px; border-radius: 16px; background: #212529 !important; border: 1px solid #343a40; overflow: hidden;">
             
-            <div class="p-3 border-bottom d-flex justify-content-between align-items-center" style="border-color: rgba(56, 189, 248, 0.3) !important; background: rgba(56, 189, 248, 0.1);">
-                <h5 class="text-info fw-bold m-0"><i class="bi bi-ui-checks-grid me-2"></i>RÀ SOÁT & CHỐT DANH SÁCH CÂU HỎI</h5>
-                <button class="btn-close btn-close-white" onclick="document.getElementById('${modalId}').remove()"></button>
+            <div class="p-3 border-bottom flex-shrink-0" style="border-color: #343a40 !important; background: #212529;">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="text-white fw-bold mb-0 d-flex align-items-center" style="font-size: 0.95rem;">
+                        <i class="bi bi-ui-checks-grid text-info me-2"></i>RÀ SOÁT & CHỐT ĐỀ THI
+                    </h6>
+                    <button class="btn-close btn-close-white opacity-50" style="font-size: 0.75rem;" onclick="document.getElementById('${modalId}').remove()"></button>
+                </div>
             </div>
             
-            <div class="p-3 flex-grow-1 custom-scrollbar" style="overflow-y: auto;" id="review_q_list"></div>
+            <div class="p-2 flex-grow-1 custom-scrollbar" style="overflow-y: auto; background: #121416;" id="review_q_list"></div>
             
-            <div class="p-3 border-top d-flex justify-content-between align-items-center" style="background: rgba(0,0,0,0.5); border-color: rgba(255,255,255,0.1) !important;">
-                <div class="text-white">
-                    Đang chọn: <strong id="review_selected_count" class="text-warning fs-4">${questionList.length}</strong> / ${questionList.length} câu
+            <div class="p-2 border-top flex-shrink-0" style="border-color: #343a40 !important; background: #212529;">
+                <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+                    <span class="text-white-50" style="font-size: 0.85rem;">Đã chọn: <strong id="review_selected_count" class="text-info fs-5">${questionList.length}</strong> / ${questionList.length}</span>
                 </div>
-                <div>
-                    <button class="btn btn-outline-light me-2 fw-bold" onclick="document.getElementById('${modalId}').remove()">HỦY BỎ</button>
-                    <button class="btn btn-warning fw-bold shadow-lg" onclick="window.confirm_review_exam()" style="background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; border: none;">
-                        ✅ CHỐT ĐỀ & TẠO PHÒNG
-                    </button>
+                <div class="d-grid" style="grid-template-columns: 1fr 1fr; gap: 8px;">
+                    <button class="btn btn-outline-secondary text-light fw-bold py-2" style="border-radius: 8px; font-size: 0.8rem;" onclick="document.getElementById('${modalId}').remove()"><i class="bi bi-x-lg me-1"></i> HỦY</button>
+                    <button class="btn btn-info text-dark fw-bold py-2 shadow-sm" style="border-radius: 8px; font-size: 0.8rem;" onclick="window.confirm_review_exam()"><i class="bi bi-check2-circle me-1"></i> TẠO PHÒNG</button>
                 </div>
             </div>
         </div>
@@ -4252,29 +5557,33 @@ window.show_exam_review_modal = function(questionList, onConfirmCallback) {
     document.body.insertAdjacentHTML('beforeend', html);
 
     let listContainer = document.getElementById('review_q_list');
+    let itemsHtml = '';
+    
     questionList.forEach((q, idx) => {
         let qText = (q.q || q.vi || "Câu hỏi trống").replace(/<[^>]*>?/gm, '');
         let qType = String(q.type || 'MCQ').toUpperCase();
+        if (['HOTSPOT', 'CLIP', 'CLIP_LISTEN', 'ARRANGE', 'SẮP XẾP'].includes(qType)) qType = 'MEDIA';
         let qAns = (q.a || q.answer || q.en || "N/A").replace(/<[^>]*>?/gm, '');
         
-        let itemHtml = `
-        <div class="p-3 mb-2 rounded shadow-sm d-flex gap-3 align-items-start" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); transition: 0.2s;">
-            <div class="form-check" style="font-size: 1.5rem; margin-top: -2px;">
-                <input class="form-check-input review-q-checkbox" type="checkbox" value="${idx}" checked onchange="window.update_review_count()" style="cursor:pointer; border-color: #38bdf8; background-color: #0f172a;">
+        itemsHtml += `
+        <label class="p-3 mb-2 rounded shadow-sm d-flex gap-3 align-items-start review-q-card">
+            <div class="form-check" style="font-size: 1.3rem; margin-top: 2px;">
+                <input class="form-check-input review-q-checkbox m-0" type="checkbox" value="${idx}" checked onchange="window.update_review_count()" style="cursor:pointer; border-color: #0ea5e9; background-color: #2b3035;">
             </div>
-            <div class="flex-grow-1">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <span class="badge bg-secondary text-uppercase">${qType}</span>
-                    <span class="text-white-50 small fw-bold">Câu ${idx + 1}</span>
+            <div class="flex-grow-1" style="min-width: 0;">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="badge bg-dark border border-secondary text-info text-uppercase" style="font-size: 0.65rem;">${qType}</span>
+                    <span class="text-white-50 small fw-bold" style="font-size: 0.7rem;">Câu ${idx + 1}</span>
                 </div>
-                <div class="text-white mb-2" style="font-size: 0.95rem; line-height: 1.5;">${qText}</div>
-                <div class="text-success small fw-bold bg-dark p-2 rounded border border-success border-opacity-25">
+                <div class="text-white mb-2 text-break" style="font-size: 0.9rem; line-height: 1.5;">${qText}</div>
+                <div class="text-success fw-bold p-2 rounded" style="font-size: 0.8rem; background: rgba(16, 185, 129, 0.1); border: 1px dashed rgba(16, 185, 129, 0.3);">
                     <i class="bi bi-check2-circle me-1"></i> Đáp án: ${qAns}
                 </div>
             </div>
-        </div>`;
-        listContainer.insertAdjacentHTML('beforeend', itemHtml);
+        </label>`;
     });
+    
+    listContainer.innerHTML = itemsHtml;
 
     window.update_review_count = function() {
         let count = document.querySelectorAll('.review-q-checkbox:checked').length;
@@ -4298,39 +5607,557 @@ window.show_exam_review_modal = function(questionList, onConfirmCallback) {
         if (typeof onConfirmCallback === 'function') onConfirmCallback(finalSelected);
     };
 };
-// =========================================================================
-// 🧹 BỘ DỌN RÁC V3: TỰ ĐỘNG LÀM SẠCH KHI RA MÀN HÌNH CHÍNH (TRIỆT ĐỂ 100%)
-// =========================================================================
-(function auto_clean_state() {
-    // Lắng nghe sự thay đổi của màn hình Menu chính (step_1)
-    const step1 = document.getElementById('step_1');
-    if (step1) {
-        const observer = new MutationObserver(function() {
-            // Mỗi khi màn hình Menu hiện lên (Thầy thoát bài, nộp bài, hoặc tải lại trang)
-            if (step1.style.display !== 'none') {
-                
-                // 1. Ép hệ thống về chế độ Ôn tập bình thường
-                window.is_study_mode = true; 
-                window.is_exam_started = false;
-                
-                // 2. Tắt radar giám sát chống gian lận
-                if (window.proctoring_state) {
-                    window.proctoring_state.is_active = false;
-                    window.proctoring_state.exam_code = null;
-                }
-                
-                // 3. Xóa sạch tên Đề thi cũ bị kẹt trên giao diện
-                window.selected_lessons_text = ""; 
-            }
-        });
-        // Bật camera giám sát màn hình Menu
-        observer.observe(step1, { attributes: true, attributeFilter: ['style'] });
-    }
-})();
 
 // =========================================================================
-// 🛠️ ADMIN MODAL: XỬ LÝ SỰ CỐ (V8 - LỌC SẠCH LỚP TỪ ĐẦU, BỘ ĐẾM CHUẨN)
+// 🚀 GIAO DIỆN TẠO PHÒNG THI ONLINE (ĐỒNG BỘ PHONG CÁCH EDIT FORM)
 // =========================================================================
+window.show_online_exam_modal = async function(defaultTime) {
+    let modalId = 'online_exam_modal';
+    let existing = document.getElementById(modalId);
+    if (existing) existing.remove();
+
+    let examCount = window.temp_online_exam_questions.length;
+    let autoCode = "DE_" + Math.floor(Date.now() / 1000).toString().slice(-6);
+    
+    let tz = (new Date()).getTimezoneOffset() * 60000;
+    let localISOTimeOpen = (new Date(Date.now() - tz)).toISOString().slice(0,16);
+    let localISOTimeClose = (new Date(Date.now() - tz + defaultTime*60000)).toISOString().slice(0,16);
+
+    let html = `
+    <style>
+        @media (max-width: 768px) {
+            .edit-mobile-sheet { height: auto !important; max-height: 95vh !important; border-radius: 16px 16px 0 0 !important; border: none !important; border-top: 1px solid #495057 !important; margin-top: auto; }
+            .edit-sheet-wrapper { align-items: flex-end !important; padding: 0 !important; }
+        }
+        .edit-mobile-sheet { max-height: 90vh; }
+        .edit-action-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        
+        .dark-input { background: #2b3035 !important; color: #fff !important; border: 1px solid #495057 !important; border-radius: 8px; font-size: 0.9rem; padding: 8px 12px; }
+        .dark-input:focus { border-color: #ffc107 !important; box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.2) !important; outline: none; }
+        .dark-label { font-size: 0.7rem; font-weight: 700; color: #adb5bd; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+        
+        .class-pill { transition: 0.2s; user-select: none; border: 1px solid #495057; background: #2b3035; cursor: pointer; }
+        .class-pill:has(input:checked) { background: rgba(255, 193, 7, 0.15) !important; border-color: #ffc107 !important; }
+        .class-pill:has(input:checked) span { color: #ffc107 !important; font-weight: bold; }
+        .suggestion-item:hover { background: #343a40 !important; }
+        
+        /* Ẩn spinner ô số & CSS nút gạt trạng thái */
+        #create_ex_time::-webkit-outer-spin-button, #create_ex_time::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        #create_ex_time[type=number] { -moz-appearance: textfield; }
+        .ios-switch { position: relative; display: inline-block; width: 44px; height: 24px; margin: 0; }
+        .ios-switch input { opacity: 0; width: 0; height: 0; }
+        .ios-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ef4444; transition: .3s; border-radius: 34px; border: 1px solid #495057; }
+        .ios-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 2px; bottom: 2px; background-color: #fff; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .ios-switch input:checked + .ios-slider { background-color: #10b981; border-color: #10b981; }
+        .ios-switch input:checked + .ios-slider:before { transform: translateX(20px); }
+    </style>
+
+    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center edit-sheet-wrapper animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.65); z-index: 99999; padding: 10px;">
+        <div class="d-flex flex-column w-100 edit-mobile-sheet shadow-lg animate__animated animate__slideInUp" style="max-width: 500px; border-radius: 16px; background: #212529 !important; border: 1px solid #343a40; overflow: hidden;">
+            
+            <div class="p-3 border-bottom flex-shrink-0" style="border-color: #343a40 !important; background: #212529;">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h6 class="fw-bold text-white mb-0 d-flex align-items-center" style="font-size: 0.95rem;">
+                        <i class="bi bi-cloud-arrow-up text-warning me-2"></i>TẠO PHÒNG: <span class="text-warning ms-1 font-monospace px-2 py-1 bg-dark rounded border border-secondary" style="font-size: 0.9rem;">${examCount} CÂU</span>
+                    </h6>
+                    <button class="btn-close btn-close-white opacity-50" style="font-size: 0.75rem;" onclick="document.getElementById('${modalId}').remove()"></button>
+                </div>
+            </div>
+
+            <div class="flex-grow-1 p-3 custom-scrollbar" style="overflow-y: auto; background: #121416;">
+                <form id="create_exam_form" onsubmit="event.preventDefault(); window.submit_online_exam_to_server()">
+                    
+                    <div class="row g-2 mb-3">
+                        <div class="col-4">
+                            <label class="dark-label">Mã Đề <span class="text-danger">*</span></label>
+                            <input type="text" id="create_ex_code" class="form-control dark-input text-warning fw-bold text-center font-monospace" value="${autoCode}" onfocus="this.select()">
+                        </div>
+                        <div class="col-8">
+                            <label class="dark-label">Tên Kỳ Thi <span class="text-danger">*</span></label>
+                            <input type="text" id="create_ex_name" class="form-control dark-input text-info fw-bold" placeholder="VD: KT1, THI..." required>
+                        </div>
+                        <div class="col-12 mt-1">
+                            <div class="text-warning" style="font-size: 0.65rem; line-height: 1.2;">
+                                <i class="bi bi-lightbulb-fill"></i> Mẹo: Tên chứa chữ <b>KT1, K2, THI, CC</b> để tự xếp đúng cột bảng điểm.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3 align-items-end">
+                        <div class="col-4">
+                            <label class="dark-label">Phút <span class="text-danger">*</span></label>
+                            <input type="number" id="create_ex_time" class="form-control dark-input text-center fw-bold text-white" value="${defaultTime}" onfocus="this.select()" onchange="window.update_modal_close_time('create_ex')" required min="1">
+                        </div>
+                        <div class="col-5">
+                            <label class="dark-label">Mật khẩu (Trống=Tắt)</label>
+                            <input type="text" id="create_ex_pass" class="form-control dark-input text-danger fw-bold text-center" placeholder="Không yêu cầu" onfocus="this.select()">
+                        </div>
+                        <div class="col-3 d-flex flex-column align-items-center">
+                            <label class="dark-label text-center">Trạng thái</label>
+                            <div class="d-flex align-items-center gap-2 mt-1">
+                                <input type="hidden" id="create_ex_status" value="MỞ">
+                                <label class="ios-switch">
+                                    <input type="checkbox" checked onchange="document.getElementById('create_ex_status').value = this.checked ? 'MỞ' : 'ĐÓNG'">
+                                    <span class="ios-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="dark-label">Giờ mở cửa (Tự động)</label>
+                            <input type="datetime-local" id="create_ex_open" class="form-control dark-input" value="${localISOTimeOpen}" onchange="window.update_modal_close_time('create_ex')">
+                        </div>
+                        <div class="col-6">
+                            <label class="dark-label">Giờ đóng cửa (Tự động)</label>
+                            <input type="datetime-local" id="create_ex_close" class="form-control dark-input" value="${localISOTimeClose}">
+                        </div>
+                    </div>
+
+                    <!-- CHỌN LỚP Y HỆT FORM SỬA -->
+                    <div class="mb-3">
+                        <label class="dark-label">1. CHỌN LỚP ĐƯỢC THI <span class="text-danger">*</span></label>
+                        <div class="position-relative mb-2">
+                            <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-2 text-white-50" style="font-size: 0.8rem;"></i>
+                            <input type="text" id="edit_class_search" class="form-control dark-input ps-4" placeholder="Nhập để tìm nhanh lớp học..." onkeyup="window.filter_edit_classes(this.value)" style="font-size: 0.85rem; padding: 6px 12px;" autocomplete="off">
+                        </div>
+                        <div id="edit_class_list" class="d-flex flex-wrap align-content-start gap-2 p-2 rounded custom-scrollbar" style="background: #212529; border: 1px solid #495057; height: 180px; overflow-y: auto;">
+                            <div class="text-white-50 small w-100 text-center mt-3"><span class="spinner-border spinner-border-sm"></span> Đang tải danh sách lớp...</div>
+                        </div>
+                    </div>
+
+                    <!-- TÌM KIẾM SINH VIÊN Y HỆT FORM SỬA -->
+                    <div class="mb-2">
+                        <label class="dark-label text-warning">2. THÊM SINH VIÊN THI BÙ / ĐẶC CÁCH</label>
+                        <div id="extra_users_tags" class="d-flex flex-wrap gap-1 mb-2"></div>
+                        <div class="position-relative">
+                            <i class="bi bi-person-plus position-absolute top-50 start-0 translate-middle-y ms-2 text-warning" style="font-size: 0.9rem;"></i>
+                            <input type="text" id="search_extra_user" class="form-control dark-input border-warning ps-4" placeholder="Nhập Mã SV hoặc Tên để thêm..." oninput="window.handle_extra_user_search(this.value)" autocomplete="off" style="font-size: 0.85rem;">
+                            <div id="extra_user_suggestions" class="position-absolute w-100 bg-dark rounded shadow-lg" style="display: none; max-height: 180px; overflow-y: auto; z-index: 1000; border: 1px solid #495057; top: 100%; left: 0;"></div>
+                        </div>
+                        <div class="text-white-50 mt-1" style="font-size: 0.7rem;"><i class="bi bi-info-circle me-1"></i>Gõ một phần tên hoặc mã, hệ thống sẽ tự động tìm kiếm.</div>
+                    </div>
+
+                </form>
+            </div>
+
+            <div class="p-2 border-top flex-shrink-0" style="border-color: #343a40 !important; background: #212529;">
+                <div class="edit-action-grid">
+                    <button class="btn btn-outline-secondary text-light fw-bold py-2" style="border-radius: 8px; font-size: 0.8rem;" onclick="document.getElementById('${modalId}').remove()">
+                        <i class="bi bi-x-lg me-1"></i> HỦY
+                    </button>
+                    <button class="btn btn-warning text-dark fw-bold py-2 shadow-sm" style="border-radius: 8px; font-size: 0.8rem;" onclick="window.submit_online_exam_to_server()">
+                        <i class="bi bi-floppy-fill me-1"></i> LƯU VÀ TẠO PHÒNG
+                    </button>
+                </div>
+            </div>
+            
+        </div>
+    </div>`;
+
+    document.body.insertAdjacentHTML('beforeend', html);
+
+    // Kéo dữ liệu Lớp và Sinh viên giống form Sửa
+    window.all_users_for_search = []; 
+    window.current_extra_users = []; 
+
+    (async function fetchDataForCreate() {
+        try {
+            const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+            const { data: users } = await clientDb.from('users').select('student_id, full_name, class_code, role');
+            
+            if (users) {
+                window.all_users_for_search = users;
+            }
+            
+            let cSet = new Set();
+            users.forEach(u => {
+                let c = u.class_code || u.role;
+                if (c && c.trim() !== '') {
+                    let cleanC = c.trim().toUpperCase();
+                    if (cleanC !== 'ALL') cSet.add(cleanC); 
+                }
+            });
+            let classList = Array.from(cSet).sort();
+            
+            let listHtml = '';
+            classList.forEach(c => {
+                listHtml += `
+                <label class="d-flex align-items-center gap-2 p-1 px-2 rounded class-pill class-filter-item" data-name="${c.toLowerCase()}">
+                    <input type="checkbox" class="form-check-input m-0 chk-class-item" value="${c}">
+                    <span class="text-white" style="font-size: 0.8rem;">${c}</span>
+                </label>`;
+            });
+            
+            document.getElementById('edit_class_list').innerHTML = listHtml || '<div class="text-white-50 small w-100 text-center mt-3">Không tìm thấy dữ liệu lớp học</div>';
+            window.render_extra_user_tags(); // Vẽ vùng badge trống chuẩn bị nhận data
+
+        } catch(e) {
+            document.getElementById('edit_class_list').innerHTML = '<div class="text-danger small w-100 text-center mt-3">Lỗi tải dữ liệu từ máy chủ!</div>';
+        }
+    })();
+};
+
+
+
+// =========================================================================
+// ⚔️ ADMIN: PHÁT LỆNH TRỪNG PHẠT SINH VIÊN (ĐÃ FIX LỖI ẢO TRẠNG THÁI)
+// =========================================================================
+window.admin_punish_student = async function(examCode, action) {
+    let chks = document.querySelectorAll('.troubleshoot-chk:checked');
+    if(chks.length === 0) return alert("Vui lòng tick chọn ít nhất 1 sinh viên để xử lý!");
+    let ids = Array.from(chks).map(c => c.value.toLowerCase());
+
+    try {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        if (action === 'lock') {
+            let conf = confirm(`Bạn có chắc chắn muốn KÍCH RA & KHÓA MÁY ${ids.length} sinh viên này? Máy của họ sẽ bị khóa cứng ngay lập tức!`);
+            if(!conf) return;
+            // 🌟 Ép trạng thái thành OFFLINE ngay lập tức
+            await clientDb.from('exam_results').update({ is_locked: true, client_status: 'OFFLINE' }).eq('exam_code', examCode).in('student_id', ids);
+        } 
+        else if (action === 'unlock') {
+            await clientDb.from('exam_results').update({ is_locked: false }).eq('exam_code', examCode).in('student_id', ids);
+        } 
+        else if (action === 'ban') {
+            let conf = confirm(`Bạn có muốn ĐÌNH CHỈ THI ${ids.length} sinh viên này?`);
+            if(!conf) return;
+            // 🌟 Ép trạng thái thành OFFLINE ngay lập tức
+            await clientDb.from('exam_results').update({ is_absent: true, client_status: 'OFFLINE' }).eq('exam_code', examCode).in('student_id', ids);
+        } 
+        else if (action === 'unban') {
+            await clientDb.from('exam_results').update({ is_absent: false }).eq('exam_code', examCode).in('student_id', ids);
+        }
+        
+        // Bỏ chọn tất cả checkbox sau khi xử lý xong
+        chks.forEach(c => c.checked = false);
+
+    } catch(e) { 
+        alert("Lỗi kết nối: " + e.message); 
+    }
+};
+
+// =========================================================================
+// 🚫 MÀN HÌNH KHÓA CƯỠNG CHẾ (ĐÃ SỬA LỖI VĂNG ĐĂNG NHẬP)
+// =========================================================================
+window.force_kick_student = function(title, msg, isPermanent) {
+    let existing = document.getElementById('kick_overlay');
+    if (existing) existing.remove();
+
+    // Thay location.reload() bằng lệnh xóa bảng đen và quay về Sảnh chính
+    let exitAction = "document.getElementById('kick_overlay').remove(); if(typeof window.back_to_subject_select === 'function') window.back_to_subject_select();";
+
+    let btnHtml = isPermanent 
+        ? `<button class="btn btn-danger w-100 fw-bold py-2 rounded-pill shadow-lg" onclick="${exitAction}">ĐÃ HIỂU VÀ THOÁT RA SẢNH</button>`
+        : `<button class="btn btn-warning text-dark w-100 fw-bold py-2 rounded-pill shadow-lg" onclick="${exitAction}">THOÁT RA SẢNH & CHỜ XỬ LÝ</button>`;
+
+    let html = `
+    <div id="kick_overlay" class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.95); z-index: 9999999; backdrop-filter: blur(15px);">
+        <div class="text-center p-4 glass-panel border-danger shadow-lg animate__animated animate__zoomIn" style="border-width: 2px; max-width: 450px; border-radius: 24px; background: #0f172a;">
+            <i class="bi bi-exclamation-triangle-fill text-danger mb-3" style="font-size: 5rem; text-shadow: 0 0 30px rgba(239, 68, 68, 0.6);"></i>
+            <h4 class="text-white fw-bold text-uppercase mb-3" style="letter-spacing: 1px;">${title}</h4>
+            <div class="p-3 mb-4 rounded-3" style="background: rgba(239, 68, 68, 0.1); border: 1px dashed #ef4444;">
+                <p class="text-white-50 mb-0" style="font-size: 0.95rem; line-height: 1.6;">${msg}</p>
+            </div>
+            ${btnHtml}
+        </div>
+    </div>`;
+    
+    document.body.insertAdjacentHTML('beforeend', html);
+};
+
+// =========================================================================
+// 🚀 KẾT NỐI REALTIME CHO BẢNG QUẢN LÝ PHÒNG THI
+// =========================================================================
+window.active_troubleshoot_subscription = null; // Biến lưu giữ kênh kết nối
+
+window.enable_realtime_troubleshoot = function(examCode) {
+    const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+    
+    // Xóa kết nối cũ nếu có để tránh bị lặp
+    if (window.active_troubleshoot_subscription) {
+        clientDb.removeChannel(window.active_troubleshoot_subscription);
+    }
+
+    // Mở kênh lắng nghe trực tiếp vào bảng điểm
+    window.active_troubleshoot_subscription = clientDb.channel('troubleshoot_channel')
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'exam_results', filter: `exam_code=eq.${examCode}` },
+            (payload) => {
+                console.log("🔥 Phát hiện thay đổi trong phòng thi (Điểm/Nộp bài):", payload);
+                // 🎯 Bí quyết ở đây: Tự động gọi lại hàm tải dữ liệu ngầm để update list
+                window.fetch_troubleshoot_data(examCode);
+            }
+        )
+        // Nếu thầy có lưu trạng thái "Đang thi" / "Rời tab" ở bảng khác (ví dụ: exam_sync), bỏ comment đoạn dưới
+        /*
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'exam_sync', filter: `exam_code=eq.${examCode}` },
+            (payload) => {
+                window.fetch_troubleshoot_data(examCode);
+            }
+        )
+        */
+        .subscribe();
+};
+
+// Hàm đóng Modal an toàn, tự động ngắt kết nối mạng để nhẹ máy
+window.close_student_control_modal = function(modalId) {
+    let el = document.getElementById(modalId);
+    if (el) el.remove();
+    
+    if (window.active_troubleshoot_subscription) {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        clientDb.removeChannel(window.active_troubleshoot_subscription);
+        window.active_troubleshoot_subscription = null;
+        console.log("🛑 Đã ngắt kết nối Live phòng thi.");
+    }
+};
+
+// =========================================================================
+// 1. ADMIN: KÉO DỮ LIỆU GIÁM SÁT (ĐÃ MỞ KHÓA TÍNH NĂNG ĐỌC TIẾN TRÌNH)
+// =========================================================================
+window.fetch_troubleshoot_data = async function(examCode, isSilent = false) {
+    window.current_troubleshoot_exam = examCode; 
+    let listContainer = document.getElementById('troubleshoot_student_list');
+    if(listContainer && !isSilent) listContainer.innerHTML = `<div class="text-center p-4"><span class="spinner-border spinner-border-sm text-info"></span><div class="mt-2 text-white-50 small">Đang tải dữ liệu...</div></div>`;
+
+    try {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        
+        const { data: examData } = await clientDb.from('online_exams').select('allowed_users').eq('exam_code', examCode).single();
+        let allowedArr = examData ? (examData.allowed_users || "").split(',').map(s => s.trim().toLowerCase()).filter(s => s !== "") : [];
+        let isAllAllowed = allowedArr.includes('all'); 
+
+        const { data: allUsers } = await clientDb.from('users').select('student_id, full_name, role, class_code, inventory');
+        
+        // 🌟 SỬA TẠI ĐÂY: Thêm chữ 'progress' vào lệnh select để máy chủ trả về % làm bài
+        const { data: results, error: errResults } = await clientDb.from('exam_results')
+            .select('student_id, score, is_submitted, is_absent, is_locked, client_status, offense_count, away_time, progress')
+            .eq('exam_code', examCode);
+            
+        if (errResults) throw errResults;
+
+        let filteredClassUsers = [];
+        let sttCounter = 1; 
+
+        allUsers.forEach(u => {
+            let uCls = (u.class_code || u.role || '').toLowerCase();
+            let uId = u.student_id.toLowerCase();
+            let isAllowed = isAllAllowed || allowedArr.includes(uCls) || allowedArr.includes(uId);
+
+            if (isAllowed) {
+                filteredClassUsers.push({ 
+                    rawId: u.student_id, id: uId, name: u.full_name || 'Chưa cập nhật', 
+                    cls: u.class_code || u.role || '', inv: u.inventory || 0, stt: sttCounter++
+                });
+            }
+        });
+
+        window.current_troubleshoot_users = filteredClassUsers; 
+        window.current_troubleshoot_submitted = {}; window.current_troubleshoot_started = []; window.current_troubleshoot_punished = []; window.current_troubleshoot_sync = {}; 
+        
+        if (results) {
+            results.forEach(r => {
+                let sId = r.student_id.toLowerCase();
+                if (r.is_absent || r.is_locked) window.current_troubleshoot_punished.push({ id: sId, type: r.is_absent ? 'ban' : 'lock' });
+                else {
+                    window.current_troubleshoot_started.push(sId);
+                    if (r.is_submitted) window.current_troubleshoot_submitted[sId] = r.score;
+                }
+                
+                // 🌟 NHẬN DỮ LIỆU: Đưa r.progress vào bộ nhớ (nếu trống thì mặc định = 0)
+                window.current_troubleshoot_sync[sId] = { 
+                    offenses: r.offense_count || 0, 
+                    away: r.away_time || 0, 
+                    client_status: r.client_status || 'OFFLINE',
+                    progress: r.progress || 0 
+                };
+            });
+        }
+        
+        let searchInput = document.getElementById('ctrl_search_student');
+        window.render_troubleshoot_list(searchInput ? searchInput.value : ""); 
+    } catch(err) {
+        if(listContainer) listContainer.innerHTML = `<div class="text-danger p-3 text-center fw-bold">LỖI KẾT NỐI: ${err.message}</div>`;
+    }
+};
+
+// =========================================================================
+// 🎨 ADMIN: VẼ GIAO DIỆN DANH SÁCH (TÍCH HỢP THANH TIẾN TRÌNH REALTIME)
+// =========================================================================
+window.render_troubleshoot_list = function(searchQuery) {
+    let listContainer = document.getElementById('troubleshoot_student_list');
+    if(!listContainer || !window.current_troubleshoot_users) return;
+
+    let q = searchQuery.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    let filterType = window.current_troubleshoot_filter || 'all';
+
+    let counts = { all: window.current_troubleshoot_users.length, online: 0, away: 0, offline: 0, submitted: 0, punished: 0 };
+
+    window.current_troubleshoot_users.forEach(u => {
+        let isPunished = window.current_troubleshoot_punished.find(p => p.id === u.id);
+        let isSub = window.current_troubleshoot_submitted[u.id] !== undefined;
+        let isStarted = window.current_troubleshoot_started.includes(u.id);
+        let sync = window.current_troubleshoot_sync[u.id] || { client_status: 'OFFLINE' };
+
+        if (isPunished) counts.punished++;
+        else if (isSub) counts.submitted++;
+        else if (isStarted) {
+            if (sync.client_status === 'ONLINE') counts.online++;
+            else if (sync.client_status === 'AWAY') counts.away++;
+            else counts.offline++;
+        }
+    });
+
+    ['all', 'online', 'away', 'offline', 'submitted', 'punished'].forEach(f => {
+        let btn = document.getElementById('ts_filter_' + f);
+        if (btn) {
+            let label = btn.innerText.split('(')[0].trim();
+            btn.innerText = `${label} (${counts[f]})`;
+        }
+    });
+
+    let filteredUsers = [];
+    window.current_troubleshoot_users.forEach(u => {
+        let matchStr = (u.rawId + " " + u.name + " " + u.cls).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        let isPunished = window.current_troubleshoot_punished.find(p => p.id === u.id);
+        let score = window.current_troubleshoot_submitted[u.id];
+        let isSub = (score !== undefined);
+        let isStarted = window.current_troubleshoot_started.includes(u.id);
+        let sync = window.current_troubleshoot_sync[u.id] || { client_status: 'OFFLINE', offenses: 0, away: 0, progress: 0 };
+
+        let passFilter = true;
+        if (filterType === 'punished' && !isPunished) passFilter = false;
+        if (filterType === 'submitted' && !isSub) passFilter = false;
+        if (filterType === 'online' && (isPunished || isSub || !isStarted || sync.client_status !== 'ONLINE')) passFilter = false;
+        if (filterType === 'away' && (isPunished || isSub || !isStarted || sync.client_status !== 'AWAY')) passFilter = false;
+        if (filterType === 'offline' && (isPunished || isSub || (!isStarted && sync.client_status !== 'OFFLINE') || (isStarted && sync.client_status !== 'OFFLINE'))) passFilter = false;
+
+        if (passFilter && (q === "" || matchStr.includes(q))) {
+            filteredUsers.push({ ...u, isPunished, isSub, score, isStarted, sync });
+        }
+    });
+
+    filteredUsers.sort((a, b) => a.stt - b.stt);
+    let html = '';
+    let displayIndex = 1;
+
+    filteredUsers.forEach(u => {
+        let statusBadge = '';
+        let warningBadge = '';
+        let borderClass = 'border-secondary';
+        let customStyle = 'background: #212529; transition: 0.2s;';
+        
+        let safeName = u.name.replace(/'/g, "\\'");
+        let safeExamCode = window.current_troubleshoot_exam || '';
+
+        let hasStrangeBehavior = (u.sync.offenses > 0 || u.sync.client_status === 'AWAY') && !u.isSub && !u.isPunished;
+
+        if (hasStrangeBehavior) {
+            warningBadge = `<span class="text-danger ms-2 animate__animated animate__flash animate__infinite animate__slower" style="font-size: 0.7rem; font-weight: bold;"><i class="bi bi-exclamation-triangle-fill"></i> Rời tab x${u.sync.offenses} (${u.sync.away}s)</span>`;
+            borderClass = 'border-danger shadow';
+            customStyle = `background: rgba(239, 68, 68, 0.08) !important; box-shadow: 0 0 12px rgba(239, 68, 68, 0.25); border: 1px solid #ef4444 !important; transition: 0.2s;`;
+        }
+
+        // 🌟 LẤY TIẾN ĐỘ LÀM BÀI (Mặc định 0% nếu chưa có data, 100% nếu đã nộp)
+        let progressPct = u.isSub ? 100 : (u.sync.progress || 0);
+        let progressHtml = '';
+        
+        if (u.isStarted && !u.isPunished) {
+            let pColor = progressPct === 100 ? '#10b981' : (progressPct > 50 ? '#38bdf8' : '#f59e0b');
+            progressHtml = `
+            <div class="mt-2 d-flex align-items-center gap-2 w-100">
+                <div class="progress flex-grow-1" style="height: 4px; background: #343a40; border-radius: 4px; overflow: hidden;">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: ${progressPct}%; background-color: ${pColor};"></div>
+                </div>
+                <span class="fw-bold" style="font-size: 0.65rem; color: ${pColor}; width: 32px; text-align: right;">${progressPct}%</span>
+            </div>`;
+        }
+
+        if (u.isPunished) {
+            let label = u.isPunished.type === 'ban' ? 'Vắng' : 'Bị Khóa';
+            statusBadge = `<span class="badge bg-danger ms-1" style="font-size: 0.65rem;">${label}</span>`;
+            borderClass = 'border-danger';
+        } else if (u.isSub) {
+            statusBadge = `<span class="badge bg-info text-dark ms-1" style="font-size: 0.65rem;">Đã nộp: ${u.score}đ</span>`;
+            borderClass = 'border-info';
+        } else if (u.isStarted) {
+            if (u.sync.client_status === 'ONLINE') {
+                statusBadge = `<span class="badge bg-success ms-1" style="font-size: 0.65rem;">Đang thi</span>`;
+                if (!hasStrangeBehavior) borderClass = 'border-success';
+            } else if (u.sync.client_status === 'AWAY') {
+                statusBadge = `<span class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem;">Rời Tab</span>`;
+            } else {
+                statusBadge = `<span class="badge bg-secondary ms-1" style="font-size: 0.65rem;">Đã thoát</span>`;
+            }
+        } else {
+            statusBadge = `<span class="text-white-50 small ms-1" style="font-size: 0.65rem;">Chưa thi</span>`;
+        }
+
+        let actionHtml = '';
+        if (u.isSub) {
+            actionHtml = `
+                <div class="d-flex gap-1">
+                    <button class="btn btn-sm btn-info py-0 px-2" style="font-size: 0.7rem; height: 22px;" onclick="event.preventDefault(); window.edit_student_score('${u.id}', '${u.rawId}', '${safeName}', ${u.score}, 0)"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-sm btn-danger py-0 px-2" style="font-size: 0.7rem; height: 22px;" onclick="event.preventDefault(); window.delete_student_score('${safeExamCode}', '${u.id}', '${safeName}')" title="Xóa điểm"><i class="bi bi-trash"></i></button>
+                </div>`;
+        } else if (u.isStarted) {
+            actionHtml = `<button class="btn btn-sm btn-outline-secondary py-0 px-2 text-white-50 border-secondary" style="font-size: 0.7rem; height: 22px;" onclick="event.preventDefault(); window.delete_student_score('${safeExamCode}', '${u.id}', '${safeName}')" title="Reset Trạng thái">Reset</button>`;
+        }
+
+        let displayStt = (filterType === 'all') ? u.stt : displayIndex++;
+
+        html += `
+        <label class="d-flex align-items-center p-2 mb-2 rounded compact-student-card ${borderClass}" style="${customStyle} cursor: pointer;">
+            <div class="d-flex align-items-center me-2 flex-shrink-0">
+                <input type="checkbox" class="form-check-input troubleshoot-chk" value="${u.rawId}" style="width: 1.1rem; height: 1.1rem; cursor: pointer; border-color: #64748b; margin-top: 0; background-color: #0f172a;">
+            </div>
+            <div class="flex-grow-1" style="min-width: 0; line-height: 1.3;">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div class="fw-bold text-white text-truncate" style="font-size: 0.85rem;">
+                        <span class="text-white-50 me-1" style="font-size: 0.75rem;">#${displayStt}</span>${u.name}
+                    </div>
+                    ${actionHtml}
+                </div>
+                <div class="d-flex align-items-center flex-wrap" style="font-size: 0.75rem;">
+                    <span class="text-info me-2">${u.rawId}</span>
+                    <span class="text-white-50 me-2">${u.cls || '?'}</span>
+                    ${statusBadge}
+                    ${warningBadge}
+                </div>
+                <!-- VÙNG HIỂN THỊ THANH TIẾN TRÌNH -->
+                ${progressHtml}
+            </div>
+        </label>`;
+    });
+
+    if (html === '') html = `<div class="text-center p-4"><i class="bi bi-inbox fs-3 text-white-50"></i><div class="text-white-50 small mt-1">Không có sinh viên nào.</div></div>`;
+    listContainer.innerHTML = html;
+};
+
+// 🌟 ĂNG-TEN LẮNG NGHE SỰ KIỆN: Khi sinh viên đổi trạng thái, Admin tự cập nhật
+window.active_troubleshoot_subscription = null;
+window.enable_realtime_troubleshoot = function(examCode) {
+    const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+    if (!clientDb) return;
+    
+    if (window.active_troubleshoot_subscription) {
+        clientDb.removeChannel(window.active_troubleshoot_subscription);
+    }
+    
+    window.active_troubleshoot_subscription = clientDb.channel('troubleshoot-' + examCode)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'exam_results', filter: 'exam_code=eq.' + examCode }, (payload) => {
+            // Khi có sinh viên rời tab hoặc nộp bài, tự động làm mới màn hình một cách âm thầm (isSilent = true)
+            if(typeof window.fetch_troubleshoot_data === 'function') {
+                window.fetch_troubleshoot_data(examCode, true); 
+            }
+        }).subscribe();
+};
+
 window.open_student_control_modal = function(examCode) {
     let modalId = 'student_control_modal';
     let existing = document.getElementById(modalId);
@@ -4339,194 +6166,84 @@ window.open_student_control_modal = function(examCode) {
     window.current_troubleshoot_filter = 'all';
 
     let html = `
-    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 99999; backdrop-filter: blur(10px); padding: 10px;">
-        <div class="glass-panel p-3 shadow-lg d-flex flex-column w-100 animate__animated animate__zoomIn" style="max-width: 550px; border-radius: 20px; background: rgba(15, 23, 42, 0.95) !important; border: 1px solid #0ea5e9;">
+    <style>
+        @media (max-width: 768px) {
+            .admin-mobile-sheet { height: 95vh !important; max-height: 95vh !important; border-radius: 16px 16px 0 0 !important; border: none !important; border-top: 1px solid #495057 !important; margin-top: auto; }
+            .admin-sheet-wrapper { align-items: flex-end !important; padding: 0 !important; }
+        }
+        .admin-mobile-sheet { height: 85vh; max-height: 800px; }
+        .admin-action-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+        .tab-filter-btn { border-radius: 6px; font-weight: 600; font-size: 0.75rem; transition: 0.1s; border: 1px solid transparent; background: transparent; }
+        .tab-filter-btn.active { background: #343a40; border-color: #495057; color: #fff !important; }
+        .hide-scroll::-webkit-scrollbar { display: none; }
+        .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+        .compact-student-card { transition: 0.1s; border: 1px solid #343a40; }
+        .compact-student-card:active { transform: scale(0.98); background: #343a40 !important; }
+    </style>
+
+    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center admin-sheet-wrapper animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.65); z-index: 99999; padding: 10px;">
+        <div class="d-flex flex-column w-100 admin-mobile-sheet shadow-lg animate__animated animate__slideInUp" style="max-width: 600px; border-radius: 16px; background: #212529 !important; border: 1px solid #343a40; overflow: hidden;">
             
-            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom" style="border-color: rgba(255,255,255,0.1) !important;">
-                <h6 class="fw-bold text-info mb-0" style="font-size: 1.1rem;"><i class="bi bi-shield-lock-fill me-2"></i> QL PHÒNG THI</h6>
+            <!-- HEADER Tinh gọn (Đã đổi màu đen) -->
+            <div class="p-2 border-bottom flex-shrink-0" style="border-color: #343a40 !important; background: #212529;">
+                <div class="d-flex justify-content-between align-items-center mb-2 px-1">
+                    <h6 class="fw-bold text-white mb-0 d-flex align-items-center" style="font-size: 0.95rem;">
+                        <i class="bi bi-shield-lock text-info me-2"></i>GIÁM SÁT PHÒNG THI
+                        <span class="badge bg-danger ms-2 animate__animated animate__pulse animate__infinite" style="font-size: 0.6rem; padding: 3px 6px;">🔴 LIVE</span>
+                    </h6>
+                    <button class="btn-close btn-close-white opacity-50" style="font-size: 0.7rem;" onclick="window.close_student_control_modal('${modalId}')"></button>
+                </div>
                 
-                <!-- 🌟 NÚT REFRESH ĐƯỢC LÀM TO ĐÙNG, MÀU VÀNG NỔI BẬT -->
-                <div class="d-flex gap-3 align-items-center">
-                    <button class="btn btn-warning rounded-pill px-4 py-1 fw-bold shadow-lg d-flex align-items-center gap-1" style="border: 2px solid #fff;" onclick="window.fetch_troubleshoot_data('${examCode}')" title="Cập nhật số liệu mới nhất">
-                        <i class="bi bi-arrow-clockwise fs-5"></i> LÀM MỚI
-                    </button>
-                    <button class="btn-close btn-close-white" onclick="document.getElementById('${modalId}').remove()"></button>
+                <div class="position-relative mb-2">
+                    <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-2 text-white-50" style="font-size: 0.8rem;"></i>
+                    <input type="text" id="ctrl_search_student" class="form-control bg-dark text-white border-secondary ps-4" placeholder="Tìm Mã SV, Tên..." onkeyup="window.filter_troubleshoot_students(this.value)" style="font-size: 0.85rem; padding: 5px 12px; border-radius: 6px;">
+                </div>
+                
+                <!-- Thanh danh mục -->
+                <div class="d-flex gap-1 pb-1 hide-scroll" style="overflow-x: auto; white-space: nowrap;">
+                    <button id="ts_filter_all" class="btn text-white-50 flex-shrink-0 py-1 px-2 tab-filter-btn active" onclick="window.set_troubleshoot_filter('all')">Tất cả</button>
+                    <button id="ts_filter_online" class="btn text-white-50 flex-shrink-0 py-1 px-2 tab-filter-btn" onclick="window.set_troubleshoot_filter('online')">🟢 Đang thi</button>
+                    <button id="ts_filter_away" class="btn text-white-50 flex-shrink-0 py-1 px-2 tab-filter-btn" onclick="window.set_troubleshoot_filter('away')">🟡 Rời Tab</button>
+                    <button id="ts_filter_offline" class="btn text-white-50 flex-shrink-0 py-1 px-2 tab-filter-btn" onclick="window.set_troubleshoot_filter('offline')">⚪ Đã thoát</button>
+                    <button id="ts_filter_submitted" class="btn text-white-50 flex-shrink-0 py-1 px-2 tab-filter-btn" onclick="window.set_troubleshoot_filter('submitted')">🔵 Đã nộp</button>
+                    <button id="ts_filter_punished" class="btn text-white-50 flex-shrink-0 py-1 px-2 tab-filter-btn" onclick="window.set_troubleshoot_filter('punished')">🔴 Vi phạm</button>
                 </div>
             </div>
 
-            <div class="d-flex gap-2 mb-2">
-                <input type="text" id="ctrl_search_student" class="form-control form-control-sm bg-dark text-white glass-input-style flex-grow-1" placeholder="🔍 Tìm Mã SV, Tên..." onkeyup="window.filter_troubleshoot_students(this.value)">
+            <!-- DANH SÁCH SINH VIÊN (Nền đen sâu) -->
+            <div id="troubleshoot_student_list" class="flex-grow-1 p-2" style="overflow-y: auto; overflow-x: hidden; background: #121416;">
+                <div class="text-center p-4"><span class="spinner-border spinner-border-sm text-info"></span><div class="mt-2 text-white-50 small">Đang tải...</div></div>
+            </div>
+
+            <!-- ACTION BAR Tinh gọn -->
+            <div class="p-2 border-top flex-shrink-0" style="border-color: #343a40 !important; background: #212529;">
+                <div class="admin-action-grid">
+                    <button class="btn btn-outline-info fw-bold d-flex flex-column align-items-center justify-content-center py-2" onclick="window.admin_punish_student('${examCode}', 'unlock')" style="border-radius: 8px; font-size: 0.7rem;"><i class="bi bi-unlock fs-5 mb-1"></i> Mở Khóa</button>
+                    <button class="btn btn-outline-warning fw-bold d-flex flex-column align-items-center justify-content-center py-2" onclick="window.admin_punish_student('${examCode}', 'lock')" style="border-radius: 8px; font-size: 0.7rem;"><i class="bi bi-lock fs-5 mb-1"></i> Khóa Máy</button>
+                    <button class="btn btn-outline-danger fw-bold d-flex flex-column align-items-center justify-content-center py-2" onclick="window.admin_punish_student('${examCode}', 'ban')" style="border-radius: 8px; font-size: 0.7rem;"><i class="bi bi-person-x fs-5 mb-1"></i> Đánh Vắng</button>
+                    <button class="btn btn-outline-secondary text-light fw-bold d-flex flex-column align-items-center justify-content-center py-2" onclick="window.admin_punish_student('${examCode}', 'unban')" style="border-radius: 8px; font-size: 0.7rem;"><i class="bi bi-person-check fs-5 mb-1"></i> Gỡ Vắng</button>
+                </div>
             </div>
             
-            <div class="row g-1 mb-2 p-1 rounded" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.05); margin: 0;">
-                <div class="col-4"><button id="ts_filter_all" class="btn btn-sm w-100 fw-bold text-white shadow-sm py-1" style="font-size: 0.75rem; background: rgba(255,255,255,0.2);" onclick="window.set_troubleshoot_filter('all')">Tất cả (0)</button></div>
-                <div class="col-4"><button id="ts_filter_submitted" class="btn btn-sm w-100 fw-bold text-info py-1" style="font-size: 0.75rem; background: transparent;" onclick="window.set_troubleshoot_filter('submitted')">Đã nộp (0)</button></div>
-                <div class="col-4"><button id="ts_filter_absent" class="btn btn-sm w-100 fw-bold text-danger py-1" style="font-size: 0.75rem; background: transparent;" onclick="window.set_troubleshoot_filter('absent')">Vắng (0)</button></div>
-            </div>
-
-            <div id="troubleshoot_student_list" class="custom-scrollbar mb-3 shadow-inner flex-grow-1" style="height: 400px; overflow-y: auto; overflow-x: hidden; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 8px; padding: 5px;">
-                <div class="text-center p-3"><span class="spinner-border spinner-border-sm text-info"></span> Đang kết nối rada...</div>
-            </div>
-
-            <div class="d-flex align-items-stretch gap-2 mb-1 flex-shrink-0">
-                <button class="btn btn-sm btn-outline-success fw-bold flex-fill py-1" onclick="window.admin_unlock_device('${examCode}')" style="font-size: 0.8rem; border-width: 2px;"><i class="bi bi-unlock-fill me-1"></i> Mở Khóa</button>
-                <button class="btn btn-sm btn-outline-danger fw-bold flex-fill py-1" onclick="window.admin_toggle_absence('${examCode}', true)" style="font-size: 0.8rem; border-width: 2px;"><i class="bi bi-person-x-fill me-1"></i> Vắng</button>
-                <button class="btn btn-sm btn-outline-warning fw-bold flex-fill py-1" onclick="window.admin_toggle_absence('${examCode}', false)" style="font-size: 0.8rem; border-width: 2px;"><i class="bi bi-person-check-fill me-1"></i> Hủy</button>
-                <button class="btn btn-sm btn-success fw-bold shadow-sm px-3 flex-shrink-0" onclick="window.export_exam_scores_excel('${examCode}')" title="Xuất Excel theo bộ lọc" style="border-radius: 8px;"><i class="bi bi-file-earmark-excel-fill fs-5"></i></button>
-            </div>
         </div>
     </div>`;
+    
     document.body.insertAdjacentHTML('beforeend', html);
     window.fetch_troubleshoot_data(examCode);
-};
-
-// [ĐÃ GỠ BẢN TRÙNG] window.fetch_troubleshoot_data (dòng cũ 3914-3958) - bản dùng thật nằm ở phía dưới file
-
-window.render_troubleshoot_list = function(searchQuery) {
-    let listContainer = document.getElementById('troubleshoot_student_list');
-    if(!listContainer || !window.current_troubleshoot_users) return;
-
-    let q = searchQuery.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    let filterType = window.current_troubleshoot_filter || 'all';
-
-    let countAll = window.current_troubleshoot_users.length;
-    let countSubmitted = 0, countAbsent = 0;
-
-    window.current_troubleshoot_users.forEach(u => {
-        let isAbs = window.current_troubleshoot_absent.includes(u.id);
-        let score = window.current_troubleshoot_submitted[u.id];
-        if(isAbs) countAbsent++;
-        else if(score !== undefined) countSubmitted++;
-    });
-
-    let btnAll = document.getElementById('ts_filter_all'); if(btnAll) btnAll.innerText = `Tất cả (${countAll})`;
-    let btnSub = document.getElementById('ts_filter_submitted'); if(btnSub) btnSub.innerText = `Đã nộp (${countSubmitted})`;
-    let btnAbs = document.getElementById('ts_filter_absent'); if(btnAbs) btnAbs.innerText = `Vắng (${countAbsent})`;
-
-    let filteredUsers = [];
-    window.current_troubleshoot_users.forEach(u => {
-        let matchStr = (u.rawId + " " + u.name + " " + u.cls).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        let isAbs = window.current_troubleshoot_absent.includes(u.id);
-        let score = window.current_troubleshoot_submitted[u.id];
-        let isSub = (score !== undefined);
-        let isStarted = window.current_troubleshoot_started && window.current_troubleshoot_started.includes(u.id);
-
-        let passFilter = true;
-        if (filterType === 'absent' && !isAbs) passFilter = false;
-        if (filterType === 'submitted' && !isSub) passFilter = false; 
-
-        if (passFilter && (q === "" || matchStr.includes(q))) {
-            filteredUsers.push({ ...u, isAbsent: isAbs, isSubmitted: isSub, score: score, isStarted: isStarted });
-        }
-    });
-
-    filteredUsers.sort((a, b) => a.stt - b.stt);
-
-    let html = '';
-    let displayIndex = 1;
-
-    filteredUsers.forEach(u => {
-        let statusText = '';
-        let warningText = '';
-        let bg = 'background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.05);';
-        let safeName = u.name.replace(/'/g, "\\'");
-        
-        let giftHtml = u.inv > 0 ? `<span class="badge bg-warning text-dark shadow-sm" style="font-size: 0.65rem;"><i class="bi bi-gift-fill"></i> x${u.inv} Quà</span>` : "";
-        
-        let sync = window.current_troubleshoot_sync[u.id];
-        let alertMsg = window.current_troubleshoot_alerts[u.id];
-
-        // 🌟 XỬ LÝ CẢNH BÁO (Tách riêng để đưa xuống dòng 2)
-        if (alertMsg && !u.isSubmitted && !u.isAbsent) {
-            warningText = `<span class="badge bg-danger text-white shadow-sm animate__animated animate__flash" style="font-size: 0.7rem;"><i class="bi bi-phone-vibrate-fill"></i> Cố tình đổi máy</span>`;
-            bg = 'background: rgba(239, 68, 68, 0.2); border: 1px dashed #ef4444;';
-        }
-        else if (sync && sync.offenses > 0 && !u.isSubmitted && !u.isAbsent) {
-            warningText = `<span class="badge bg-danger text-white shadow-sm animate__animated animate__flash" style="font-size: 0.7rem;" title="Tổng thời gian rời: ${sync.away}s"><i class="bi bi-exclamation-triangle-fill"></i> Rời Tab: ${sync.offenses} lần</span>`;
-            bg = 'background: rgba(239, 68, 68, 0.2); border: 1px dashed #ef4444;';
-        }
-
-        // 🌟 XỬ LÝ TRẠNG THÁI (Đưa xuống dòng 2)
-        if (u.isAbsent) {
-            statusText = `<span class="text-danger fw-bold" style="font-size: 0.8rem;">[Vắng]</span>`;
-            bg = 'background: rgba(239, 68, 68, 0.15); border: 1px dashed #ef4444;';
-        } else if (u.isSubmitted) {
-            // SỬ DỤNG BIẾN TOÀN CỤC CHUẨN XÁC, KHÔNG QUÉT DOM TEXT NỮA
-            let safeExamCode = window.current_troubleshoot_exam || ''; 
-            statusText = `<div class="d-flex align-items-center gap-2">
-                            <span class="badge" style="background: #0ea5e9; border: 1px solid #38bdf8; font-size: 0.8rem; cursor: pointer; box-shadow: 0 0 10px rgba(14,165,233,0.5);" onclick="event.preventDefault(); window.edit_student_score('${u.id}', '${u.rawId}', '${safeName}', ${u.score}, ${u.inv})">
-                                Điểm: ${u.score}đ <i class="bi bi-pencil-square ms-1"></i>
-                            </span>
-                            <span class="badge bg-danger shadow-sm" style="font-size: 0.8rem; cursor: pointer; border: 1px solid #ef4444;" onclick="event.preventDefault(); window.delete_student_score('${safeExamCode}', '${u.id}', '${safeName}')" title="Xóa điểm cho thi lại">
-                                <i class="bi bi-trash3-fill"></i> Xóa
-                            </span>
-                          </div>`;
-            bg = 'background: rgba(14, 165, 233, 0.1); border: 1px solid rgba(14, 165, 233, 0.3);';
-        } else if (u.isStarted) {
-            let safeExamCode = window.current_troubleshoot_exam || ''; 
-            let statusLabel = '';
-            
-            if (sync && sync.active === false) {
-                 if (sync.disconnected) {
-                     statusLabel = `<span class="text-warning fw-bold animate__animated animate__pulse animate__infinite" style="font-size: 0.8rem;"><i class="bi bi-wifi-off me-1"></i> [Tắt tab / Rớt mạng]</span>`;
-                 } else {
-                     statusLabel = `<span class="text-warning fw-bold animate__animated animate__pulse animate__infinite" style="font-size: 0.8rem;"><i class="bi bi-door-open-fill me-1"></i> [Đã vào nhưng bấm thoát ra]</span>`;
-                 }
-            } else {
-                 statusLabel = `<span class="text-success fw-bold" style="font-size: 0.8rem;"><i class="bi bi-record-circle-fill text-success animate__animated animate__flash animate__infinite animate__slower me-1"></i> [Đang thi]</span>`;
-            }
-            
-            // 🌟 TÍCH HỢP NÚT RESET NGAY CẠNH TRẠNG THÁI (Dùng chung hàm Xóa điểm)
-            statusText = `<div class="d-flex align-items-center gap-2">
-                            ${statusLabel}
-                            <span class="badge bg-secondary shadow-sm" style="font-size: 0.75rem; cursor: pointer; border: 1px solid #64748b;" onclick="event.preventDefault(); window.delete_student_score('${safeExamCode}', '${u.id}', '${safeName}')" title="Reset trạng thái để làm lại từ đầu">
-                                <i class="bi bi-arrow-counterclockwise"></i> Reset
-                            </span>
-                          </div>`;
-        } else {
-            statusText = `<span class="text-secondary fw-bold" style="font-size: 0.8rem; opacity: 0.7;">[Chưa vào phòng thi]</span>`;
-        }
-
-        let displayStt = (filterType === 'submitted' || filterType === 'absent') ? displayIndex++ : u.stt;
-
-        html += `
-        <label class="d-flex align-items-start p-2 mb-2 rounded" style="${bg} cursor: pointer; transition: 0.2s;">
-            <div class="d-flex align-items-center me-2 flex-shrink-0" style="margin-top: 0.1rem;">
-                <span class="text-white-50 fw-bold me-2" style="font-size: 0.8rem; width: 22px; text-align: right;">${displayStt}.</span>
-                <input type="checkbox" class="form-check-input troubleshoot-chk" value="${u.rawId}" style="width: 1.1rem; height: 1.1rem; cursor: pointer; margin: 0;">
-            </div>
-            
-            <div class="flex-grow-1" style="line-height: 1.4;">
-                <!-- DÒNG 1: THÔNG TIN CÁ NHÂN VÀ LỚP -->
-                <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
-                    <span class="fw-bold text-white" style="font-size: 0.95rem;">${u.rawId} - ${u.name}</span>
-                    <span class="text-warning small fw-bold" style="font-size: 0.75rem;">(Lớp: ${u.cls || 'Chưa phân lớp'})</span>
-                    ${giftHtml}
-                </div>
-                
-                <!-- DÒNG 2: TRẠNG THÁI VÀ CẢNH BÁO -->
-                <div class="d-flex align-items-center flex-wrap gap-2">
-                    ${statusText}
-                    ${warningText}
-                </div>
-            </div>
-        </label>`;
-    });
-
-    if (html === '') html = `<div class="text-center p-3 text-white-50 small">Không tìm thấy sinh viên trong bộ lọc này.</div>`;
-    listContainer.innerHTML = html;
+    if(typeof window.enable_realtime_troubleshoot === 'function') window.enable_realtime_troubleshoot(examCode);
 };
 
 window.set_troubleshoot_filter = function(filterType) {
     window.current_troubleshoot_filter = filterType;
-    ['all', 'submitted', 'absent'].forEach(f => {
+    ['all', 'online', 'away', 'offline', 'submitted', 'punished'].forEach(f => {
         let btn = document.getElementById('ts_filter_' + f);
         if (btn) {
-            if (f === filterType) { btn.style.background = 'rgba(255,255,255,0.2)'; btn.classList.add('text-white', 'shadow-sm'); } 
-            else { btn.style.background = 'transparent'; btn.classList.remove('text-white', 'shadow-sm'); }
+            if (f === filterType) { btn.classList.add('active'); btn.classList.remove('text-white-50'); } 
+            else { btn.classList.remove('active'); btn.classList.add('text-white-50'); }
         }
     });
-    window.render_troubleshoot_list(document.getElementById('ctrl_search_student').value);
+    let searchInput = document.getElementById('ctrl_search_student');
+    window.render_troubleshoot_list(searchInput ? searchInput.value : "");
 };
 
 window.edit_student_score = function(studentIdLower, rawId, name, currentScore, invCount) {
@@ -4535,8 +6252,8 @@ window.edit_student_score = function(studentIdLower, rawId, name, currentScore, 
     if(existing) existing.remove();
 
     let html = `
-    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 100000; backdrop-filter: blur(5px);">
-        <div class="glass-panel p-4 shadow-lg d-flex flex-column animate__animated animate__zoomIn" style="width: 90%; max-width: 350px; border-radius: 20px; background: rgba(15, 23, 42, 0.95) !important; border: 1px solid #38bdf8;">
+    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.9); z-index: 100000; backdrop-filter: blur(5px);">
+        <div class="glass-panel p-4 shadow-lg d-flex flex-column animate__animated animate__zoomIn" style="width: 90%; max-width: 350px; border-radius: 20px; background: #1a1a1a !important; border: 1px solid #38bdf8;">
             <h6 class="fw-bold text-info mb-3 text-center"><i class="bi bi-pencil-square me-2"></i>CẬP NHẬT ĐIỂM</h6>
             
             <div class="text-center mb-3">
@@ -4670,15 +6387,27 @@ window.logout_user = function() {
 };
 
 // =========================================================================
-// 🕷️ TRẠM GÁC REAL-TIME (CÓ CHỨC NĂNG PHỤC HỒI ÁN TÍCH KHI F5 / VÀO LẠI)
-// =========================================================================
-// =========================================================================
-// 🕷️ TRẠM GÁC REAL-TIME BẰNG SUPABASE (CHỐNG GIAN LẬN)
+// 🕷️ TRẠM GÁC REAL-TIME BẰNG SUPABASE (GIÁM SÁT & NHẬN LỆNH KÍCH TỨC THÌ)
 // =========================================================================
 (function setup_realtime_proctoring() {
-    let is_recovered = false; 
-    setInterval(async () => {
+    window.sync_exam_client_status = async function(statusText) {
         if (window.is_exam_started && window.proctoring_state && window.proctoring_state.exam_code) {
+            try {
+                await db.from('exam_results').upsert({ 
+                    exam_code: window.proctoring_state.exam_code, student_id: window.current_student_id, 
+                    offense_count: window.offense_count || 0, away_time: window.away_time_total || 0,
+                    client_status: statusText
+                }, { onConflict: 'exam_code,student_id' });
+            } catch(e) {}
+        }
+    };
+
+    let is_recovered = false;
+    let current_live_status = null; 
+    
+    setInterval(() => {
+        let isDoingExam = window.is_exam_started && window.proctoring_state && window.proctoring_state.exam_code;
+        if (isDoingExam) {
             let storageKey = "CHEAT_LOG_" + window.proctoring_state.exam_code + "_" + window.current_student_id;
             if (!is_recovered) {
                 let saved = localStorage.getItem(storageKey);
@@ -4686,67 +6415,119 @@ window.logout_user = function() {
                 is_recovered = true;
             }
             localStorage.setItem(storageKey, JSON.stringify({ offenses: window.offense_count || 0, away: window.away_time_total || 0 }));
-            try { 
-                await db.from('exam_results').upsert({ exam_code: window.proctoring_state.exam_code, student_id: window.current_student_id, offense_count: window.offense_count || 0, away_time: window.away_time_total || 0 }, { onConflict: 'exam_code,student_id' }); 
-            } catch(e) {}
-        } else { is_recovered = false; }
-    }, 15000); 
+            if (!document.hidden && current_live_status !== 'ONLINE') {
+                window.sync_exam_client_status('ONLINE');
+                current_live_status = 'ONLINE';
+            }
+        } else { is_recovered = false; current_live_status = null; }
+    }, 10000); 
+
+    setInterval(() => {
+        if (window.is_exam_started && window.proctoring_state && current_live_status !== 'ONLINE' && !document.hidden) {
+            window.sync_exam_client_status('ONLINE');
+            current_live_status = 'ONLINE';
+        }
+    }, 1000); 
 
     let old_back = window.back_to_subject_select;
     window.back_to_subject_select = async function() {
-        if (window.proctoring_state && window.proctoring_state.exam_code && window.is_exam_started) {
-            try { 
-                await db.from('exam_results').upsert({ exam_code: window.proctoring_state.exam_code, student_id: window.current_student_id, offense_count: window.offense_count || 0, away_time: window.away_time_total || 0 }, { onConflict: 'exam_code,student_id' }); 
-            } catch(e) {}
-        }
+        await window.sync_exam_client_status('OFFLINE'); current_live_status = 'OFFLINE';
         if (old_back) old_back();
     };
+
+    window.addEventListener('beforeunload', function () { window.sync_exam_client_status('OFFLINE'); });
+
+    document.addEventListener("visibilitychange", function() {
+        if (!(window.is_exam_started && window.proctoring_state && window.proctoring_state.is_active)) return;
+        if (document.hidden) {
+            window.sync_exam_client_status('AWAY'); current_live_status = 'AWAY';
+        } else {
+            window.sync_exam_client_status('ONLINE'); current_live_status = 'ONLINE'; 
+        }
+    });
 
     let old_warn = window.show_cheat_warning_ui;
     window.show_cheat_warning_ui = async function(duration, isExempt) {
         if (old_warn) old_warn(duration, isExempt); 
-        if (window.proctoring_state && window.proctoring_state.exam_code && window.is_exam_started) {
-            let storageKey = "CHEAT_LOG_" + window.proctoring_state.exam_code + "_" + window.current_student_id;
-            localStorage.setItem(storageKey, JSON.stringify({ offenses: window.offense_count || 0, away: window.away_time_total || 0 }));
-            try { 
-                await db.from('exam_results').upsert({ exam_code: window.proctoring_state.exam_code, student_id: window.current_student_id, offense_count: window.offense_count || 0, away_time: window.away_time_total || 0 }, { onConflict: 'exam_code,student_id' }); 
-            } catch(e) {}
-        }
+        await window.sync_exam_client_status('ONLINE'); current_live_status = 'ONLINE';
     };
+
+    // 🌟 TÍCH HỢP ĂNG-TEN LẮNG NGHE LỆNH KÍCH/ĐÌNH CHỈ TỪ ADMIN (HOÀN CHỈNH)
+    let init_punish_listener = setInterval(() => {
+        // Chờ đến khi học sinh đăng nhập xong mới giương ăng-ten
+        if (window.current_student_id && typeof db !== 'undefined') {
+            clearInterval(init_punish_listener); // Dừng chờ
+            
+            if (window.active_student_punish_sub) db.removeChannel(window.active_student_punish_sub);
+            
+            window.active_student_punish_sub = db.channel('punish-' + window.current_student_id)
+                .on('postgres_changes', { 
+                    event: 'UPDATE', 
+                    schema: 'public', 
+                    table: 'exam_results', 
+                    filter: 'student_id=eq.' + window.current_student_id 
+                }, (payload) => {
+                    let r = payload.new;
+                    
+                    // Chỉ kích hoạt nếu sinh viên đang mở đúng bài thi đó
+                    if (window.is_exam_started && window.proctoring_state && r.exam_code === window.proctoring_state.exam_code) {
+                        if (r.is_absent) {
+                            if(typeof window.force_kick_student === 'function') 
+                                window.force_kick_student("🚫 ĐÌNH CHỈ THI", "Giám thị đã cấm thi và mời bạn ra khỏi phòng. Bài làm của bạn đã bị vô hiệu hóa.", true);
+                        } 
+                        else if (r.is_locked) {
+                            if(typeof window.force_kick_student === 'function') 
+                                window.force_kick_student("🔒 TÀI KHOẢN BỊ KHÓA TẠM THỜI", "Hệ thống phát hiện dấu hiệu bất thường hoặc bạn đã bị giám thị mời ra khỏi phòng.<br><br><b>Vui lòng giơ tay báo cáo giám thị để được MỞ KHÓA.</b>", false);
+                        } 
+                        else {
+                            let overlay = document.getElementById('kick_overlay');
+                            if (overlay && !r.is_absent && !r.is_locked) {
+                                overlay.remove(); // Tự động thu hồi bảng đen khi Admin ấn Mở Khóa
+                            }
+                        }
+                    }
+                }).subscribe();
+        }
+    }, 2000); // Cứ 2 giây kiểm tra 1 lần xem học sinh đăng nhập chưa
 })();
 
 // =========================================================================
-// 🗑️ HÀM GỌI MÁY CHỦ ĐỂ XÓA ĐIỂM HOẶC RESET TRẠNG THÁI ĐANG THI
+// 🛠️ ADMIN: HÀM RESET / XÓA DỮ LIỆU CỦA SINH VIÊN (ĐÃ FIX LỖI GIAO DIỆN)
 // =========================================================================
-window.delete_student_score = function(examCode, studentId, studentName) {
-    if (!examCode) return window.show_toast("Lỗi: Không tìm thấy Mã Đề!", true);
-    
-    let modal = document.getElementById('student_control_modal');
-    if (!modal) return;
-    
-    // Tạo Giao diện Confirm tuyệt đẹp, mượt mà (Overlay)
-    let confirmHtml = `
-    <div id="custom_confirm_overlay" class="position-absolute top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 99999; border-radius: 20px; backdrop-filter: blur(5px);">
-        <div class="glass-panel p-4 shadow-lg text-center animate__animated animate__zoomIn" style="max-width: 90%; width: 340px; background: rgba(15, 23, 42, 0.95) !important; border: 1px solid #ef4444; border-radius: 15px;">
-            <i class="bi bi-exclamation-triangle-fill text-danger mb-2" style="font-size: 3.5rem;"></i>
-            <h6 class="text-white fw-bold">XÁC NHẬN RESET / XÓA BÀI</h6>
-            <p class="text-white-50 small mb-4" style="line-height: 1.4;">Hệ thống sẽ dọn sạch trạng thái thi và bài nộp (nếu có) của <b>${studentName}</b>.<br>Sinh viên sẽ được làm lại từ đầu.</p>
-            <div class="d-flex gap-2 justify-content-center">
-                <button class="btn btn-sm btn-secondary px-4 fw-bold rounded-pill" onclick="document.getElementById('custom_confirm_overlay').remove()">HỦY BỎ</button>
-                <button class="btn btn-sm btn-danger px-4 fw-bold rounded-pill" onclick="window.execute_delete_score('${examCode}', '${studentId}')">ĐỒNG Ý</button>
-            </div>
-        </div>
-    </div>`;
-    
-    let existing = document.getElementById('custom_confirm_overlay');
-    if (existing) existing.remove();
-    
-    let panel = modal.querySelector('.glass-panel');
-    panel.style.position = 'relative';
-    panel.insertAdjacentHTML('beforeend', confirmHtml);
+window.delete_student_score = async function(examCode, studentId, studentName) {
+    // 1. Hiện hộp thoại Xác nhận an toàn
+    let msg = `⚠️ XÁC NHẬN RESET\n\nBạn có chắc chắn muốn xóa toàn bộ dữ liệu làm bài và trạng thái của sinh viên:\n[ ${studentId.toUpperCase()} - ${studentName} ] ?\n\nHành động này sẽ giúp sinh viên có thể vào thi lại từ đầu.`;
+    if (!confirm(msg)) return;
+
+    try {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        
+        // 2. Gọi lệnh xóa dữ liệu khỏi bảng exam_results trên Supabase
+        const { error } = await clientDb
+            .from('exam_results')
+            .delete()
+            .eq('exam_code', examCode)
+            .eq('student_id', studentId.toLowerCase());
+            
+        if (error) throw error;
+        
+        // 3. Thông báo thành công mượt mà
+        if (typeof window.show_toast === 'function') {
+            window.show_toast(`✅ Đã reset thành công sinh viên ${studentId.toUpperCase()}`, false);
+        } else {
+            alert(`✅ Đã reset thành công sinh viên ${studentId.toUpperCase()}`);
+        }
+
+        // 4. Quét lại dữ liệu Bảng giám sát ngay lập tức (Chế độ im lặng, không làm giật màn hình)
+        if (typeof window.fetch_troubleshoot_data === 'function') {
+            window.fetch_troubleshoot_data(examCode, true);
+        }
+
+    } catch (err) {
+        alert("Lỗi khi reset dữ liệu Supabase: " + err.message);
+    }
 };
 
-// [ĐÃ GỠ BẢN TRÙNG] window.execute_delete_score (dòng cũ 4280-4314) - bản dùng thật nằm ở phía dưới file
 
 // =========================================================================
 // 🚀 ENGINE SINH TRẮC HỌC (GIAO TIẾP VỚI FACE ID / TOUCH ID CỦA THIẾT BỊ)
@@ -4891,49 +6672,89 @@ window.login_with_face_id = function() {
 };
 
 // =========================================================================
-// 🚀 SUPABASE ADMIN BACKEND: QUẢN LÝ MÔN HỌC, NGƯỜI DÙNG & ĐỀ THI ONLINE
+// 🚀 SUPABASE ADMIN BACKEND: LƯU VÀ XÓA MÔN HỌC CHUẨN XÁC
 // =========================================================================
 
-// --- 1. QUẢN LÝ MÔN HỌC ---
 window.save_subject_to_sheet = async function(btn) {
     let selectedUI = document.querySelector('input[name="ui_template_opt"]:checked');
     let uiVal = selectedUI ? selectedUI.value : '1'; 
+    
+    // Tự động gán role 'all' nếu bỏ trống để ai cũng thấy
+    let roleInput = document.getElementById('modal_s_role').value.trim();
+    if (roleInput === '') roleInput = 'all';
+
+    // 🎯 Đảm bảo key xuất ra khớp 100% với tên cột trên Supabase (Bảng 'subjects')
     let data = {
-        subject_key: document.getElementById('modal_s_code').value.trim(),
+        subject_key: document.getElementById('modal_s_code').value.trim().toLowerCase(),
         name: document.getElementById('modal_s_name').value.trim(),
         icon: document.getElementById('modal_s_icon').value.trim() || '📚',
-        file_id: document.getElementById('modal_s_fileid').value.trim(),
+        file_id: document.getElementById('modal_s_fileid').value.trim(), // Nếu CSDL của thầy cột này tên khác, hãy sửa tên biến key 'file_id' tương ứng
         sheet_name: document.getElementById('modal_s_sheetname').value.trim(),
-        role_access: document.getElementById('modal_s_role').value.trim() || 'all',
+        role_access: roleInput, // Supabase column name
         ui_template: uiVal
     };
-    if(!data.subject_key || !data.name || !data.file_id || !data.sheet_name) return window.show_toast("⚠️ Vui lòng nhập đủ thông tin!", true);
     
-    btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>...`; btn.classList.add('disabled');
+    if(!data.subject_key || !data.name) {
+        return window.show_toast("⚠️ Vui lòng nhập đủ Mã môn và Tên hiển thị!", true);
+    }
+    
+    let originalHtml = btn.innerHTML;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> ĐANG LƯU...`; 
+    btn.classList.add('disabled');
     
     try {
-        const { error } = await db.from('subjects').upsert([data], { onConflict: 'subject_key' });
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        
+        // Dùng lệnh Upsert (Update nếu có, Insert nếu mới) dựa trên subject_key
+        const { error } = await clientDb.from('subjects').upsert([data], { onConflict: 'subject_key' });
+        
         if (error) throw error;
+        
         window.show_toast("✅ Lưu môn học thành công!");
-        window.subjectConfig[data.subject_key] = { id: data.file_id, sheetName: data.sheet_name, role: data.role_access, icon: data.icon, name: data.name, ui_template: data.ui_template };
+        
+        // Cập nhật lại Object cấu hình cục bộ để giao diện đổi ngay lập tức
+        window.subjectConfig[data.subject_key] = { 
+            id: data.file_id, 
+            sheetName: data.sheet_name, 
+            role: data.role_access, 
+            icon: data.icon, 
+            name: data.name, 
+            ui_template: data.ui_template 
+        };
+        
         document.getElementById('subject_modal').remove(); 
-        window.render_subject_management(); 
+        
+        // Làm mới lại bảng quản lý môn học
+        if (typeof window.render_subject_management === 'function') {
+            window.render_subject_management(); 
+        }
     } catch (err) {
+        console.error("Lỗi lưu môn:", err);
         window.show_toast("❌ Lỗi: " + err.message, true);
-        btn.innerHTML = `<i class="bi bi-save2-fill me-1"></i> LƯU MÔN HỌC`; btn.classList.remove('disabled');
+        btn.innerHTML = originalHtml; 
+        btn.classList.remove('disabled');
     }
 };
 
 window.remove_subject = function(code) {
-    window.show_alert("CẢNH BÁO", `Xóa môn học <b class="text-danger">${code}</b> khỏi hệ thống?`, async function(ans) {
+    window.show_alert("CẢNH BÁO", `Bạn có chắc chắn muốn xóa môn học <b class="text-danger">${code}</b> khỏi hệ thống?<br><br><small class="text-info">Lưu ý: Dữ liệu câu hỏi của môn này vẫn được bảo lưu, chỉ tên môn học bị xóa khỏi danh mục.</small>`, async function(ans) {
         if (!ans) return;
+        
         try {
-            const { error } = await db.from('subjects').delete().eq('subject_key', code);
+            const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+            const { error } = await clientDb.from('subjects').delete().eq('subject_key', code);
+            
             if (error) throw error;
-            window.show_toast("✅ Đã xóa!"); 
+            
+            window.show_toast("✅ Đã xóa môn học thành công!"); 
             delete window.subjectConfig[code]; 
-            window.render_subject_management();
-        } catch (err) { window.show_toast("❌ Lỗi: " + err.message, true); }
+            
+            if (typeof window.render_subject_management === 'function') {
+                window.render_subject_management();
+            }
+        } catch (err) { 
+            window.show_toast("❌ Lỗi xóa môn: " + err.message, true); 
+        }
     });
 };
 
@@ -5030,38 +6851,344 @@ window.remove_user = function(uname) {
 };
 
 // =========================================================================
-// 🚀 QUẢN LÝ PHÒNG THI ONLINE (TẠO/SỬA/XÓA/LẤY DANH SÁCH) -> KẾT NỐI BẢNG online_exams
+// 🚀 ENGINE ĐỌC VÀ IMPORT DANH SÁCH EXCEL TỪ NHÀ TRƯỜNG (ĐÃ FIX LỖI 409)
 // =========================================================================
+window.process_excel_import = async function(event, classCode) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    if (!classCode) {
+        window.show_toast("⚠️ Vui lòng nhập mã lớp trước khi import!", true);
+        event.target.value = ""; 
+        return;
+    }
+
+    window.show_toast("<span class='spinner-border spinner-border-sm me-2'></span> Đang xử lý file Excel...");
+
+    const reader = new FileReader();
+    reader.onload = async function(e) {
+        try {
+            const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+
+            // 🎯 BƯỚC 1: TẠO LỚP HỌC TRƯỚC ĐỂ TRÁNH LỖI KHÓA NGOẠI (409 CONFLICT)
+            const { error: classErr } = await clientDb.from('classes').upsert([
+                { class_code: classCode, class_name: "Lớp " + classCode }
+            ], { onConflict: 'class_code' });
+            
+            if (classErr) throw classErr;
+
+            // 🎯 BƯỚC 2: ĐỌC DỮ LIỆU TỪ FILE EXCEL
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheetName = workbook.SheetNames[0];
+            const worksheet = workbook.Sheets[firstSheetName];
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+            let newUsers = [];
+            
+            for (let i = 0; i < jsonData.length; i++) {
+                let row = jsonData[i];
+                let maSV = row['Mã sinh viên'];
+                
+                if (!maSV) continue; // Bỏ qua dòng trống
+
+                let ho = (row['Họ'] || "").toString().trim();
+                let ten = (row['Tên'] || "").toString().trim();
+                let fullName = ho + " " + ten;
+                let ngaySinh = (row['Ngày sinh'] || "").toString().trim();
+                
+                // Mật khẩu mặc định = Ngày sinh (Bỏ dấu /). VD: 16/08/2008 -> 16082008
+                let defaultPass = ngaySinh.replace(/\//g, '') || "123456";
+
+                newUsers.push({
+                    student_id: String(maSV).trim(),
+                    password: defaultPass,
+                    full_name: fullName.trim(),
+                    role: 'k12', 
+                    class_code: classCode, 
+                    ngay_sinh: ngaySinh,
+                    khoa_hoc: (row['Khóa học'] || "").toString().trim(),
+                    nganh_hoc: (row['Ngành học'] || "").toString().trim(),
+                    thoi_diem_dang_ky: (row['Thời điểm đăng ký'] || "").toString().trim()
+                });
+            }
+
+            if (newUsers.length === 0) {
+                event.target.value = "";
+                return window.show_toast("⚠️ Không tìm thấy dữ liệu hợp lệ (Cần cột 'Mã sinh viên')!", true);
+            }
+
+            // 🎯 BƯỚC 3: LƯU DANH SÁCH SINH VIÊN VÀO BẢNG USERS
+            const { error } = await clientDb.from('users').upsert(newUsers, { onConflict: 'student_id' });
+
+            if (error) throw error;
+
+            window.show_toast(`✅ Đã tạo lớp ${classCode} và nhập thành công ${newUsers.length} sinh viên!`);
+            event.target.value = ""; // Reset nút chọn
+            
+            // Tải lại giao diện để hiển thị lớp mới
+            if (typeof window.render_user_management === 'function') {
+                window.render_user_management();
+            }
+
+        } catch (err) {
+            console.error("❌ Lỗi Import:", err);
+            window.show_toast("❌ Lỗi khi đọc file: " + (err.message || "Kiểm tra Console"), true);
+            event.target.value = "";
+        }
+    };
+    reader.readAsArrayBuffer(file);
+};
+
+// =========================================================================
+// 🚀 QUẢN LÝ PHÒNG THI ONLINE (ĐỒNG BỘ 100% MÀU SẮC RADAR)
+// =========================================================================
+// =========================================================================
+// 🚀 QUẢN LÝ PHÒNG THI ONLINE (PREMIUM DASHBOARD - NÚT GẠT iOS)
+// =========================================================================
+
+window.dashboard_sync_interval = null;
+
 window.render_exam_management = async function() {
     const container = document.getElementById('dash_subject_cards_container');
-    container.innerHTML = `<div class="col-12 text-center p-5"><div class="spinner-border text-warning"></div><div class="mt-2 text-warning fw-bold">Đang tải đề thi Supabase...</div></div>`;
-    try {
-        const { data: exams, error } = await db.from('online_exams').select('*').order('created_at', { ascending: false });
-        if (error) throw error;
-        let html = `<div class="col-12 px-1 animate__animated animate__fadeIn mb-3"><div class="d-flex justify-content-between align-items-center bg-dark p-3 rounded-4 shadow-sm w-100" style="background: transparent !important; border: 1px solid rgba(255,255,255,0.1);"><div style="flex: 1;"><button class="btn btn-sm glass-action-btn fw-bold px-3" onclick="window.render_admin_hub()">Thoát</button></div><h6 class="text-white fw-bold mb-0 text-center m-0 text-uppercase flex-grow-1 text-truncate" style="font-size: 0.9rem;">PHÒNG THI TRỰC TUYẾN</h6><div style="flex: 1;"></div></div></div>`;
-        if (!exams || exams.length === 0) { html += `<div class="col-12 text-center p-5 mt-4 glass-panel"><i class="bi bi-inbox text-white-50" style="font-size: 3rem;"></i><div class="text-white-50 mt-2 fw-bold">Chưa có đề thi nào.</div></div>`; } 
-        else {
-            exams.forEach((ex, idx) => {
-                let isMo = ex.status === "MỞ" || ex.status === "🟢 MỞ (Thi ngay)";
-                let statusBadge = isMo ? `<span class="badge bg-success shadow-sm px-3 py-2"><i class="bi bi-broadcast me-1"></i> ĐANG MỞ</span>` : `<span class="badge bg-secondary shadow-sm px-3 py-2"><i class="bi bi-lock-fill me-1"></i> ĐÃ KHÓA</span>`;
-                let statusToggleBtn = isMo ? `<button class="btn btn-sm fw-bold w-100 mb-2 shadow-sm" style="background: rgba(239, 68, 68, 0.2); border: 1px solid #ef4444; color: #ef4444;" onclick="window.toggle_exam_status('${ex.exam_code}', 'ĐÓNG')"><i class="bi bi-x-octagon-fill me-1"></i> KHÓA NGAY</button>` : `<button class="btn btn-sm fw-bold w-100 mb-2 shadow-sm" style="background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #10b981;" onclick="window.toggle_exam_status('${ex.exam_code}', 'MỞ')"><i class="bi bi-unlock-fill me-1"></i> MỞ PHÒNG</button>`;
-                let subjectDisplayName = window.subjectConfig[ex.subject_key] ? window.subjectConfig[ex.subject_key].name : ex.subject_key;
-                let safeExStr = encodeURIComponent(JSON.stringify({ 
-                    code: ex.exam_code, 
-                    name: ex.exam_name, 
-                    time: ex.time_limit, 
-                    status: ex.status, 
-                    pass: ex.password, 
-                    users: ex.allowed_users,
-                    auto_open: ex.auto_open, 
-                    auto_close: ex.auto_close 
-                }));
+    container.innerHTML = `<div class="col-12 text-center p-5"><div class="spinner-border text-info"></div><div class="mt-2 text-info fw-bold">Đang tải Trung tâm chỉ huy...</div></div>`;
+    
+    if (window.dashboard_sync_interval) clearInterval(window.dashboard_sync_interval);
 
-                html += `<div class="col-12 px-1 mb-3 animate__animated animate__fadeInUp" style="animation-delay: ${idx * 0.05}s;"><div class="card glass-panel p-3 shadow-sm border-start border-3 ${isMo ? 'border-success' : 'border-secondary'}"><div class="d-flex flex-column flex-md-row justify-content-between gap-3"><div class="flex-grow-1"><div class="d-flex align-items-center gap-3 mb-2"><span class="badge bg-dark border font-monospace text-warning shadow-sm" style="font-size: 0.85rem;">${ex.exam_code}</span>${statusBadge}</div><h6 class="fw-bold text-white mb-1" style="font-size: 1.05rem;">${ex.exam_name}</h6><div class="text-white-50 small d-flex flex-wrap gap-3 mb-1" style="font-size: 0.8rem;"><span><i class="bi bi-book"></i> Môn: <b class="text-light">${subjectDisplayName}</b></span><span><i class="bi bi-clock-history text-warning"></i> Thời gian: <b>${ex.time_limit} phút</b></span></div></div><div class="d-flex flex-row flex-md-column gap-2 flex-shrink-0" style="min-width: 150px;">${statusToggleBtn}<button class="btn btn-sm fw-bold w-100 mb-1 shadow-sm" style="background: rgba(14, 165, 233, 0.2); border: 1px solid #0ea5e9; color: #38bdf8;" onclick="window.open_student_control_modal('${ex.exam_code}')"><i class="bi bi-person-gear me-1"></i> XỬ LÝ SỰ CỐ</button><div class="d-flex gap-2"><button class="btn btn-sm glass-action-btn text-warning w-100 fw-bold shadow-sm" onclick="window.open_edit_exam_modal('${safeExStr}')"><i class="bi bi-pencil-square"></i> SỬA</button><button class="btn btn-sm glass-action-btn text-danger w-100 fw-bold shadow-sm" onclick="window.delete_online_exam('${ex.exam_code}', '${ex.exam_name}')"><i class="bi bi-trash3"></i> XÓA</button></div></div></div></div></div>`;
+    try {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        
+        const { data: exams, error } = await clientDb.from('online_exams').select('*').order('created_at', { ascending: false });
+        if (error) throw error;
+
+        let statsMap = await window.fetch_dashboard_stats_silently(exams);
+
+        // 🌟 CSS DÀNH RIÊNG CHO PREMIUM DASHBOARD & NÚT GẠT IOS
+        let html = `
+        <style>
+            .premium-exam-card { background: #121416; border: 1px solid #2b3035; border-radius: 16px; transition: 0.3s; box-shadow: 0 4px 20px rgba(0,0,0,0.3); overflow: hidden; }
+            .premium-exam-card:hover { border-color: #495057; box-shadow: 0 8px 30px rgba(0,0,0,0.5); transform: translateY(-2px); }
+            
+            /* Dải màu trạng thái trên cùng */
+            .exam-status-bar { height: 4px; width: 100%; transition: 0.3s; }
+            .status-bar-open { background: #10b981; box-shadow: 0 0 12px #10b981; }
+            .status-bar-closed { background: #ef4444; box-shadow: 0 0 12px #ef4444; }
+            
+            .info-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-top: 15px; }
+            .info-item { background: #1a1d20; padding: 10px; border-radius: 10px; border: 1px solid #2b3035; }
+            .info-label { font-size: 0.65rem; color: #adb5bd; font-weight: 700; letter-spacing: 0.5px; margin-bottom: 3px; }
+            .info-value { font-size: 0.85rem; color: #f8f9fa; font-weight: 600; }
+            
+            .glass-badge { padding: 4px 10px; border-radius: 8px; font-size: 0.75rem; font-weight: 600; display: inline-flex; align-items: center; gap: 5px; border: 1px solid transparent; }
+            .gb-total { background: #212529; color: #f8f9fa; border-color: #343a40; }
+            .gb-online { background: rgba(16, 185, 129, 0.1); color: #10b981; border-color: rgba(16, 185, 129, 0.3); }
+            .gb-away { background: rgba(245, 158, 11, 0.1); color: #f59e0b; border-color: rgba(245, 158, 11, 0.3); }
+            .gb-offline { background: rgba(255, 255, 255, 0.05); color: #adb5bd; border-color: rgba(255, 255, 255, 0.1); }
+            .gb-sub { background: rgba(14, 165, 233, 0.1); color: #38bdf8; border-color: rgba(14, 165, 233, 0.3); }
+            .gb-punished { background: rgba(239, 68, 68, 0.1); color: #ef4444; border-color: rgba(239, 68, 68, 0.3); }
+            .gb-zero { background: #1a1d20; color: #6c757d; border-color: #2b3035; }
+            
+            /* CSS CHUẨN NÚT GẠT iOS (TOGGLE SWITCH) */
+            .ios-switch { position: relative; display: inline-block; width: 44px; height: 24px; margin: 0; }
+            .ios-switch input { opacity: 0; width: 0; height: 0; }
+            .ios-slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #343a40; transition: .3s; border-radius: 34px; border: 1px solid #495057; }
+            .ios-slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 2px; bottom: 2px; background-color: #adb5bd; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+            .ios-switch input:checked + .ios-slider { background-color: #10b981; border-color: #10b981; }
+            .ios-switch input:checked + .ios-slider:before { transform: translateX(20px); background-color: #fff; }
+        </style>
+
+        <div class="col-12 px-2 animate__animated animate__fadeIn mb-4">
+            <div class="d-flex justify-content-between align-items-center bg-dark p-3 rounded-4 shadow-sm" style="border: 1px solid #343a40;">
+                <div><button class="btn btn-sm btn-outline-secondary text-light fw-bold px-3" onclick="window.render_admin_hub()"><i class="bi bi-arrow-left me-1"></i> Trở về</button></div>
+                <h6 class="text-white fw-bold mb-0 text-center m-0 text-uppercase" style="font-size: 1rem; letter-spacing: 1px;"><i class="bi bi-grid-1x2-fill text-info me-2"></i>TRUNG TÂM CHỈ HUY</h6>
+                <div>
+                    <span class="badge bg-success shadow-sm animate__animated animate__pulse animate__infinite"><i class="bi bi-broadcast me-1"></i> LIVE SYNC</span>
+                </div>
+            </div>
+        </div>`;
+
+        if (!exams || exams.length === 0) { 
+            html += `<div class="col-12 text-center p-5 mt-4"><i class="bi bi-inbox text-white-50" style="font-size: 4rem;"></i><div class="text-white-50 mt-3 fw-bold fs-5">Chưa có phòng thi nào.</div></div>`; 
+        } 
+        else {
+            const formatDate = (dateStr) => {
+                if (!dateStr) return null;
+                return new Date(dateStr).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit', year: 'numeric' });
+            };
+
+            exams.forEach((ex, idx) => {
+                // Xác định trạng thái logic
+                let isMo = ex.status === "MỞ" || ex.status === "🟢 MỞ (Thi ngay)";
+                
+                // Quyết định màu sắc dải ánh sáng trên cùng
+                let topBarClass = isMo ? 'status-bar-open' : 'status-bar-closed';
+                
+                let subjectDisplayName = window.subjectConfig[ex.subject_key] ? window.subjectConfig[ex.subject_key].name : ex.subject_key;
+                let safeExStr = encodeURIComponent(JSON.stringify({ code: ex.exam_code, name: ex.exam_name, time: ex.time_limit, status: ex.status, pass: ex.password, users: ex.allowed_users, auto_open: ex.auto_open, auto_close: ex.auto_close }));
+                let s = statsMap[ex.exam_code] || { total: 0, online: 0, away: 0, offline: 0, sub: 0, punished: 0 };
+                
+                let openStr = formatDate(ex.auto_open) || "Tự do";
+                let closeStr = formatDate(ex.auto_close) || "Không giới hạn";
+
+                html += `
+                <div class="col-12 col-lg-6 px-2 mb-4 animate__animated animate__fadeInUp" style="animation-delay: ${idx * 0.05}s;">
+                    <div class="premium-exam-card d-flex flex-column h-100">
+                        
+                        <!-- DẢI MÀU TRẠNG THÁI (XANH / ĐỎ) -->
+                        <div class="exam-status-bar ${topBarClass}"></div>
+                        
+                        <div class="p-4 d-flex flex-column flex-grow-1">
+                            
+                            <!-- 🌟 HEADER: TÊN ĐỀ THI LÊN TRÊN CÙNG & NÚT GẠT BÊN PHẢI -->
+                            <div class="d-flex justify-content-between align-items-start mb-3">
+                                <div class="pe-3">
+                                    <h5 class="fw-bold text-white mb-2" style="font-size: 1.15rem; line-height: 1.4;">${ex.exam_name}</h5>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <span class="badge bg-dark border border-secondary font-monospace text-warning px-2 py-1 shadow-sm">${ex.exam_code}</span>
+                                        <div class="text-info fw-bold" style="font-size: 0.8rem;"><i class="bi bi-journal-bookmark-fill me-1"></i> ${subjectDisplayName}</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="d-flex flex-column align-items-end flex-shrink-0">
+                                    <label class="ios-switch mb-1" title="Bật/Tắt phòng thi">
+                                        <input type="checkbox" ${isMo ? 'checked' : ''} onchange="window.toggle_exam_status('${ex.exam_code}', this.checked ? 'MỞ' : 'ĐÓNG')">
+                                        <span class="ios-slider"></span>
+                                    </label>
+                                    ${isMo ? `<span class="text-success fw-bold" style="font-size: 0.65rem; letter-spacing: 0.5px;">ĐANG MỞ</span>` : `<span class="text-danger fw-bold" style="font-size: 0.65rem; letter-spacing: 0.5px;">ĐÃ KHÓA</span>`}
+                                </div>
+                            </div>
+
+                            <!-- Lưới thông tin -->
+                            <div class="info-grid">
+                                <div class="info-item">
+                                    <div class="info-label">THỜI LƯỢNG</div>
+                                    <div class="info-value"><i class="bi bi-clock-history text-warning me-1"></i> ${ex.time_limit} phút</div>
+                                </div>
+                                <div class="info-item">
+                                    <div class="info-label">ĐỐI TƯỢNG</div>
+                                    <div class="info-value text-truncate" title="${ex.allowed_users || 'Tất cả'}"><i class="bi bi-people-fill text-primary me-1"></i> ${ex.allowed_users ? ex.allowed_users.toUpperCase() : 'Tất cả'}</div>
+                                </div>
+                                <div class="info-item">
+                                    <div class="info-label">HIỆU LỰC</div>
+                                    <div class="info-value" style="font-size: 0.75rem;"><span class="text-success">${openStr}</span> <br> <span class="text-danger">${closeStr}</span></div>
+                                </div>
+                                <div class="info-item">
+                                    <div class="info-label">MẬT KHẨU</div>
+                                    <div class="info-value">${ex.password ? `<span class="text-danger"><i class="bi bi-key-fill"></i> ${ex.password}</span>` : `<span class="text-white-50">Tắt</span>`}</div>
+                                </div>
+                            </div>
+
+                            <!-- RADAR GIÁM SÁT TRỰC TIẾP -->
+                            <div class="mt-4 pt-3" style="border-top: 1px dashed #2b3035;">
+                                <div class="info-label mb-2"><i class="bi bi-radar text-success"></i> RADAR GIÁM SÁT TRỰC TIẾP</div>
+                                <div class="d-flex flex-wrap gap-2" id="radar_zone_${ex.exam_code}">
+                                    ${window.generate_radar_badges_html(s)}
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 🌟 THANH CÔNG CỤ (ACTION BAR): TINH GỌN CÒN 3 NÚT -->
+                        <div class="p-3 d-flex gap-2" style="background: #1a1d20; border-top: 1px solid #2b3035;">
+                            <!-- Nút Xử lý sự cố nổi bật nhất chiếm không gian lớn -->
+                            <button class="btn btn-info text-dark fw-bold flex-grow-1 shadow-sm py-2" onclick="window.open_student_control_modal('${ex.exam_code}')">
+                                <i class="bi bi-person-gear fs-5 mb-1 d-block d-sm-inline"></i> XỬ LÝ SỰ CỐ
+                            </button>
+                            
+                            <!-- Nút Sửa & Xóa bo vuông, màu cảnh báo (Warning/Danger) -->
+                            <button class="btn btn-outline-warning fw-bold shadow-sm" style="width: 60px;" onclick="window.open_edit_exam_modal('${safeExStr}')" title="Sửa Đề Thi">
+                                <i class="bi bi-pencil-square fs-5"></i>
+                            </button>
+                            <button class="btn btn-outline-danger fw-bold shadow-sm" style="width: 60px;" onclick="window.delete_online_exam('${ex.exam_code}', '${ex.exam_name}')" title="Xóa Đề Thi">
+                                <i class="bi bi-trash3 fs-5"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>`;
             });
         }
-        container.innerHTML = html;
-    } catch(err) { container.innerHTML = `<div class="text-danger p-5 text-center">Lỗi tải đề: ${err.message}</div>`; }
+        container.innerHTML = `<div class="row m-0">${html}</div>`;
+
+        // ĐỘNG CƠ CẬP NHẬT NGẦM (Mỗi 5 giây quét 1 lần)
+        if (exams && exams.length > 0) {
+            window.dashboard_sync_interval = setInterval(async () => {
+                let newStats = await window.fetch_dashboard_stats_silently(exams);
+                exams.forEach(ex => {
+                    let zone = document.getElementById(`radar_zone_${ex.exam_code}`);
+                    let stat = newStats[ex.exam_code] || { total: 0, online: 0, away: 0, offline: 0, sub: 0, punished: 0 };
+                    if (zone) zone.innerHTML = window.generate_radar_badges_html(stat);
+                });
+            }, 5000);
+        }
+
+    } catch(err) { 
+        container.innerHTML = `<div class="text-danger p-5 text-center">Lỗi tải đề: ${err.message}</div>`; 
+    }
+};
+
+// =========================================================================
+// 🧩 CÁC HÀM PHỤ TRỢ CHO DASHBOARD REALTIME
+// =========================================================================
+
+// Hàm sinh HTML cho các cục Badge (Đảm bảo logic hiển thị/ẩn màu chuẩn xác)
+window.generate_radar_badges_html = function(s) {
+    let html = `<span class="glass-badge gb-total">Tổng: ${s.total}</span>`;
+    
+    html += s.online > 0 
+        ? `<span class="glass-badge gb-online"><i class="bi bi-record-circle-fill animate__animated animate__flash animate__infinite"></i> Đang thi: ${s.online}</span>` 
+        : `<span class="glass-badge gb-zero"><i class="bi bi-record-circle-fill"></i> Đang thi: 0</span>`;
+        
+    html += s.away > 0 
+        ? `<span class="glass-badge gb-away animate__animated animate__pulse animate__infinite"><i class="bi bi-exclamation-triangle-fill"></i> Rời tab: ${s.away}</span>` 
+        : `<span class="glass-badge gb-zero"><i class="bi bi-phone-vibrate-fill"></i> Rời tab: 0</span>`;
+        
+    html += s.offline > 0 
+        ? `<span class="glass-badge gb-offline"><i class="bi bi-door-open-fill"></i> Đã thoát: ${s.offline}</span>` 
+        : `<span class="glass-badge gb-zero"><i class="bi bi-door-open-fill"></i> Đã thoát: 0</span>`;
+        
+    html += s.sub > 0 
+        ? `<span class="glass-badge gb-sub"><i class="bi bi-check-circle-fill"></i> Đã nộp: ${s.sub}</span>` 
+        : `<span class="glass-badge gb-zero"><i class="bi bi-check-circle-fill"></i> Đã nộp: 0</span>`;
+        
+    html += s.punished > 0 
+        ? `<span class="glass-badge gb-punished"><i class="bi bi-shield-lock-fill"></i> Vi phạm: ${s.punished}</span>` 
+        : `<span class="glass-badge gb-zero"><i class="bi bi-shield-lock-fill"></i> Vi phạm: 0</span>`;
+        
+    return html;
+};
+
+// Hàm quét dữ liệu Database chạy ngầm không gây giật lag
+window.fetch_dashboard_stats_silently = async function(exams) {
+    let statsMap = {};
+    if (!exams || exams.length === 0) return statsMap;
+    
+    try {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        let examCodes = exams.map(e => e.exam_code);
+        const { data: results } = await clientDb.from('exam_results')
+            .select('exam_code, is_submitted, is_absent, is_locked, client_status')
+            .in('exam_code', examCodes);
+            
+        if (results) {
+            results.forEach(r => {
+                if (!statsMap[r.exam_code]) {
+                    statsMap[r.exam_code] = { total: 0, online: 0, away: 0, offline: 0, sub: 0, punished: 0 };
+                }
+                statsMap[r.exam_code].total++;
+
+                if (r.is_absent || r.is_locked) {
+                    statsMap[r.exam_code].punished++;
+                } else if (r.is_submitted) {
+                    statsMap[r.exam_code].sub++;
+                } else {
+                    if (r.client_status === 'ONLINE') statsMap[r.exam_code].online++;
+                    else if (r.client_status === 'AWAY') statsMap[r.exam_code].away++;
+                    else statsMap[r.exam_code].offline++; 
+                }
+            });
+        }
+    } catch (e) { console.error("Lỗi đồng bộ ngầm Radar:", e); }
+    
+    return statsMap;
 };
 // 🌟 Đổi giá trị <input type="datetime-local"> (giờ máy, không offset) sang ISO UTC
 // chuẩn để lưu vào cột timestamptz — tránh lệch múi giờ khi so sánh auto_open/auto_close.
@@ -5086,27 +7213,47 @@ window.submit_online_exam_to_server = async function() {
     let specificStr = document.getElementById('create_ex_specific_users').value.trim();
     if (specificStr) selectedRoles.push(specificStr);
 
-    // Xử lý jsonb
-    let cleanQuestions = window.temp_online_exam_questions.map(q => ({
-        id: q.id, type: q.type, q: q.q, opts: q.opts ? q.opts : [q.opta, q.optb, q.optc, q.optd], a: q.a || q.answer, image: q.image || "", hint: q.hint || ""
-    }));
+    // 🌟 BẢN VÁ LỖI 1: Bóc tách đáp án đa cấu trúc (Quét mọi loại key optA, opt_a, opts...)
+    let cleanQuestions = window.temp_online_exam_questions.map(q => {
+        let oA = q.opta || q.optA || q.opt_a || q.opts_A || (q.opts && q.opts[0]) || "";
+        let oB = q.optb || q.optB || q.opt_b || q.opts_B || (q.opts && q.opts[1]) || "";
+        let oC = q.optc || q.optC || q.opt_c || q.opts_C || (q.opts && q.opts[2]) || "";
+        let oD = q.optd || q.optD || q.opt_d || q.opts_D || (q.opts && q.opts[3]) || "";
+
+        // Chỉ lọc bỏ các lựa chọn hoàn toàn trống
+        let validOpts = [oA, oB, oC, oD].filter(o => o !== null && o !== undefined && String(o).trim() !== '');
+
+        return {
+            id: q.id, 
+            type: q.type, 
+            q: q.q || q.question || q.question_text || "", 
+            opts: validOpts, // Đã an toàn 100%
+            a: q.a || q.answer || "", 
+            image: q.image || q.img || q.multimedia || "", 
+            hint: q.hint || ""
+        };
+    });
 
     let payload = {
         exam_code: code, subject_key: window.current_subject, exam_name: name,
         time_limit: parseInt(time), status: document.getElementById('create_ex_status').value, 
         password: document.getElementById('create_ex_pass').value.trim(),
-        questions_json: cleanQuestions, // Dạng mảng chuẩn cho cột jsonb
+        questions_json: cleanQuestions, 
         allowed_users: selectedRoles.join(", "),
         auto_open: window.dtlocal_to_iso(document.getElementById('create_ex_open').value),
         auto_close: window.dtlocal_to_iso(document.getElementById('create_ex_close').value)
     };
 
     try {
-        const { error } = await db.from('online_exams').insert([payload]);
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        const { error } = await clientDb.from('online_exams').insert([payload]);
         if (error) throw error;
         window.show_toast("🎉 Đã phát hành Đề thi lên Supabase!"); 
         document.getElementById('online_exam_modal').remove(); window.render_exam_management();
-    } catch(err) { window.show_toast("❌ Lỗi: " + err.message, true); btn.innerHTML = `LƯU ĐỀ THI`; btn.classList.remove('disabled'); }
+    } catch(err) { 
+        window.show_toast("❌ Lỗi: " + err.message, true); 
+        btn.innerHTML = `LƯU ĐỀ THI`; btn.classList.remove('disabled'); 
+    }
 };
 
 window.save_edit_exam = async function(code) {
@@ -5242,109 +7389,7 @@ window.join_online_exam = async function(encodedEx) {
         } else window.start_online_exam(ex);
     } catch(err) { if (originalBtn) { originalBtn.innerHTML = oldHtml; originalBtn.disabled = false; } window.show_toast("Lỗi xác thực: " + err.message, true); }
 };
-// ─── 3. QUẢN LÝ ĐIỂM THI VÀ SỰ CỐ (TROUBLESHOOT) -> KẾT NỐI BẢNG exam_results ───
-window.fetch_troubleshoot_data = async function(examCode) {
-    window.current_troubleshoot_exam = examCode; 
-    let listContainer = document.getElementById('troubleshoot_student_list');
-    if(listContainer) listContainer.innerHTML = `<div class="text-center p-3 mt-4"><span class="spinner-border text-info"></span><div class="text-info fw-bold mt-2">Đang tải dữ liệu phòng thi từ Supabase...</div></div>`;
 
-    try {
-        // 🌟 1. LẤY THÔNG TIN ĐỀ THI TỪ BẢNG 'online_exams' (Bốc lớp được thi và danh sách vắng)
-        const { data: examData, error: errExam } = await db.from('online_exams')
-            .select('allowed_users, absent_list')
-            .eq('exam_code', examCode)
-            .single();
-        if (errExam) throw errExam;
-
-        // Xử lý bộ lọc "Ai được thi"
-        let allowedStr = examData ? (examData.allowed_users || "") : ""; 
-        let allowedArr = allowedStr.split(',').map(s => s.trim().toLowerCase()).filter(s => s !== "");
-        let isAllAllowed = allowedArr.includes('all'); // Nếu có 'all' thì mới hiện toàn trường
-
-        // Xử lý danh sách vắng (lưu dạng chuỗi text trong Supabase)
-        let absentStr = examData ? (examData.absent_list || "") : "";
-        window.current_troubleshoot_absent = absentStr.split(',').map(s => s.trim().toLowerCase()).filter(s => s !== "");
-
-        // 🌟 2. LẤY DANH SÁCH USER TỪ BẢNG 'users'
-        const { data: allUsers, error: errUsers } = await db.from('users')
-            .select('student_id, full_name, role, class_code, inventory');
-        if (errUsers) throw errUsers;
-
-        // 🌟 3. LẤY KẾT QUẢ ĐÃ NỘP TỪ BẢNG 'exam_results'
-        const { data: results, error: errResults } = await db.from('exam_results')
-            .select('student_id, score, is_submitted')
-            .eq('exam_code', examCode);
-        if (errResults) throw errResults;
-
-        // 🌟 4. LẤY ÁN TÍCH GIAN LẬN TỪ BẢNG 'study_logs' (Chế độ thi thật)
-        const { data: logs, error: errLogs } = await db.from('study_logs')
-            .select('student_id, offense_count, away_time, logout_time')
-            .eq('lesson_name', examCode)
-            .eq('mode', 'THI THẬT');
-        if (errLogs) throw errLogs;
-
-        let filteredClassUsers = [];
-        let sttCounter = 1; 
-
-        // 🌟 5. BỘ LỌC CỐT LÕI: Lọc người dùng hợp lệ
-        allUsers.forEach(u => {
-            let uCls = (u.class_code || u.role || '').toLowerCase();
-            let uId = u.student_id.toLowerCase();
-
-            // Ráp điều kiện: Trùng chữ 'all' HOẶC trùng Lớp HOẶC trùng Mã SV
-            if (isAllAllowed || allowedArr.includes(uCls) || allowedArr.includes(uId)) {
-                filteredClassUsers.push({ 
-                    rawId: u.student_id, 
-                    id: u.student_id.toLowerCase(), 
-                    name: u.full_name || 'Chưa cập nhật', 
-                    cls: u.class_code || u.role || '', 
-                    inv: u.inventory || 0, 
-                    stt: sttCounter++ 
-                });
-            }
-        });
-
-        // 🌟 6. ĐỔ DỮ LIỆU VÀO CÁC BIẾN CỦA GIAO DIỆN
-        window.current_troubleshoot_users = filteredClassUsers; 
-        
-        window.current_troubleshoot_submitted = {};
-        window.current_troubleshoot_started = [];
-        
-        // Quét những em đã nộp bài
-        if (results) {
-            results.forEach(r => {
-                let sId = r.student_id.toLowerCase();
-                window.current_troubleshoot_started.push(sId);
-                if (r.is_submitted) {
-                    window.current_troubleshoot_submitted[sId] = r.score;
-                }
-            });
-        }
-        
-        window.current_troubleshoot_sync = {}; 
-        window.current_troubleshoot_alerts = {};
-        
-        // Quét những em vi phạm, rời tab (lấy từ study_logs)
-        if (logs) {
-            logs.forEach(log => {
-                let sId = log.student_id.toLowerCase();
-                window.current_troubleshoot_sync[sId] = {
-                    offenses: log.offense_count || 0,
-                    away: log.away_time || 0,
-                    active: !log.logout_time // Nếu chưa có giờ logout thì tính là đang online làm bài
-                };
-            });
-        }
-        
-        // 🌟 7. RENDER RA MÀN HÌNH CHÍNH THỨC
-        let searchInput = document.getElementById('ctrl_search_student');
-        window.render_troubleshoot_list(searchInput ? searchInput.value : ""); 
-        
-    } catch(err) {
-        if(listContainer) listContainer.innerHTML = `<div class="text-danger p-3 text-center fw-bold">LỖI SUPABASE: ${err.message}</div>`;
-        console.error(err);
-    }
-};
 
 window.save_new_score = async function(studentIdLower) {
     let examCode = window.current_troubleshoot_exam;
@@ -5376,11 +7421,18 @@ window.admin_toggle_absence = async function(examCode, isAbsent) {
     if(chkIds.length === 0) return window.show_toast("⚠️ Vui lòng tick chọn ít nhất 1 sinh viên!", true);
     
     try {
-        for (let id of chkIds) {
-            await db.from('exam_results').upsert({ exam_code: examCode, student_id: id, is_absent: isAbsent }, { onConflict: 'exam_code,student_id' });
-        }
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        // Chạy song song lệnh để phản hồi nhanh như chớp
+        let promises = chkIds.map(id => 
+            clientDb.from('exam_results').upsert(
+                { exam_code: examCode, student_id: id, is_absent: isAbsent }, 
+                { onConflict: 'exam_code,student_id' }
+            )
+        );
+        await Promise.all(promises);
+
         window.show_toast("✅ Cập nhật trạng thái thành công!");
-        document.getElementById('student_control_modal').remove();
+        window.fetch_troubleshoot_data(examCode); // Làm mới danh sách ngay lập tức, KHÔNG TẮT MODAL NỮA
     } catch(e) { window.show_toast("❌ Lỗi: " + e.message, true); }
 };
 
@@ -5388,11 +7440,17 @@ window.admin_unlock_device = async function(examCode) {
     let chkIds = Array.from(document.querySelectorAll('.troubleshoot-chk:checked')).map(chk => chk.value.toLowerCase());
     if(chkIds.length === 0) return window.show_toast("⚠️ Vui lòng tick chọn sinh viên!", true);
     try {
-        for (let id of chkIds) {
-            await db.from('exam_results').upsert({ exam_code: examCode, student_id: id, is_locked: false }, { onConflict: 'exam_code,student_id' });
-        }
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        let promises = chkIds.map(id => 
+            clientDb.from('exam_results').upsert(
+                { exam_code: examCode, student_id: id, is_locked: false }, 
+                { onConflict: 'exam_code,student_id' }
+            )
+        );
+        await Promise.all(promises);
+
         window.show_toast("✅ Đã mở khóa thiết bị!");
-        document.getElementById('student_control_modal').remove();
+        window.fetch_troubleshoot_data(examCode); // KHÔNG TẮT MODAL
     } catch(e) { window.show_toast("❌ Lỗi: " + e.message, true); }
 };
 
@@ -5406,7 +7464,7 @@ window.show_alert = function(title, message, callback) {
     // TỰ ĐỘNG SINH DOM NẾU BỊ THIẾU
     if (!modal) {
         let mHtml = `
-        <div id="custom_confirm" class="custom-modal animate__animated animate__fadeIn" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 999999; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
+        <div id="custom_confirm" class="custom-modal animate__animated animate__fadeIn" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 999999; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
           <div class="glass-panel p-4 text-center shadow-lg" style="max-width: 350px; width: 90%; border-radius: 20px; background: rgba(15, 23, 42, 0.95); border: 1px solid #38bdf8;">
             <div class="mb-3"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3.5rem; color: #f59e0b; filter: drop-shadow(0 0 10px rgba(245,158,11,0.5));"></i></div>
             <h5 class="fw-bold text-white mt-2 modal-title-txt"></h5>
@@ -5452,7 +7510,7 @@ window.show_prompt = function(title, message, callback) {
     // TỰ ĐỘNG SINH DOM NẾU BỊ THIẾU
     if (!modal) {
         let mHtml = `
-        <div id="custom_prompt_modal" class="custom-modal animate__animated animate__fadeIn" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 999999; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
+        <div id="custom_prompt_modal" class="custom-modal animate__animated animate__fadeIn" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 999999; justify-content: center; align-items: center; backdrop-filter: blur(5px);">
           <div class="glass-panel p-4 text-center shadow-lg" style="max-width: 350px; width: 90%; border-radius: 20px; background: rgba(15, 23, 42, 0.95); border: 1px solid #0ea5e9;">
             <h5 class="fw-bold text-info mt-2 mb-3 prompt-title"></h5>
             <div class="text-white-50 px-2 mb-3 prompt-msg" style="font-size: 0.9rem; line-height: 1.5;"></div>
@@ -5515,7 +7573,7 @@ window.show_edit_lesson_list = function(subKey) {
     let displayName = (window.subjectConfig && window.subjectConfig[subKey]) ? window.subjectConfig[subKey].name : subKey.toUpperCase();
     let html = `
     <div class="p-3 glass-panel m-2 animate__animated animate__fadeIn">
-        <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2" style="border-color: rgba(255,255,255,0.1) !important;">
+        <div class="d-flex justify-content-between align-items-center mb-4 border-bottom pb-2" style="border-color: #2a2a2a !important;">
             <h5 class="text-info fw-bold mb-0"><i class="bi bi-folder2-open me-2"></i> Chọn bài để sửa: <span class="text-warning">${displayName}</span></h5>
             <button class="btn btn-sm btn-outline-light rounded-pill px-3 shadow-sm" onclick="window.back_to_subject_select()"><i class="bi bi-x-circle"></i> Thoát</button>
         </div>
@@ -5575,7 +7633,7 @@ window.open_admin_lesson_panel = function(subKey, lessonId) {
 // =========================================================================
 window.open_interaction_selector = function() {
     let modalHtml = `
-    <div id="interaction_selector_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.8); z-index: 27000; backdrop-filter: blur(10px);">
+    <div id="interaction_selector_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.8); z-index: 27000; ">
         <div class="glass-panel p-4 shadow-lg mx-2 text-center" style="width: 100%; max-width: 400px; border-radius: 20px; border: 1px solid #f43f5e; background: rgba(15, 23, 42, 0.95);">
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="fw-bold text-white mb-0"><i class="bi bi-layers-half text-danger me-2"></i>CHỌN LOẠI TƯƠNG TÁC</h6>
@@ -5617,7 +7675,7 @@ window.open_migration_tool = function() {
     if (oldModal) oldModal.remove();
 
     let modalHtml = `
-    <div id="migration_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.9); z-index: 99999; backdrop-filter: blur(10px);">
+    <div id="migration_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.9); z-index: 99999; ">
         <div class="glass-panel p-4 shadow-lg text-center" style="width: 100%; max-width: 450px; border-radius: 20px; border: 1px solid #10b981; background: rgba(15, 23, 42, 0.95);">
             <div class="mb-3"><i class="bi bi-database-up text-success" style="font-size: 3.5rem; filter: drop-shadow(0 0 15px rgba(16,185,129,0.5));"></i></div>
             <h5 class="fw-bold text-white mb-2 text-uppercase">NẠP LỊCH SỬ TỪ EXCEL</h5>
@@ -5781,3 +7839,327 @@ window.process_excel_file = function(file, statusEl) {
 
 // Gọi tự động bảng công cụ ra giữa màn hình sau 1.5 giây
 //setTimeout(window.open_migration_tool, 1500);
+
+// =========================================================================
+// 🚀 GIAO DIỆN GIÁM SÁT PHÒNG THI TRỰC TIẾP (REALTIME SUPABASE)
+// =========================================================================
+window.live_exam_subscription = null; // Biến toàn cục để lưu kênh kết nối
+
+window.open_live_monitor = async function(examCode) {
+    let existingModal = document.getElementById('live_monitor_modal');
+    if (existingModal) existingModal.remove();
+
+    // 1. Tạo Giao diện Bảng theo dõi
+    let modalHtml = `
+    <div class="modal fade show" id="live_monitor_modal" tabindex="-1" style="display: block; background: rgba(0,0,0,0.8); z-index: 40000;">
+        <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+            <div class="modal-content text-white shadow-lg" style="background: #1e293b; border: 1px solid #10b981; border-radius: 12px; height: 80vh;">
+                <div class="modal-header border-bottom p-3" style="border-color: rgba(255,255,255,0.1) !important;">
+                    <h6 class="modal-title fw-bold text-success mb-0">
+                        <span class="spinner-grow spinner-grow-sm text-danger me-2" role="status" aria-hidden="true"></span>
+                        LIVE MONITOR: PHÒNG THI <span class="text-warning">${examCode}</span>
+                    </h6>
+                    <button type="button" class="btn-close btn-close-white" onclick="window.close_live_monitor()"></button>
+                </div>
+                <div class="modal-body p-0 custom-scrollbar" style="background: #0f172a;">
+                    <table class="table table-dark table-hover table-borderless mb-0 align-middle">
+                        <thead style="position: sticky; top: 0; background: #1e293b; z-index: 1;">
+                            <tr>
+                                <th class="text-white-50 small" style="width: 5%;">#</th>
+                                <th class="text-white-50 small" style="width: 20%;">Mã SV</th>
+                                <th class="text-white-50 small" style="width: 40%;">Tình trạng</th>
+                                <th class="text-white-50 small text-center" style="width: 15%;">Thời gian</th>
+                                <th class="text-white-50 small text-center" style="width: 20%;">Điểm số</th>
+                            </tr>
+                        </thead>
+                        <tbody id="live_exam_tbody">
+                            <tr><td colspan="5" class="text-center py-4 text-white-50"><div class="spinner-border spinner-border-sm me-2"></div> Đang tải dữ liệu ban đầu...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="modal-footer p-2 border-top d-flex justify-content-between" style="border-color: rgba(255,255,255,0.1) !important;">
+                    <small class="text-info"><i class="bi bi-broadcast"></i> Đang kết nối Realtime...</small>
+                    <button type="button" class="btn btn-secondary btn-sm px-4" onclick="window.close_live_monitor()">Đóng Giám Sát</button>
+                </div>
+            </div>
+        </div>
+    </div>`;
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+    const tbody = document.getElementById('live_exam_tbody');
+
+    // 2. Hàm vẽ/cập nhật 1 dòng sinh viên
+    const renderRow = (record) => {
+        let isSub = record.is_submitted;
+        let statusHtml = isSub ? `<span class="badge bg-success">Đã nộp bài</span>` : `<span class="badge bg-warning text-dark animate__animated animate__pulse animate__infinite">Đang làm bài...</span>`;
+        let timeStr = record.submitted_at ? new Date(record.submitted_at).toLocaleTimeString('vi-VN') : '--:--';
+        let scoreHtml = isSub ? `<strong class="text-warning fs-5">${record.score}</strong>` : `-`;
+        
+        // Hiệu ứng chớp sáng khi có cập nhật mới
+        let rowClass = isSub ? 'animate__animated animate__flash' : 'animate__animated animate__fadeInLeft';
+
+        return `
+        <tr id="live_row_${record.student_id}" class="${rowClass}" style="border-bottom: 1px solid rgba(255,255,255,0.05);">
+            <td class="text-white-50"><i class="bi bi-person-circle"></i></td>
+            <td class="fw-bold text-info">${record.student_id}</td>
+            <td>${statusHtml}</td>
+            <td class="text-center text-white-50 small">${timeStr}</td>
+            <td class="text-center">${scoreHtml}</td>
+        </tr>`;
+    };
+
+    // 3. Tải danh sách những em đã/đang thi trước đó
+    try {
+        const { data: initialData } = await clientDb.from('exam_results').select('*').eq('exam_code', examCode).order('submitted_at', { ascending: false });
+        if (initialData && initialData.length > 0) {
+            tbody.innerHTML = initialData.map(r => renderRow(r)).join('');
+        } else {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-white-50">Phòng thi chưa có ai truy cập. Vui lòng chờ...</td></tr>`;
+        }
+    } catch (err) { tbody.innerHTML = `<tr><td colspan="5" class="text-danger text-center">Lỗi tải dữ liệu.</td></tr>`; }
+
+    // 4. KÍCH HOẠT SUPABASE REALTIME (PHÉP THUẬT NẰM Ở ĐÂY)
+    if (window.live_exam_subscription) clientDb.removeChannel(window.live_exam_subscription);
+
+    window.live_exam_subscription = clientDb.channel('custom-exam-channel')
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'exam_results', filter: `exam_code=eq.${examCode}` },
+            (payload) => {
+                console.log("Realtime bắt được:", payload);
+                const record = payload.new;
+                
+                // Nếu là Insert (Sinh viên mới vào thi) hoặc Update (Sinh viên nộp bài)
+                if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                    let existingRow = document.getElementById(`live_row_${record.student_id}`);
+                    
+                    if (existingRow) {
+                        // Cập nhật dòng cũ
+                        existingRow.outerHTML = renderRow(record);
+                    } else {
+                        // Xóa dòng "Chưa có ai" nếu có
+                        if(tbody.innerHTML.includes('chưa có ai truy cập')) tbody.innerHTML = '';
+                        // Chèn dòng mới lên đầu bảng
+                        tbody.insertAdjacentHTML('afterbegin', renderRow(record));
+                    }
+                }
+            }
+        )
+        .subscribe();
+};
+
+window.close_live_monitor = function() {
+    let modalEl = document.getElementById('live_monitor_modal');
+    if (modalEl) modalEl.remove();
+    
+    // Hủy lắng nghe để tiết kiệm tài nguyên mạng khi đóng Modal
+    if (window.live_exam_subscription) {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        clientDb.removeChannel(window.live_exam_subscription);
+        window.live_exam_subscription = null;
+    }
+};
+// =========================================================================
+// 🚀 TẢI VÀ HIỂN THỊ PHÒNG THI ONLINE (TÀNG HÌNH & HIỆN TRƯỚC 5 PHÚT BẰNG JS)
+// =========================================================================
+window.exam_future_timeouts = window.exam_future_timeouts || [];
+window.exam_dom_countdown = null;
+
+window.fetch_and_render_active_exams = async function() {
+    let container = document.getElementById('dash_subject_cards_container'); 
+    if (!container) return;
+    
+    try {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        // Lấy các phòng thi đang ở trạng thái MỞ
+        const { data: exams, error } = await clientDb.from('online_exams')
+                                       .select('*')
+                                       .in('status', ['MỞ', '🟢 MỞ (Thi ngay)'])
+                                       .order('created_at', { ascending: false });
+        if (error) throw error;
+        
+        let oldWrap = document.getElementById('active_exams_wrapper'); 
+        if (oldWrap) oldWrap.remove(); 
+
+        // 1. Dọn dẹp các đồng hồ báo thức cũ để tránh đụng độ
+        window.exam_future_timeouts.forEach(t => clearTimeout(t));
+        window.exam_future_timeouts = [];
+        if (window.exam_dom_countdown) clearInterval(window.exam_dom_countdown);
+
+        if (!exams || exams.length === 0) return;
+
+        let validExams = []; 
+        let now = new Date(); 
+        let currentRole = window.current_user_role || "";
+        let sId = (window.current_student_id || "").toLowerCase();
+        let sClass = (window.current_class_code || currentRole).toLowerCase();
+
+        exams.forEach(ex => {
+            if (ex.auto_close && new Date(ex.auto_close) < now) return; 
+            
+            let allowedArr = (ex.allowed_users || "").split(',').map(s => s.trim().toLowerCase()).filter(s => s !== "");
+            if (allowedArr.length === 0) return;
+            
+            let isAllowed = (currentRole === 'all' || currentRole === 'admin' || currentRole === 'teacher') ||
+                            allowedArr.includes('all') || allowedArr.includes(sId) || (sClass && allowedArr.includes(sClass));
+            
+            if (!isAllowed) return;
+
+            // 2. TÍNH TOÁN THỜI GIAN ĐỂ XÁC ĐỊNH TÀNG HÌNH HAY HIỂN THỊ
+            let openTime = ex.auto_open ? new Date(ex.auto_open) : null;
+            let diffSec = openTime ? Math.floor((openTime - now) / 1000) : -1;
+
+            if (diffSec > 300) {
+                // 🛑 Lớn hơn 5 phút (300 giây): Tàng hình.
+                // Cài đồng hồ báo thức: Khi nào thời gian tụt xuống đúng 300 giây thì tự động vẽ lại giao diện!
+                let timeUntil5Mins = (diffSec - 300) * 1000;
+                let t = setTimeout(() => { window.fetch_and_render_active_exams(); }, timeUntil5Mins);
+                window.exam_future_timeouts.push(t);
+            } else {
+                // 🟢 Đang trong phạm vi 5 phút hoặc đã mở thi: Đưa vào danh sách vẽ lên màn hình
+                validExams.push({ ...ex, diffSec });
+            }
+        });
+
+        if (validExams.length === 0) return;
+
+        let html = `<div id="active_exams_wrapper" class="col-12 px-1 mb-2 animate__animated animate__fadeInDown">
+            <div class="glass-panel p-3" style="border: 2px dashed #ef4444; background: rgba(239, 68, 68, 0.15); border-radius: 16px;">
+                <h6 class="fw-bold text-danger mb-3 text-uppercase"><i class="bi bi-fire me-2"></i>KỲ THI TRỰC TUYẾN</h6>
+                <div class="d-flex flex-column gap-2">`;
+        
+        let hasCountdown = false;
+
+        validExams.forEach(ex => {
+            let safeEx = encodeURIComponent(JSON.stringify({ 
+                examCode: ex.exam_code, subjectKey: ex.subject_key, examName: ex.exam_name, 
+                timeLimit: ex.time_limit, hasPassword: ex.password && ex.password !== "", 
+                password: ex.password, questionsJSON: ex.questions_json 
+            }));
+            let subjectDisplayName = window.subjectConfig[ex.subject_key] ? window.subjectConfig[ex.subject_key].name : ex.subject_key;
+            
+            let actionBtn = "";
+            let timeNotice = "";
+
+            if (ex.diffSec > 0 && ex.diffSec <= 300) {
+                // Đang trong 5 phút đếm ngược (Trạng thái vàng chớp nháy)
+                hasCountdown = true;
+                actionBtn = `<button id="btn_ex_${ex.exam_code}" class="btn btn-warning fw-bold rounded-pill px-4 py-2 shadow-lg animate__animated animate__pulse animate__infinite live-exam-btn" data-ex="${safeEx}" data-open="${ex.auto_open}" style="background: linear-gradient(135deg, #f59e0b, #ef4444); color: white; border: 2px solid #fff;">
+                    SẴN SÀNG (--) <i class="bi bi-arrow-right-circle-fill"></i>
+                </button>`;
+                timeNotice = `<span id="notice_ex_${ex.exam_code}" class="text-warning fw-bold"><i class="bi bi-stopwatch-fill me-1"></i> Sắp mở!</span>`;
+            } else {
+                // Đã mở (Trạng thái đỏ)
+                actionBtn = `<button class="btn btn-danger fw-bold rounded-pill px-4 py-2 shadow-lg" onclick="window.join_online_exam('${safeEx}')">
+                    THI NGAY <i class="bi bi-arrow-right-circle-fill"></i>
+                </button>`;
+                timeNotice = `<span class="text-success fw-bold"><i class="bi bi-broadcast me-1"></i> Đang diễn ra</span>`;
+            }
+
+            html += `<div class="p-3 rounded-3 d-flex flex-column flex-md-row justify-content-between align-items-md-center shadow-sm gap-2" style="background: rgba(0,0,0,0.5); border-left: 5px solid ${ex.diffSec > 0 ? '#f59e0b' : '#ef4444'};">
+                <div>
+                    <div class="fw-bold text-white mb-1" style="font-size: 1rem;">${ex.exam_name}</div>
+                    <div class="text-white-50 d-flex align-items-center gap-2 flex-wrap" style="font-size: 0.75rem;">
+                        <span class="badge bg-danger shadow-sm">Mã: ${ex.exam_code}</span>
+                        <span>Môn: <b class="text-info">${subjectDisplayName}</b></span>
+                        <span class="text-secondary">|</span>
+                        <span><b>${ex.time_limit}</b> phút</span>
+                        <span class="text-secondary">|</span>
+                        ${timeNotice}
+                    </div>
+                </div>
+                ${actionBtn}
+            </div>`;
+        });
+        html += `</div></div></div>`;
+        
+        let firstCard = container.querySelector('.animate__fadeInUp');
+        if (firstCard) firstCard.insertAdjacentHTML('beforebegin', html); 
+        else container.insertAdjacentHTML('beforeend', html);
+
+        // 3. Nếu có phòng đang trong giai đoạn 5 phút, kích hoạt đồng hồ đếm trên giao diện
+        if (hasCountdown) {
+            window.start_dom_exam_countdown();
+        }
+
+    } catch(err) { console.error("Lỗi kéo đề thi:", err); }
+};
+
+// =========================================================================
+// 🚀 ĐỘNG CƠ CẬP NHẬT ĐỒNG HỒ TRÊN GIAO DIỆN (KHÔNG GỌI MÁY CHỦ)
+// =========================================================================
+window.start_dom_exam_countdown = function() {
+    if (window.exam_dom_countdown) clearInterval(window.exam_dom_countdown);
+    
+    // Mỗi 1 giây chỉ thay đổi chữ trên màn hình (04:59 -> 04:58), hoàn toàn nhẹ máy
+    window.exam_dom_countdown = setInterval(() => {
+        let btns = document.querySelectorAll('.live-exam-btn');
+        if (btns.length === 0) {
+            clearInterval(window.exam_dom_countdown);
+            return;
+        }
+        
+        let now = new Date();
+        btns.forEach(btn => {
+            let openTime = new Date(btn.getAttribute('data-open'));
+            let diffSec = Math.floor((openTime - now) / 1000);
+            let notice = document.getElementById(btn.id.replace('btn_', 'notice_'));
+            
+            if (diffSec <= 0) {
+                // HẾT 5 PHÚT -> CHUYỂN NÚT THÀNH ĐỎ ĐỂ THI NGAY
+                btn.classList.remove('btn-warning', 'animate__animated', 'animate__pulse', 'animate__infinite', 'live-exam-btn');
+                btn.classList.add('btn-danger');
+                btn.style.background = ''; // Xóa màu vàng
+                btn.innerHTML = `THI NGAY <i class="bi bi-arrow-right-circle-fill"></i>`;
+                
+                let safeEx = btn.getAttribute('data-ex');
+                btn.setAttribute('onclick', `window.join_online_exam('${safeEx}')`);
+                
+                if (notice) {
+                    notice.innerHTML = `<i class="bi bi-broadcast me-1"></i> Đang diễn ra`;
+                    notice.className = "text-success fw-bold";
+                }
+                btn.closest('.rounded-3').style.borderLeftColor = '#ef4444'; // Đổi viền thẻ thành đỏ
+            } else {
+                // CẬP NHẬT CHỮ ĐẾM NGƯỢC
+                let m = Math.floor(diffSec / 60);
+                let s = diffSec % 60;
+                let str = (m < 10 ? '0' + m : m) + ":" + (s < 10 ? '0' + s : s);
+                btn.innerHTML = `SẴN SÀNG (${str}) <i class="bi bi-arrow-right-circle-fill"></i>`;
+            }
+        });
+    }, 1000);
+};
+
+// =========================================================================
+// 📡 KÊNH REALTIME: TỰ ĐỘNG CẬP NHẬT KHI ADMIN TẠO HOẶC SỬA PHÒNG THI
+// =========================================================================
+window.active_student_exam_subscription = null;
+
+window.enable_realtime_exams_for_student = function() {
+    const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+    if (!clientDb) return;
+
+    // Gỡ kết nối cũ nếu có để tránh trùng lặp kênh
+    if (window.active_student_exam_subscription) {
+        clientDb.removeChannel(window.active_student_exam_subscription);
+    }
+
+    // Mở kênh lắng nghe mọi biến động từ bảng online_exams
+    window.active_student_exam_subscription = clientDb.channel('public-online-exams')
+        .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'online_exams' },
+            (payload) => {
+                console.log("🔥 Máy chủ vừa báo có thay đổi về phòng thi:", payload);
+                
+                // Chỉ làm mới danh sách nếu học sinh đang ở màn hình chính (chưa vào phòng thi)
+                let isAtMenu = document.getElementById('step_1') && document.getElementById('step_1').style.display !== 'none';
+                if (isAtMenu && typeof window.fetch_and_render_active_exams === 'function') {
+                    window.fetch_and_render_active_exams();
+                }
+            }
+        )
+        .subscribe();
+};

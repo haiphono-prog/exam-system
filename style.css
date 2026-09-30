@@ -2,15 +2,15 @@
 /* 🌌 1. HỆ THỐNG BIẾN GIAO DIỆN SÁNG/TỐI (THEME ENGINE) VÀ NÚT CHUNG        */
 /* ========================================================================= */
 :root {
-    /* CHẾ ĐỘ TỐI (DARK MODE - MẶC ĐỊNH) */
-    --bg-color: #0b071e;
+    /* CHẾ ĐỘ TỐI (ĐEN XÁM HUYỀN BÍ) */
+    --bg-color: #101010; /* Đen sâu */
     --text-color: #e2e8f0;
-    --text-muted: rgba(255, 255, 255, 0.7);
-    --glass-border: rgba(255, 255, 255, 0.15);
-    --btn-border: rgba(255, 255, 255, 0.3);
-    --btn-hover-bg: rgba(255, 255, 255, 0.1);
-    --grad-1: rgba(6, 182, 212, 0.05);
-    --grad-2: rgba(236, 72, 153, 0.05);
+    --text-muted: rgba(255, 255, 255, 0.6);
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --btn-border: rgba(255, 255, 255, 0.2);
+    --btn-hover-bg: rgba(255, 255, 255, 0.08);
+    --grad-1: rgba(255, 255, 255, 0.02); /* Đốm sáng xám khói */
+    --grad-2: rgba(255, 255, 255, 0.02);
 }
 
 [data-theme="light"] {
@@ -93,18 +93,22 @@ body::after { background: #ec4899; bottom: -100px; right: -100px; }
 * { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.15) transparent; }
 
 /* ========================================================================= */
-/* 💎 2. GIAO DIỆN PHẲNG CỰC RỘNG - CHUẨN IOS (KHÔNG VIỀN, CHỈ VẠCH NGĂN)     */
+/* 💎 2. GIAO DIỆN MÀU ĐẶC (SOLID COLOR) - TONE ĐEN XÁM                      */
 /* ========================================================================= */
 .card, .glass-panel, .admin-dashboard-card, .modal-content, 
 .bg-white, .bg-light, .quiz-card, .glass-login-box, .bg-dark {
-    background: transparent !important; 
+    background: #1a1a1a !important; /* Xám than nhám */
     backdrop-filter: none !important; 
     -webkit-backdrop-filter: none !important;
-    border: none !important; /* 🌟 BỎ TOÀN BỘ VIỀN KHUNG */
-    box-shadow: none !important; /* 🌟 BỎ BÓNG ĐỔ */
+    border: 1px solid #2a2a2a !important; /* Viền xám mờ */
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.4) !important; /* Bóng đổ sâu hơn tạo độ nổi */
     color: var(--text-color) !important;
-    border-radius: 0 !important; 
+    border-radius: 12px !important; 
     transition: background-color 0.4s ease, color 0.4s ease;
+}
+[data-theme="light"] .card, [data-theme="light"] .glass-panel, [data-theme="light"] .admin-dashboard-card, [data-theme="light"] .modal-content, [data-theme="light"] .glass-login-box {
+    background: #ffffff !important; /* Màu đặc cho chế độ Sáng */
+    border-color: #e2e8f0 !important;
 }
 
 /* CHỈ dùng 1 vạch mảnh mờ nhạt ở đáy để phân tách các danh sách (iOS Style) */
@@ -160,14 +164,18 @@ h1, h2, h3, h4, h5, h6 { color: #ffffff !important; font-weight: 700; }
 .wrong, .glass-option-btn.wrong { background: rgba(239, 68, 68, 0.2) !important; border: 1px solid #f87171 !important; color: var(--text-color) !important; }
 
 /* ========================================================================= */
-/* ⌨️ 4. Ô NHẬP LIỆU PHẲNG (CÓ ĐƯỜNG GẠCH MỜ DƯỚI ĐÁY)                        */
+/* ⌨️ 4. Ô NHẬP LIỆU MÀU ĐẶC (SOLID COLOR)                                   */
 /* ========================================================================= */
 .form-control, .form-select, input[type="text"], input[type="password"], input[type="number"], textarea, .glass-input-style {
-    background: var(--input-bg) !important; 
-    border: none !important; 
-    border-bottom: 1px solid var(--glass-border) !important; /* 🌟 THÊM ĐƯỜNG GẠCH MỜ PHÂN CÁCH */
+    background: #101010 !important; /* Đen sâu chìm hẳn vào nền */
+    border: 1px solid #333333 !important; /* Viền xám sắc nét */
     color: var(--text-color) !important; border-radius: 12px !important;
-    backdrop-filter: none !important; transition: all 0.3s ease !important; max-width: 100% !important; 
+    backdrop-filter: none !important; -webkit-backdrop-filter: none !important; 
+    transition: all 0.3s ease !important; max-width: 100% !important; 
+}
+[data-theme="light"] .form-control, [data-theme="light"] .form-select, [data-theme="light"] input, [data-theme="light"] textarea, [data-theme="light"] .glass-input-style {
+    background: #f1f5f9 !important; /* Nền xám nhạt đặc cho chế độ Sáng */
+    border: 1px solid #cbd5e1 !important;
 }
 .form-control::placeholder, input::placeholder { color: rgba(255, 255, 255, 0.4) !important; }
 /* Đã loại trừ checkbox và radio để không bị mất dấu tích */
@@ -212,7 +220,8 @@ h1, h2, h3, h4, h5, h6 { color: #ffffff !important; font-weight: 700; }
 
 .custom-modal, .media-modal-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: transparent !important; /* TRONG SUỐT 100% */; backdrop-filter: blur(10px);
+    background: rgba(0, 0, 0, 0.9) !important; /* Nền Đen đặc 90% thay vì Kính mờ */
+    backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
     display: flex; align-items: center; justify-content: center; z-index: 99999; padding: 15px;
 }
 .video-responsive { position: relative !important; width: 100% !important; height: 230px !important; overflow: hidden !important; border-radius: 12px; background: transparent !important; border: 1px solid rgba(255,255,255,0.2); margin: 8px 0; }
@@ -243,7 +252,7 @@ h1, h2, h3, h4, h5, h6 { color: #ffffff !important; font-weight: 700; }
 .hint-fog-container.revealed .hint-fog-overlay { opacity: 0; pointer-events: none; }
 
 /* Nút Submit Khổng lồ (Đã loại bỏ nền đỏ, chỉ dùng viền đỏ và glow) */
-#submit_btn button { background: transparent !important; border: 1px solid rgba(239,68,68,0.8) !important; color: #ff4d4d !important; backdrop-filter: blur(10px); box-shadow: 0 4px 15px rgba(239,68,68,0.2); transition: all 0.3s ease;}
+#submit_btn button { background: transparent !important; border: 1px solid rgba(239,68,68,0.8) !important; color: #ff4d4d !important;  box-shadow: 0 4px 15px rgba(239,68,68,0.2); transition: all 0.3s ease;}
 #submit_btn button:hover { background: rgba(239,68,68,0.2) !important; color: #fff !important; box-shadow: 0 6px 20px rgba(239,68,68,0.5); }
 
 .admin-dashboard-card .btn, #quiz_area .btn { white-space: normal !important; }
@@ -337,14 +346,19 @@ h1, h2, h3, h4, h5, h6 { color: #ffffff !important; font-weight: 700; }
 #quiz_area .ui3-lab-container:last-child {
     border-bottom: none !important;
 }
-/* Khung bám đỉnh, trong suốt, luôn nổi */
+/* Khung bám đỉnh, màu đặc, luôn nổi */
 .header-fixed-wrapper {
     position: fixed !important;
     top: 0; left: 0; width: 100% !important;
     z-index: 1050;
-    background: rgba(11, 7, 30, 0.8) !important;
-    backdrop-filter: blur(10px);
-    }
+    background: #101010 !important; /* Trùng với màu nền hệ thống */
+    backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+    border-bottom: 1px solid #1a1a1a !important; /* Đường gạch chia cắt rất tinh tế */
+}
+[data-theme="light"] .header-fixed-wrapper {
+    background: #f8fafc !important;
+    border-bottom: 1px solid #e2e8f0 !important;
+}
 
 /* Khoảng cách đẩy nội dung xuống để không bị header đè */
 #step_3 { padding-top: 70px !important; }
@@ -367,7 +381,7 @@ h1, h2, h3, h4, h5, h6 { color: #ffffff !important; font-weight: 700; }
     padding-right: 0 !important;
 }
 #history_view_area .border-bottom {
-    border-bottom: 1px dashed rgba(255,255,255,0.1) !important;
+    border-bottom: 1px dashed #2a2a2a !important;
 }
 #timeline_container {
     max-height: none !important; /* ĐÃ THÁO BỎ THANH CUỘN LỒNG Ở NHẬT KÝ */
@@ -406,11 +420,13 @@ h1, h2, h3, h4, h5, h6 { color: #ffffff !important; font-weight: 700; }
 /* ========================================================================= */
 .form-select { background-color: #0f172a !important; color: #ffffff !important; border-color: rgba(255, 255, 255, 0.2) !important; }
 .form-select option { background-color: #0f172a !important; color: #ffffff !important; }
-.adm-kpi-card { background: rgba(15, 23, 42, 0.75) !important; backdrop-filter: blur(12px) !important; border: 1px solid rgba(255, 255, 255, 0.12) !important; border-radius: 16px !important; transition: all 0.3s ease !important; }
+.adm-kpi-card { background: #1a1a1a !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; border: 1px solid #2a2a2a !important; border-radius: 16px !important; transition: all 0.3s ease !important; }
 .adm-kpi-card:hover { transform: translateY(-3px) scale(1.01) !important; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3) !important; }
+[data-theme="light"] .adm-kpi-card { background: #ffffff !important; border-color: #e2e8f0 !important; }
 
 .adm-glass-table { --bs-table-bg: transparent !important; background-color: transparent !important; color: #ffffff !important; border-collapse: separate !important; border-spacing: 0 4px !important; }
-.adm-glass-table thead tr { background: rgba(15, 23, 42, 0.95) !important; backdrop-filter: blur(10px) !important; }
+.adm-glass-table thead tr { background: #101010 !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+[data-theme="light"] .adm-glass-table thead tr { background: #f1f5f9 !important; }
 .adm-glass-table tbody tr { background: rgba(255, 255, 255, 0.03) !important; border: 1px solid rgba(255, 255, 255, 0.08) !important; transition: all 0.2s ease !important; }
 .adm-glass-table tbody tr:hover { background: rgba(56, 189, 248, 0.12) !important; }
 .adm-glass-table td, .adm-glass-table th { background: transparent !important; color: #ffffff !important; border: none !important; padding: 8px 10px !important; font-size: 0.8rem !important; white-space: nowrap !important; }
@@ -448,9 +464,75 @@ h1, h2, h3, h4, h5, h6 { color: #ffffff !important; font-weight: 700; }
     border-radius: 10px;
   }
   .kpi-card {
-    background: rgba(255, 255, 255, 0.05) !important;
-    backdrop-filter: blur(12px) !important;
-    -webkit-backdrop-filter: blur(12px) !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
+    background: #1a1a1a !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: 1px solid #2a2a2a !important;
     border-radius: 16px !important;
   }
+  [data-theme="light"] .kpi-card {
+    background: #ffffff !important;
+    border-color: #e2e8f0 !important;
+  }
+
+  /* ========================================================================= */
+/* 🔲 HỆ THỐNG CLASS CHUẨN HÓA CHO TẤT CẢ CÁC MODAL/CỬA SỔ TRONG JS          */
+/* ========================================================================= */
+
+/* 1. Lớp phủ đen đè lên toàn màn hình (thay cho background: rgba... blur...) */
+.modal-overlay-solid {
+    background: rgba(0, 0, 0, 0.9) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+
+/* 2. Khung cửa sổ hiển thị chính (thay cho glass-panel + style nội tuyến) */
+.modal-panel-solid {
+    background: #1a1a1a !important;
+    border: 1px solid #2a2a2a !important;
+    border-radius: 16px !important;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* 3. Vạch kẻ phân cách (Header, Footer) trong cửa sổ */
+.modal-divider-solid {
+    border-color: #2a2a2a !important;
+}
+
+/* 4. Khung nền phụ bên trong Modal (vd: chỗ chứa danh sách câu hỏi) */
+.modal-inner-bg-solid {
+    background: #101010 !important;
+    border: 1px solid #2a2a2a !important;
+}
+/* ========================================================================= */
+/* 🚀 GIAO DIỆN PHẲNG (FLAT DESIGN) - TẮT KHUNG VIỀN VÀ BÓNG ĐỔ 3D           */
+/* ========================================================================= */
+
+/* 1. Xóa khung và bóng đổ của mọi khối, thẻ, cửa sổ Modal */
+.card, .glass-panel, .admin-dashboard-card, .modal-content, 
+.bg-white, .bg-light, .quiz-card, .glass-login-box, .bg-dark,
+.adm-kpi-card, .kpi-card, .modal-panel-solid {
+    border: none !important;
+    box-shadow: none !important;
+}
+
+/* 2. Ép phẳng ô nhập liệu: Bỏ viền hộp, chỉ để lại 1 gạch ngang siêu mờ ở đáy */
+.form-control, .form-select, input[type="text"], input[type="password"], 
+input[type="number"], textarea, .glass-input-style {
+    border: none !important;
+    border-bottom: 1px solid #2a2a2a !important; 
+    box-shadow: none !important;
+    border-radius: 8px !important; /* Giảm bo tròn để giao diện trông dứt khoát hơn */
+}
+
+/* 3. Tắt hiệu ứng nổi 3D khi rê chuột (hover) vào thẻ thống kê */
+.adm-kpi-card:hover, .stat-card-hover:hover {
+    transform: translateY(-2px) !important; /* Chỉ nảy lên nhẹ, không tạo bóng đổ */
+    box-shadow: none !important;
+}
+
+/* 4. Đảm bảo nút bấm cũng không có viền thừa */
+.btn, .glass-btn-action, .option-btn, .glass-option-btn {
+    border: none !important;
+    box-shadow: none !important;
+}

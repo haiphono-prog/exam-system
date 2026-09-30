@@ -25,7 +25,7 @@
         .px-word.show-meaning .px-meaning { opacity: 1; bottom: 100%; }
         .px-action-bar { display: flex; justify-content: center; align-items: center; gap: 25px; margin-bottom: 20px; }
         .px-action-btn { width: 48px; height: 48px; border-radius: 50%; background: transparent !important; border: 1px solid transparent !important; color: rgba(255,255,255,0.7) !important; font-size: 16px; cursor: pointer; transition: 0.2s; }
-        .px-action-btn:hover { background: rgba(255,255,255,0.1) !important; border-color: rgba(255,255,255,0.4) !important; color: #fff !important; transform: scale(1.08); }
+        .px-action-btn:hover { background: #2a2a2a !important; border-color: rgba(255,255,255,0.4) !important; color: #fff !important; transform: scale(1.08); }
         .px-center-slot { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; position: relative; }
         .px-timer-compact { width: 55px; height: 55px; position: relative; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; }
         .px-circle-bg { fill: none; stroke: rgba(255,255,255,0.15); stroke-width: 3; }
@@ -39,7 +39,7 @@
         .px-settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
         .px-config-group { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
         .px-mode-btn { background: transparent !important; border: 1px solid transparent !important; padding: 6px 15px !important; border-radius: 20px !important; font-size: 13px !important; font-weight: 700; cursor: pointer; transition: 0.3s; color: rgba(255,255,255,0.5) !important; }
-        .px-btn-loop { background: rgba(255,255,255,0.05) !important; border: 1px solid rgba(255,255,255,0.1) !important; color: rgba(255, 255, 255, 0.7) !important; padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; }
+        .px-btn-loop { background: rgba(255,255,255,0.05) !important; border: 1px solid #2a2a2a !important; color: rgba(255, 255, 255, 0.7) !important; padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; }
         .px-btn-loop.active-toggle { background: rgba(56, 189, 248, 0.15) !important; color: #38bdf8 !important; border-color: #38bdf8 !important; }
     `;
     document.head.appendChild(style);
@@ -51,7 +51,7 @@ window.openPhanXaModule = function() {
     if (!wrapper) {
         wrapper = document.createElement('div');
         wrapper.id = 'phanxa_module_wrapper';
-        wrapper.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 99999; overflow-y: auto; background-color: rgba(15, 23, 42, 0.9); backdrop-filter: blur(10px);';
+        wrapper.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 99999; overflow-y: auto; background-color: rgba(15, 23, 42, 0.9); ';
         
         wrapper.innerHTML = `
         <div class="position-absolute" style="top: 15px; right: 20px; z-index: 100000;">
@@ -250,22 +250,56 @@ window.pxInitExercise = function() {
     
     setTimeout(() => {
         let lessonData = [];
-        // Lấy dữ liệu ngay từ RAM (Supabase)
-        if (window.full_data && window.full_data[targetSubject]) {
+        
+        // 1. Lấy đúng mảng câu hỏi của môn hiện tại đang chọn
+        if (window.px_custom_pool && window.px_custom_pool.length > 0) {
+            lessonData = [...window.px_custom_pool];
+        } else if (window.questions && window.questions.length > 0) {
+            lessonData = [...window.questions];
+        } else if (window.full_data && window.full_data[targetSubject]) {
             lessonData = window.full_data[targetSubject].filter(q => String(q.lesson).trim() === String(currentLessonId).trim());
         }
 
-        // 🌟 NẾU CHƯA CHỌN BÀI HOẶC BÀI RỖNG -> TỰ ĐỘNG NẠP BÀI MẪU ĐỂ TEST
         if (lessonData.length === 0) {
-            window.show_toast("⚠️ Chưa chọn bài học. Hệ thống tự tải bài Mẫu để trải nghiệm!");
-            lessonData = [
-                { type: 'phanxa', vi: "Xin chào, rất vui được gặp bạn.", en: "Hello, nice to meet you." },
-                { type: 'phanxa', vi: "Bệnh nhân cần được kiểm tra huyết áp.", en: "The patient needs blood pressure checked." },
-                { type: 'phanxa', vi: "Hôm nay bạn cảm thấy thế nào?", en: "How are you feeling today?" }
-            ];
+            if (typeof window.show_toast === 'function') {
+                window.show_toast("⚠️ Bài học này chưa có câu hỏi nào!");
+            }
+            document.getElementById("px_sourceBox").innerText = "Chưa có dữ liệu câu hỏi cho bài học này.";
+            return;
         }
 
-        window.px_allQuestions = lessonData;
+        // 2. Chuyển đổi linh hoạt theo từng loại môn học:
+        window.px_allQuestions = lessonData.map(q => {
+            let item = { ...q };
+
+            // A. Lấy NỘI DUNG CÂU HỎI (mặt trước / câu đọc)
+            item.vi = q.vi || q.q || q.question || q[4] || q[3] || "Câu hỏi";
+
+            // B. Lấy ĐÁP ÁN ĐÚNG (mặt sau / câu trả lời)
+            let correctOpt = String(q.a || q.answer || q[8] || "").trim().toUpperCase();
+            let ansText = "";
+
+            // Nếu là câu hỏi Trắc nghiệm A, B, C, D (Môn Y học, Lý thuyết, v.v.)
+            if (q.opts && q.opts.length > 0) {
+                let idx = ['A', 'B', 'C', 'D'].indexOf(correctOpt);
+                if (idx !== -1 && q.opts[idx]) {
+                    ansText = q.opts[idx];
+                } else {
+                    ansText = q.opts[0];
+                }
+            } else if (q.optA || q.optB || q.optC || q.optD) {
+                if (correctOpt === 'A') ansText = q.optA;
+                else if (correctOpt === 'B') ansText = q.optB;
+                else if (correctOpt === 'C') ansText = q.optC;
+                else if (correctOpt === 'D') ansText = q.optD;
+            }
+
+            // Ưu tiên theo thứ tự: Nội dung đáp án trắc nghiệm -> en -> answer -> a
+            item.en = ansText || q.en || q.answer || q.a || "Đáp án";
+
+            return item;
+        });
+
         window.px_currentIndex = 0;
         window.pxStartPreload();
     }, 300);

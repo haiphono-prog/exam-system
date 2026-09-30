@@ -74,7 +74,7 @@ window.open_trainable_parser_modal = function() {
             .editable-cell.is-editing { cursor: text; background: rgba(0,0,0,0.8) !important; border: 1px solid #38bdf8 !important; box-shadow: inset 0 0 8px rgba(0,0,0,0.8); outline: none; }
         </style>
         <div class="glass-modal p-0 d-flex flex-column m-2" style="width: 98vw; max-width: 1900px; height: 96vh;">
-            <div class="d-flex justify-content-between align-items-center p-2 px-3 border-bottom flex-shrink-0" style="border-color: rgba(255,255,255,0.1) !important; background: rgba(0,0,0,0.2); border-radius: 16px 16px 0 0;">
+            <div class="d-flex justify-content-between align-items-center p-2 px-3 border-bottom flex-shrink-0" style="border-color: #2a2a2a !important; background: rgba(0,0,0,0.2); border-radius: 16px 16px 0 0;">
                 <h6 class="fw-bold text-success m-0" style="letter-spacing: 0.5px; font-size: 0.9rem;"><i class="bi bi-robot me-2"></i> AI BÓC TÁCH V12 (GIAO DIỆN KHAI BÁO BẰNG TAY)</h6>
                 <button class="btn-close btn-close-white opacity-75" style="transform: scale(0.8);" onclick="close_trainable_modal()"></button>
             </div>

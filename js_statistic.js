@@ -601,7 +601,7 @@ window.render_quiz_dashboard = function() {
             </div>
             <div class="col-12">
                 <input type="text" id="search_master" class="form-control bg-dark text-white shadow-sm" 
-                       style="padding: 12px 15px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1) !important;" 
+                       style="padding: 12px 15px; border-radius: 12px; border: 1px solid #2a2a2a !important;" 
                        placeholder="🔍 Lọc theo tên môn, từ khóa..." oninput="window.updateDashboard()">
             </div>
             <div class="col-12 col-md-6"><div class="glass-panel p-3 rounded-4 shadow-sm h-100"><canvas id="chartSubject"></canvas></div></div>
@@ -945,7 +945,7 @@ window.render_user_dashboard = function() {
                 <div class="glass-panel p-3 rounded-4 shadow-sm border border-success border-opacity-25" style="background: rgba(16, 185, 129, 0.03) !important;">
                     <div class="table-responsive stat-table-scroll" style="max-height: 450px; overflow-y: auto;">
                         <table class="table table-borderless text-white mb-0" style="min-width: 600px; --bs-table-bg: transparent !important; background-color: transparent !important; border-collapse: separate; border-spacing: 0 6px;">
-                            <thead style="position: sticky; top: 0; background: rgba(15, 23, 42, 0.95) !important; z-index: 10; backdrop-filter: blur(10px);">
+                            <thead style="position: sticky; top: 0; background: #1a1a1a !important; z-index: 10; ">
                                 <tr style="border-bottom: 2px solid rgba(255,255,255,0.1);">
                                     <th class="text-white-50 fw-bold small pb-2 text-uppercase" style="background: transparent !important;">Mã SV / ID</th>
                                     <th class="text-white-50 fw-bold small pb-2 text-uppercase" style="background: transparent !important;">Họ và Tên</th>
@@ -966,9 +966,9 @@ window.render_user_dashboard = function() {
 window.open_user_detail_report = function(idx) {
     let u = window.user_master_data[idx];
     let modalHtml = `
-    <div id="user_detail_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 30000; backdrop-filter: blur(15px); padding: 10px;">
-        <div class="glass-panel p-3 shadow-lg d-flex flex-column" style="width: 100%; max-width: 700px; max-height: 85vh; border-radius: 20px; background: rgba(15, 23, 42, 0.95) !important; border: 1px solid rgba(16, 185, 129, 0.4);">
-            <div class="d-flex justify-content-between align-items-center pb-2 border-bottom" style="border-color: rgba(255,255,255,0.1) !important;">
+    <div id="user_detail_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.9); z-index: 30000; backdrop-filter: blur(15px); padding: 10px;">
+        <div class="glass-panel p-3 shadow-lg d-flex flex-column" style="width: 100%; max-width: 700px; max-height: 85vh; border-radius: 20px; background: #1a1a1a !important; border: 1px solid rgba(16, 185, 129, 0.4);">
+            <div class="d-flex justify-content-between align-items-center pb-2 border-bottom" style="border-color: #2a2a2a !important;">
                 <h6 class="fw-bold text-success mb-0 text-uppercase"><i class="bi bi-person-badge me-2"></i>Hồ sơ: ${u.fullname} (${u.username})</h6>
                 <button class="btn-close btn-close-white" onclick="document.getElementById('user_detail_modal').remove()"></button>
             </div>
@@ -1107,7 +1107,7 @@ window.render_error_dashboard = function() {
                 <div class="glass-panel p-3 rounded-4 shadow-sm border border-danger border-opacity-25" style="background: rgba(239, 68, 68, 0.03) !important;">
                     <div class="table-responsive stat-table-scroll" style="max-height: 550px; overflow-y: auto;">
                         <table class="table table-borderless text-white mb-0" style="min-width: 700px; --bs-table-bg: transparent !important; border-collapse: separate; border-spacing: 0 4px;">
-                            <thead style="position: sticky; top: 0; background: rgba(15, 23, 42, 0.95) !important; z-index: 10; backdrop-filter: blur(10px);">
+                            <thead style="position: sticky; top: 0; background: #1a1a1a !important; z-index: 10; ">
                                 <tr style="border-bottom: 2px solid rgba(255,255,255,0.1);">
                                     <th class="text-white-50 fw-bold small pb-2 text-uppercase">Thời gian / SV</th>
                                     <th class="text-white-50 fw-bold small pb-2 text-uppercase">Môn / Câu hỏi</th>
@@ -1252,9 +1252,9 @@ window.show_quick_edit_modal = function() {
     let btnSaveText = window.current_edit_error_row !== null ? "LƯU & XÓA BÁO CÁO NÀY" : "LƯU CÂU HỎI NÀY";
 
     let html = `
-    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 99999; backdrop-filter: blur(10px); padding: 15px;">
-        <div class="glass-panel p-4 shadow-lg d-flex flex-column w-100 animate__animated animate__zoomIn custom-scrollbar" style="max-width: 700px; max-height: 90vh; overflow-y: auto; border-radius: 20px; background: rgba(15, 23, 42, 0.95) !important; border: 1px solid rgba(245, 158, 11, 0.5);">
-            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom" style="border-color: rgba(255,255,255,0.1) !important;">
+    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.9); z-index: 99999;  padding: 15px;">
+        <div class="glass-panel p-4 shadow-lg d-flex flex-column w-100 animate__animated animate__zoomIn custom-scrollbar" style="max-width: 700px; max-height: 90vh; overflow-y: auto; border-radius: 20px; background: #1a1a1a !important; border: 1px solid rgba(245, 158, 11, 0.5);">
+            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom" style="border-color: #2a2a2a !important;">
                 <h5 class="fw-bold text-warning mb-0"><i class="bi bi-pencil-square me-2"></i> CHỈNH SỬA CHI TIẾT CÂU HỎI</h5>
                 <button class="btn-close btn-close-white" onclick="document.getElementById('${modalId}').remove()"></button>
             </div>
@@ -1271,7 +1271,7 @@ window.show_quick_edit_modal = function() {
                 <div class="col-12 col-md-8"><label class="text-white-50 small mb-1">Giải thích (Hint)</label><textarea id="q_edit_hint" class="form-control bg-dark text-warning custom-scrollbar" rows="1">${q.hint || ''}</textarea></div>
             </div>
             
-            <div class="d-flex justify-content-end gap-2 mt-2 pt-3 border-top" style="border-color: rgba(255,255,255,0.1) !important;">
+            <div class="d-flex justify-content-end gap-2 mt-2 pt-3 border-top" style="border-color: #2a2a2a !important;">
                 <button class="btn btn-outline-light px-4 rounded-pill fw-bold" onclick="document.getElementById('${modalId}').remove()">HỦY</button>
                 <button class="btn btn-warning px-4 rounded-pill fw-bold shadow-sm" onclick="window.save_quick_edit(this)"><i class="bi bi-save-fill me-1"></i> ${btnSaveText}</button>
             </div>

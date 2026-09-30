@@ -32,7 +32,7 @@ window.open_bulk_import_modal = function() {
             .glass-textarea { background: rgba(0,0,0,0.2) !important; border: 1px solid rgba(255,255,255,0.08) !important; color: #fff !important; border-radius: 10px; resize: none; font-size: 0.95rem; line-height: 1.6; }
             .glass-textarea:focus { border-color: rgba(56, 189, 248, 0.5) !important; box-shadow: inset 0 2px 10px rgba(0,0,0,0.3) !important; outline: none; }
             .row-hover-magic { transition: background 0.2s; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,0.08); }
-            .row-hover-magic:hover { background: rgba(255,255,255,0.1) !important; }
+            .row-hover-magic:hover { background: #2a2a2a !important; }
             .thin-font { font-weight: 400 !important; letter-spacing: 0.2px; }
             
             .toggle-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); color: #cbd5e1; border-radius: 6px; font-size: 0.75rem; padding: 4px 10px; cursor: pointer; transition: 0.2s; font-weight: 500; }
@@ -45,7 +45,7 @@ window.open_bulk_import_modal = function() {
 
         <div class="glass-modal p-0 d-flex flex-column m-2" style="width: 98vw; max-width: 1900px; height: 96vh;">
             
-            <div class="d-flex justify-content-between align-items-center p-2 px-3 border-bottom flex-shrink-0" style="border-color: rgba(255,255,255,0.1) !important; background: rgba(0,0,0,0.2); border-radius: 16px 16px 0 0;">
+            <div class="d-flex justify-content-between align-items-center p-2 px-3 border-bottom flex-shrink-0" style="border-color: #2a2a2a !important; background: rgba(0,0,0,0.2); border-radius: 16px 16px 0 0;">
                 <h6 class="fw-bold text-white m-0" style="letter-spacing: 0.5px;"><i class="bi bi-robot text-warning me-2"></i> TRỢ LÝ AI BÓC TÁCH DỮ LIỆU ĐA MÔ HÌNH</h6>
                 <button class="btn-close btn-close-white opacity-75 hover-opacity-100" onclick="close_bulk_import_modal()"></button>
             </div>
@@ -104,7 +104,7 @@ window.open_bulk_import_modal = function() {
 
             </div>
 
-            <div class="d-flex justify-content-between align-items-center p-2 border-top flex-shrink-0" style="border-color: rgba(255,255,255,0.1) !important;">
+            <div class="d-flex justify-content-between align-items-center p-2 border-top flex-shrink-0" style="border-color: #2a2a2a !important;">
                 <div class="small text-info ms-2 fw-bold" id="auto_detect_msg"><i class="bi bi-info-circle me-1"></i> Dán dữ liệu và bấm Bóc Tách Ngay.</div>
                 <button id="btn_save_bulk" class="btn btn-sm btn-success fw-bold px-4 disabled" style="border-radius: 6px; font-size: 0.9rem;" onclick="confirm_save_bulk()">
                     <i class="bi bi-cloud-arrow-up-fill me-1"></i> LƯU VÀO NGÂN HÀNG

@@ -25,9 +25,9 @@ window.open_hotspot_creator_modal = function() {
     let currentLessonName = window.lessonNames?.[window.current_subject]?.[currentLessonNum] || "";
 
     let modalHtml = `
-    <div id="hotspot_creator_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.85); z-index: 28000; backdrop-filter: blur(10px); padding: 15px;">
+    <div id="hotspot_creator_modal" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.9); z-index: 28000;  padding: 15px;">
         
-        <div class="glass-panel p-2 p-md-3 shadow-lg w-100 h-100 d-flex flex-column flex-lg-row gap-3" style="max-width: 1400px; max-height: 96vh; border-radius: 16px; background: rgba(15, 23, 42, 0.95) !important;">
+        <div class="glass-panel p-2 p-md-3 shadow-lg w-100 h-100 d-flex flex-column flex-lg-row gap-3" style="max-width: 1400px; max-height: 96vh; border-radius: 16px; background: #1a1a1a !important;">
             
             <!-- 🌟 CỘT TRÁI: HÌNH ẢNH (DÒNG THÔNG BÁO ĐÃ DỜI RA NGOÀI ẢNH) -->
             <div class="flex-grow-1 h-100 bg-dark rounded-3 border border-secondary d-flex flex-column overflow-hidden p-2">
@@ -59,7 +59,7 @@ window.open_hotspot_creator_modal = function() {
             <div class="d-flex flex-column h-100" style="width: 100%; max-width: 360px; flex-shrink: 0;">
                 
                 <!-- TOP BAR GỘP CHUNG (ICON TẢI/DÁN, BÀI, TÊN, MULTI, HÌNH DÁNG) -->
-                <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom" style="border-color: rgba(255,255,255,0.1) !important;">
+                <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom" style="border-color: #2a2a2a !important;">
                     <div class="d-flex gap-1 align-items-center w-100 me-1">
                         
                         <div class="d-flex gap-1">
@@ -129,7 +129,7 @@ window.open_hotspot_creator_modal = function() {
                     </div>
                 </div>
 
-                <div class="d-flex justify-content-center align-items-center pt-2 mt-2 border-top position-relative" style="border-color: rgba(255,255,255,0.1) !important; min-height: 45px; flex-shrink: 0;">
+                <div class="d-flex justify-content-center align-items-center pt-2 mt-2 border-top position-relative" style="border-color: #2a2a2a !important; min-height: 45px; flex-shrink: 0;">
                     <div class="text-warning fw-bold small position-absolute start-0 ms-2" id="hs_total_badge">Tổng: 0</div>
                     <button id="btn_save_all_hotspots" class="btn btn-danger shadow-sm d-flex align-items-center justify-content-center p-0 z-1" style="border-radius: 8px; width: 80px; height: 38px;" onclick="window.submit_all_hotspots()">
                         <i class="bi bi-cloud-arrow-up-fill fs-3"></i>

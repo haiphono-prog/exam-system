@@ -32,7 +32,7 @@ window.open_import_by_type_modal = function() {
         </style>
 
         <div class="glass-modal p-0 d-flex flex-column m-2" style="width: 98vw; max-width: 1900px; height: 96vh;">
-            <div class="d-flex justify-content-between align-items-center p-2 px-3 border-bottom flex-shrink-0" style="border-color: rgba(255,255,255,0.1) !important; background: rgba(0,0,0,0.2); border-radius: 16px 16px 0 0;">
+            <div class="d-flex justify-content-between align-items-center p-2 px-3 border-bottom flex-shrink-0" style="border-color: #2a2a2a !important; background: rgba(0,0,0,0.2); border-radius: 16px 16px 0 0;">
                 <h6 class="fw-bold text-white m-0" style="letter-spacing: 0.5px;"><i class="bi bi-layers-half text-info me-2"></i> NHẬP THEO LOẠI CÂU (MODULE CHUYÊN BIỆT)</h6>
                 <button class="btn-close btn-close-white opacity-75 hover-opacity-100" onclick="close_type_import_modal()"></button>
             </div>
@@ -90,7 +90,7 @@ window.open_import_by_type_modal = function() {
 
             </div>
 
-            <div class="d-flex justify-content-between align-items-center p-2 border-top flex-shrink-0" style="border-color: rgba(255,255,255,0.1) !important;">
+            <div class="d-flex justify-content-between align-items-center p-2 border-top flex-shrink-0" style="border-color: #2a2a2a !important;">
                 <div class="small text-info ms-2 fw-bold" id="type_detect_msg"><i class="bi bi-info-circle me-1"></i> Chọn Loại Câu ở trên cùng và bấm Bóc Tách.</div>
                 <button id="btn_save_bulk" class="btn btn-sm btn-success fw-bold px-4 disabled" style="border-radius: 6px; font-size: 0.9rem;" onclick="confirm_save_bulk()">
                     <i class="bi bi-cloud-arrow-up-fill me-1"></i> LƯU VÀO NGÂN HÀNG
