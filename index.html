@@ -38,21 +38,6 @@
     <!-- 🌟 BẢN VÁ TOÀN CẦU V2: SIÊU MƯỢT, KHÔNG BỊ KHUẤT ĐÁY -->
     <!-- ========================================================= -->
     <style>
-        /* 🌟 ÉP NÚT NHẬN CLICK NGAY LẬP TỨC & NÉ VÙNG TRANH CHẤP CỦA TRÌNH DUYỆT */
-            #submit_btn, 
-            #exit_review_btn,
-            #admin_dashboard .card-footer {
-                /* Nâng nút lên cao hơn viền đáy một chút, tự động tính toán viền màn hình (tai thỏ/home bar) */
-                bottom: max(30px, env(safe-area-inset-bottom)) !important; 
-                /* Chặn trình duyệt nội suy thao tác, ép nhận Click tức thì */
-                touch-action: manipulation !important; 
-                z-index: 999999 !important;
-            }
-            
-            /* Tắt luôn tính năng nháy đúp phóng to (Double-tap to zoom) gây trễ 300ms ở TẤT CẢ các nút */
-            button, .btn, .class-pill, .student-subj-card {
-                touch-action: manipulation !important;
-            }
         @media (max-width: 767.98px) {
             /* 1. Trị dứt điểm lướt bị rít: Bật gia tốc phần cứng của thiết bị */
             .overflow-auto, 
@@ -220,34 +205,34 @@
         <!-- BỌC BODY -->
         <div class="card-body p-2 p-md-3 d-flex flex-column" style="overflow-y: auto;">
             
-            <!-- KHU VỰC THỐNG KÊ: Dùng nền trong suốt mờ (bg-secondary bg-opacity-25) -->
-            <div class="d-flex flex-wrap justify-content-center gap-2 mb-3">
-                <div class="text-center p-2 rounded flex-fill bg-secondary bg-opacity-25" style="border-top: 2px solid #ef4444; min-width: 80px;">
-                    <div style="font-size: 0.6rem; color: #adb5bd; font-weight: bold; margin-bottom: 2px;">THỜI GIAN</div>
+            <!-- 🌟 KHU VỰC THỐNG KÊ: ÉP NẰM TRÊN 1 HÀNG DUY NHẤT (DÙNG flex-nowrap) -->
+            <div class="d-flex flex-nowrap justify-content-between gap-1 mb-3 w-100 overflow-hidden">
+                <div class="text-center p-1 rounded flex-fill bg-secondary bg-opacity-25" style="border-top: 2px solid #ef4444;">
+                    <div style="font-size: 0.55rem; color: #adb5bd; font-weight: bold; margin-bottom: 2px;">THỜI GIAN</div>
                     <div class="d-flex align-items-center justify-content-center">
-                        <input type="number" id="exam_time_input" value="45" class="form-control form-control-sm border-0 bg-transparent text-center text-white fw-bold p-0 shadow-none" style="width: 35px; font-size: 1.1rem;">
-                        <span style="color: #adb5bd; font-weight: bold;">phút</span>
+                        <input type="number" id="exam_time_input" value="45" class="form-control form-control-sm border-0 bg-transparent text-center text-white fw-bold p-0 shadow-none" style="width: 30px; font-size: 1rem;">
+                        <span style="color: #adb5bd; font-weight: bold; font-size: 0.75rem; margin-left: 2px;">phút</span>
                     </div>
                 </div>
-                <div class="text-center p-2 rounded flex-fill bg-secondary bg-opacity-25" style="border-top: 2px solid #adb5bd; min-width: 80px;">
-                    <div style="font-size: 0.6rem; color: #adb5bd; font-weight: bold; margin-bottom: 2px;">TỔNG CÂU</div>
-                    <div id="total_selected_count" class="fw-bold text-white" style="font-size: 1.1rem;">0</div>
+                <div class="text-center p-1 rounded flex-fill bg-secondary bg-opacity-25" style="border-top: 2px solid #adb5bd;">
+                    <div style="font-size: 0.55rem; color: #adb5bd; font-weight: bold; margin-bottom: 2px;">TỔNG</div>
+                    <div id="total_selected_count" class="fw-bold text-white" style="font-size: 1rem;">0</div>
                 </div>
-                <div class="text-center p-2 rounded flex-fill bg-secondary bg-opacity-25" style="border-top: 2px solid #38bdf8; min-width: 60px;">
-                    <div style="font-size: 0.6rem; color: #38bdf8; font-weight: bold; margin-bottom: 2px;">MCQ</div>
-                    <div id="count_single" class="fw-bold text-white" style="font-size: 1.1rem;">0</div>
+                <div class="text-center p-1 rounded flex-fill bg-secondary bg-opacity-25" style="border-top: 2px solid #38bdf8;">
+                    <div style="font-size: 0.55rem; color: #38bdf8; font-weight: bold; margin-bottom: 2px;">MCQ</div>
+                    <div id="count_single" class="fw-bold text-white" style="font-size: 1rem;">0</div>
                 </div>
-                <div class="text-center p-2 rounded flex-fill bg-secondary bg-opacity-25" style="border-top: 2px solid #4ade80; min-width: 60px;">
-                    <div style="font-size: 0.6rem; color: #4ade80; font-weight: bold; margin-bottom: 2px;">Đ/S</div>
-                    <div id="count_true_false" class="fw-bold text-white" style="font-size: 1.1rem;">0</div>
+                <div class="text-center p-1 rounded flex-fill bg-secondary bg-opacity-25" style="border-top: 2px solid #4ade80;">
+                    <div style="font-size: 0.55rem; color: #4ade80; font-weight: bold; margin-bottom: 2px;">Đ/S</div>
+                    <div id="count_true_false" class="fw-bold text-white" style="font-size: 1rem;">0</div>
                 </div>
-                <div class="text-center p-2 rounded flex-fill bg-secondary bg-opacity-25" style="border-top: 2px solid #fb923c; min-width: 60px;">
-                    <div style="font-size: 0.6rem; color: #fb923c; font-weight: bold; margin-bottom: 2px;">Đ/K</div>
-                    <div id="count_fill" class="fw-bold text-white" style="font-size: 1.1rem;">0</div>
+                <div class="text-center p-1 rounded flex-fill bg-secondary bg-opacity-25" style="border-top: 2px solid #fb923c;">
+                    <div style="font-size: 0.55rem; color: #fb923c; font-weight: bold; margin-bottom: 2px;">Đ/K</div>
+                    <div id="count_fill" class="fw-bold text-white" style="font-size: 1rem;">0</div>
                 </div>
-                <div class="text-center p-2 rounded flex-fill bg-secondary bg-opacity-25" style="border-top: 2px solid #c084fc; min-width: 60px;">
-                    <div style="font-size: 0.6rem; color: #c084fc; font-weight: bold; margin-bottom: 2px;">MEDIA</div>
-                    <div id="count_media" class="fw-bold text-white" style="font-size: 1.1rem;">0</div>
+                <div class="text-center p-1 rounded flex-fill bg-secondary bg-opacity-25" style="border-top: 2px solid #c084fc;">
+                    <div style="font-size: 0.55rem; color: #c084fc; font-weight: bold; margin-bottom: 2px;">MEDIA</div>
+                    <div id="count_media" class="fw-bold text-white" style="font-size: 1rem;">0</div>
                 </div>
             </div>
             
