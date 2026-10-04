@@ -867,7 +867,7 @@ window.render_student_subject_list = function(safe_role) {
     </style>
     <div class="row w-100 m-0 g-3">`;
 
-    // 🌟 CHIA 2 KỊCH BẢN HEADER TÙY THEO VAI TRÒ
+    // 🌟 CHIA 2 KỊCH BẢN HEADER TÙY THEO VAI TRÒ (ĐÃ TÍCH HỢP 3 NÚT MODULE SIÊU GỌN VÀO THANH CÔNG CỤ)
     if (safe_role === 'all') {
         html += `
         <div class="col-12 px-0 animate__animated animate__fadeIn sticky-top z-3 mb-0 mb-md-3" style="top: 0;">
@@ -876,12 +876,17 @@ window.render_student_subject_list = function(safe_role) {
                     <i class="bi bi-chevron-left fs-4"></i><span class="d-none d-md-inline ms-1">Thoát</span>
                 </button>
                 
-                <h6 class="text-white fw-bold mb-0 text-center flex-grow-1 text-truncate px-2 text-uppercase" style="font-size: 1.1rem; letter-spacing: 0.5px;">
+                <h6 class="text-white fw-bold mb-0 text-center flex-grow-1 text-truncate px-2 text-uppercase d-none d-sm-block" style="font-size: 1.1rem; letter-spacing: 0.5px;">
                     QUẢN LÝ TRẮC NGHIỆM
                 </h6>
                 
                 <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                    <span class="text-white-50 d-none d-sm-block fw-bold ms-2" style="font-size: 0.75rem;">${studentNameDisplay}</span>
+                    <!-- 🌟 3 NÚT TIỆN ÍCH DẠNG TRÒN CHO ADMIN -->
+                    <div class="d-flex align-items-center justify-content-center rounded-circle stat-card-hover shadow-sm" title="Trạm Dịch" style="width: 32px; height: 32px; cursor: pointer; background: rgba(250, 204, 21, 0.15); border: 1px solid rgba(250, 204, 21, 0.3);" onclick="window.openBuilderModule()"><span style="font-size:0.9rem">✍️</span></div>
+                    <div class="d-flex align-items-center justify-content-center rounded-circle stat-card-hover shadow-sm" title="Nghe Reels" style="width: 32px; height: 32px; cursor: pointer; background: rgba(244, 63, 94, 0.15); border: 1px solid rgba(244, 63, 94, 0.3);" onclick="window.openReelsModule()"><span style="font-size:0.9rem">🎬</span></div>
+                    <div class="d-flex align-items-center justify-content-center rounded-circle stat-card-hover shadow-sm" title="Học Phản Xạ" style="width: 32px; height: 32px; cursor: pointer; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3);" onclick="window.openPhanXaModule()"><span style="font-size:0.9rem">🧠</span></div>
+                    
+                    <span class="text-white-50 d-none d-md-block fw-bold ms-2" style="font-size: 0.75rem;">${studentNameDisplay}</span>
                     <div class="d-flex align-items-center gap-1 stat-card-hover ms-1" title="Túi Đồ" style="cursor: pointer;" onclick="window.toggle_inventory_popover(event)">
                         <span style="font-size: 1.1rem;">🎁</span>
                         <span class="text-warning fw-bold" style="font-size: 0.85rem;" id="dashboard_inventory_count">${inventoryCount}</span>
@@ -899,28 +904,37 @@ window.render_student_subject_list = function(safe_role) {
                 <div class="position-absolute" style="bottom: -20px; left: 10%; width: 100px; height: 100px; background: #c084fc; filter: blur(40px); opacity: 0.2; pointer-events: none;"></div>
 
                 <div class="d-flex align-items-center justify-content-between flex-wrap gap-3 position-relative z-1">
-    <div class="d-flex align-items-center gap-3">
-        <div class="position-relative" style="z-index: 2;">
-            ${window.get_user_rank_html()}
-        </div>
-        <div>
-            <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px;">Chào mừng trở lại,</div>
-            <!-- 🌟 Đã xóa text-truncate & max-width, thêm cho phép xuống dòng mượt mà -->
-            <div class="fw-bold" style="font-size: 1.15rem; line-height: 1.3; background: linear-gradient(to right, #38bdf8, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 0.5px; white-space: normal; word-break: break-word;">
-                ${studentNameDisplay}
-            </div>
-        </div>
-    </div>
-    
-    <div class="d-flex align-items-center gap-2 gap-md-3 bg-black bg-opacity-25 p-2 rounded-pill border border-secondary border-opacity-25">
-        <div id="dashboard_inventory_badge" class="d-flex align-items-center gap-1 px-3 py-1 rounded-pill stat-card-hover" title="Túi Đồ" style="cursor: pointer; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3);" onclick="window.toggle_inventory_popover(event)">
-            <span style="font-size: 1.1rem; filter: drop-shadow(0 0 5px rgba(245,158,11,0.5));">🎁</span>
-            <span class="text-warning fw-bold" style="font-size: 0.95rem;" id="dashboard_inventory_count">${inventoryCount}</span>
-        </div>
-        <div class="d-flex align-items-center justify-content-center rounded-circle stat-card-hover shadow-sm" title="Liên kết khuôn mặt" style="width: 36px; height: 36px; cursor: pointer; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8;" onclick="window.setup_face_id()"><i class="bi bi-person-bounding-box"></i></div>
-        <div class="d-flex align-items-center justify-content-center rounded-circle stat-card-hover shadow-sm" title="Đăng xuất" style="width: 36px; height: 36px; cursor: pointer; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444;" onclick="window.logout_user()"><i class="bi bi-power"></i></div>
-    </div>
-</div>
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="position-relative" style="z-index: 2;">
+                            ${window.get_user_rank_html()}
+                        </div>
+                        <div>
+                            <div style="font-size: 0.7rem; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px;">Chào mừng trở lại,</div>
+                            <div class="fw-bold" style="font-size: 1.15rem; line-height: 1.3; background: linear-gradient(to right, #38bdf8, #a855f7); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 0.5px; white-space: normal; word-break: break-word;">
+                                ${studentNameDisplay}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 🌟 THANH CÔNG CỤ SINH VIÊN (GỘP CẢ MODULE, QUÀ, KHUÔN MẶT, ĐĂNG XUẤT) -->
+                    <div class="d-flex align-items-center gap-2 bg-black bg-opacity-25 p-2 rounded-pill border border-secondary border-opacity-25 flex-wrap justify-content-end">
+                        
+                        <!-- 3 NÚT TIỆN ÍCH DẠNG TRÒN -->
+                        <div class="d-flex align-items-center justify-content-center rounded-circle stat-card-hover shadow-sm" title="Trạm Dịch" style="width: 36px; height: 36px; cursor: pointer; background: rgba(250, 204, 21, 0.15); border: 1px solid rgba(250, 204, 21, 0.3);" onclick="window.openBuilderModule()"><span style="font-size:1.1rem">✍️</span></div>
+                        <div class="d-flex align-items-center justify-content-center rounded-circle stat-card-hover shadow-sm" title="Nghe Reels" style="width: 36px; height: 36px; cursor: pointer; background: rgba(244, 63, 94, 0.15); border: 1px solid rgba(244, 63, 94, 0.3);" onclick="window.openReelsModule()"><span style="font-size:1.1rem">🎬</span></div>
+                        <div class="d-flex align-items-center justify-content-center rounded-circle stat-card-hover shadow-sm" title="Học Phản Xạ" style="width: 36px; height: 36px; cursor: pointer; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3);" onclick="window.openPhanXaModule()"><span style="font-size:1.1rem">🧠</span></div>
+                        
+                        <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.2); margin: 0 2px;"></div> <!-- Dải phân cách mờ -->
+                        
+                        <!-- CÁC NÚT CŨ -->
+                        <div id="dashboard_inventory_badge" class="d-flex align-items-center gap-1 px-2 py-1 rounded-pill stat-card-hover" title="Túi Đồ" style="cursor: pointer; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3);" onclick="window.toggle_inventory_popover(event)">
+                            <span style="font-size: 1.1rem; filter: drop-shadow(0 0 5px rgba(245,158,11,0.5));">🎁</span>
+                            <span class="text-warning fw-bold" style="font-size: 0.95rem;" id="dashboard_inventory_count">${inventoryCount}</span>
+                        </div>
+                        <div class="d-flex align-items-center justify-content-center rounded-circle stat-card-hover shadow-sm" title="Liên kết khuôn mặt" style="width: 36px; height: 36px; cursor: pointer; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8;" onclick="window.setup_face_id()"><i class="bi bi-person-bounding-box"></i></div>
+                        <div class="d-flex align-items-center justify-content-center rounded-circle stat-card-hover shadow-sm" title="Đăng xuất" style="width: 36px; height: 36px; cursor: pointer; background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #ef4444;" onclick="window.logout_user()"><i class="bi bi-power"></i></div>
+                    </div>
+                </div>
             </div>
         </div>`;
     }
@@ -1139,14 +1153,24 @@ window.render_admin_hub = function() {
                         </div>
                         <div>
                             <div style="font-size: 0.7rem; color: #a78bfa; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px;">Trang quản trị hệ thống,</div>
-                            <div class="fw-bold text-truncate" style="font-size: 1.3rem; background: linear-gradient(to right, #f43f5e, #fb923c); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 0.5px; max-width: 220px;">
+                            <div class="fw-bold" style="font-size: 1.15rem; line-height: 1.3; background: linear-gradient(to right, #f43f5e, #fb923c); -webkit-background-clip: text; -webkit-text-fill-color: transparent; letter-spacing: 0.5px; white-space: normal; word-break: break-word;">
                                 ${studentNameDisplay}
                             </div>
                         </div>
                     </div>
                     
-                    <div class="d-flex align-items-center gap-2 gap-md-3 bg-black bg-opacity-25 p-2 rounded-pill border border-secondary border-opacity-25">
-                        <div id="dashboard_inventory_badge" class="d-flex align-items-center gap-1 px-3 py-1 rounded-pill stat-card-hover" title="Túi Đồ" style="cursor: pointer; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3);" onclick="window.toggle_inventory_popover(event)">
+                    <!-- 🌟 THANH CÔNG CỤ TÍCH HỢP CHO ADMIN -->
+                    <div class="d-flex align-items-center gap-2 bg-black bg-opacity-25 p-2 rounded-pill border border-secondary border-opacity-25 flex-wrap justify-content-end">
+                        
+                        <!-- 3 NÚT TIỆN ÍCH DẠNG TRÒN CHO ADMIN -->
+                        <div class="d-flex align-items-center justify-content-center rounded-circle stat-card-hover shadow-sm" title="Trạm Dịch" style="width: 36px; height: 36px; cursor: pointer; background: rgba(250, 204, 21, 0.15); border: 1px solid rgba(250, 204, 21, 0.3);" onclick="window.openBuilderModule()"><span style="font-size:1.1rem">✍️</span></div>
+                        <div class="d-flex align-items-center justify-content-center rounded-circle stat-card-hover shadow-sm" title="Nghe Reels" style="width: 36px; height: 36px; cursor: pointer; background: rgba(244, 63, 94, 0.15); border: 1px solid rgba(244, 63, 94, 0.3);" onclick="window.openReelsModule()"><span style="font-size:1.1rem">🎬</span></div>
+                        <div class="d-flex align-items-center justify-content-center rounded-circle stat-card-hover shadow-sm" title="Học Phản Xạ" style="width: 36px; height: 36px; cursor: pointer; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3);" onclick="window.openPhanXaModule()"><span style="font-size:1.1rem">🧠</span></div>
+                        
+                        <div style="width: 1px; height: 20px; background: rgba(255,255,255,0.2); margin: 0 2px;"></div> <!-- Phân cách -->
+                        
+                        <!-- TÚI QUÀ VÀ CÁC NÚT CŨ CỦA ADMIN -->
+                        <div id="dashboard_inventory_badge" class="d-flex align-items-center gap-1 px-2 py-1 rounded-pill stat-card-hover" title="Túi Đồ" style="cursor: pointer; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.3);" onclick="window.toggle_inventory_popover(event)">
                             <span style="font-size: 1.1rem; filter: drop-shadow(0 0 5px rgba(245,158,11,0.5));">🎁</span>
                             <span class="text-warning fw-bold" style="font-size: 0.95rem;" id="dashboard_inventory_count">${inventoryCount}</span>
                         </div>
