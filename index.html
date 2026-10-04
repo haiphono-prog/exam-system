@@ -35,42 +35,48 @@
     <!-- 2. HỆ THỐNG CSS LÕI: HỖ TRỢ CHUYỂN ĐỔI SÁNG/TỐI (LIGHT/DARK MODE) -->
     <link rel="stylesheet" href="style.css">
 <!-- ========================================================= -->
-    <!-- 🌟 BẢN VÁ TOÀN CẦU (GLOBAL FIX) CHO MÀN HÌNH ĐIỆN THOẠI -->
+    <!-- 🌟 BẢN VÁ TOÀN CẦU V2: SIÊU MƯỢT, KHÔNG BỊ KHUẤT ĐÁY -->
     <!-- ========================================================= -->
     <style>
         @media (max-width: 767.98px) {
-            /* 1. Tự động ép TẤT CẢ các thành phần 100vh sang 100dvh để né thanh URL */
-            html, body {
-                height: 100dvh !important;
-                min-height: 100dvh !important;
-            }
-            
-            /* Quét sạch mọi popup, màn hình chờ, bảng điểm, dashboard đang dùng 100vh */
-            [style*="100vh"], .vh-100, 
-            #admin_dashboard, 
-            #glass_result_overlay,
-            [id$="_modal"],
-            .position-fixed.w-100.h-100 {
-                height: 100dvh !important;
-                max-height: 100dvh !important;
-            }
-
-            /* 2. Bật gia tốc phần cứng (chống rít, chống lag) cho MỌI khu vực có thanh cuộn */
+            /* 1. Trị dứt điểm lướt bị rít: Bật gia tốc phần cứng của thiết bị */
             .overflow-auto, 
             .overflow-y-auto, 
             .custom-scrollbar,
             .card-body,
-            [style*="overflow-y: auto"],
-            [style*="overflow: auto"] {
+            [style*="overflow-y: auto"] {
                 -webkit-overflow-scrolling: touch !important;
-                overscroll-behavior-y: contain !important; /* Chống cuộn văng ra ngoài khung */
             }
 
-            /* 3. Tự động bơm khoảng thở đáy cho các khung danh sách dài, tránh bị nút đè */
-            .custom-scrollbar > div:last-child,
-            .card-body > div:last-child,
+            /* 2. Bơm đệm khổng lồ dưới đáy cho bảng Admin để lòi nút lên */
+            #admin_dashboard .card-body,
+            #lesson_config_body {
+                padding-bottom: 150px !important; 
+            }
+            
+            /* 3. Bơm đệm đáy cho màn hình thi (khi Rà soát) */
             #quiz_area {
-                padding-bottom: 85px !important; 
+                padding-bottom: 120px !important;
+            }
+
+            /* 4. Định hình lại nút Admin để không bị thanh Safari che mất */
+            #admin_dashboard .card-footer {
+                position: fixed !important;
+                bottom: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                background: #1a1d20 !important;
+                z-index: 10000 !important;
+                box-shadow: 0 -5px 15px rgba(0,0,0,0.5) !important;
+            }
+            
+            /* 5. Bảo hiểm tuyệt đối cho màn hình admin (tránh nhảy lung tung) */
+            #admin_dashboard {
+                position: fixed !important;
+                top: 0 !important; left: 0 !important; right: 0 !important; bottom: 0 !important;
+                height: 100% !important;
+                width: 100% !important;
+                background: #212529 !important;
             }
         }
     </style>
@@ -383,8 +389,8 @@
     const db = supabase.createClient(supabaseUrl, supabaseKey);
 
     window.db = db;
-   // =========================================================
-    // 🛸 NÚT NỔI DRAGGABLE (THÔNG MINH CHUẨN ASSISTIVETOUCH IPHONE)
+// =========================================================
+    // 🛸 NÚT NỔI DRAGGABLE (ĐÃ FIX TẬN GỐC LỖI LAG SCROLL)
     // =========================================================
     window.make_draggable = function(elementId) {
         let el = document.getElementById(elementId);
@@ -394,17 +400,13 @@
         let startX, startY, initialX, initialY;
         let hasMoved = false;
 
-        el.addEventListener('touchstart', dragStart, { passive: false });
-        document.addEventListener('touchmove', drag, { passive: false });
-        document.addEventListener('touchend', dragEnd);
-
+        // 🌟 FIX LAG TỐI THƯỢNG: Đổi passive thành true ở trạng thái chờ
+        el.addEventListener('touchstart', dragStart, { passive: true });
         el.addEventListener('mousedown', dragStart);
-        document.addEventListener('mousemove', drag);
-        document.addEventListener('mouseup', dragEnd);
 
         function dragStart(e) {
             let target = e.target.closest('#fab_main_btn');
-            if (!target) return; // Chỉ cho phép kéo khi nắm đúng cái búa 🛠️
+            if (!target) return; 
 
             hasMoved = false;
             if (e.type === 'touchstart') {
@@ -421,11 +423,17 @@
 
             isDragging = true;
             el.style.transition = 'none';
+
+            // 🌟 CHỈ BẬT THEO DÕI NGÓN TAY KHI ĐANG CẦM NÚT
+            document.addEventListener('touchmove', drag, { passive: false });
+            document.addEventListener('touchend', dragEnd);
+            document.addEventListener('mousemove', drag);
+            document.addEventListener('mouseup', dragEnd);
         }
 
         function drag(e) {
             if (!isDragging) return;
-            e.preventDefault();
+            e.preventDefault(); // Chỉ chặn cuộn web KHI ĐANG KÉO NÚT NÀY
 
             let currentX, currentY;
             if (e.type === 'touchmove') {
@@ -439,10 +447,8 @@
             let diffX = currentX - startX;
             let diffY = currentY - startY;
 
-            // Nếu tay nhúc nhích > 5px thì hệ thống nhận diện là "Đang kéo"
             if (Math.abs(diffX) > 5 || Math.abs(diffY) > 5) {
                 hasMoved = true;
-                // Đóng menu lại cho gọn khi đang kéo
                 let menuItems = document.getElementById('fab_menu_items');
                 if (menuItems && !menuItems.classList.contains('d-none')) {
                     menuItems.classList.add('d-none');
@@ -469,7 +475,12 @@
             isDragging = false;
             el.style.transition = 'all 0.3s ease';
 
-            // Nếu chỉ CHẠM (không kéo) thì mở menu
+            // 🌟 NHẢ TAY RA LÀ TẮT THEO DÕI NGAY ĐỂ WEB CUỘN MƯỢT LẠI
+            document.removeEventListener('touchmove', drag);
+            document.removeEventListener('touchend', dragEnd);
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', dragEnd);
+
             if (!hasMoved) {
                 toggle_smart_fab_menu();
             }
