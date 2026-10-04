@@ -34,6 +34,46 @@
 
     <!-- 2. HỆ THỐNG CSS LÕI: HỖ TRỢ CHUYỂN ĐỔI SÁNG/TỐI (LIGHT/DARK MODE) -->
     <link rel="stylesheet" href="style.css">
+<!-- ========================================================= -->
+    <!-- 🌟 BẢN VÁ TOÀN CẦU (GLOBAL FIX) CHO MÀN HÌNH ĐIỆN THOẠI -->
+    <!-- ========================================================= -->
+    <style>
+        @media (max-width: 767.98px) {
+            /* 1. Tự động ép TẤT CẢ các thành phần 100vh sang 100dvh để né thanh URL */
+            html, body {
+                height: 100dvh !important;
+                min-height: 100dvh !important;
+            }
+            
+            /* Quét sạch mọi popup, màn hình chờ, bảng điểm, dashboard đang dùng 100vh */
+            [style*="100vh"], .vh-100, 
+            #admin_dashboard, 
+            #glass_result_overlay,
+            [id$="_modal"],
+            .position-fixed.w-100.h-100 {
+                height: 100dvh !important;
+                max-height: 100dvh !important;
+            }
+
+            /* 2. Bật gia tốc phần cứng (chống rít, chống lag) cho MỌI khu vực có thanh cuộn */
+            .overflow-auto, 
+            .overflow-y-auto, 
+            .custom-scrollbar,
+            .card-body,
+            [style*="overflow-y: auto"],
+            [style*="overflow: auto"] {
+                -webkit-overflow-scrolling: touch !important;
+                overscroll-behavior-y: contain !important; /* Chống cuộn văng ra ngoài khung */
+            }
+
+            /* 3. Tự động bơm khoảng thở đáy cho các khung danh sách dài, tránh bị nút đè */
+            .custom-scrollbar > div:last-child,
+            .card-body > div:last-child,
+            #quiz_area {
+                padding-bottom: 85px !important; 
+            }
+        }
+    </style>
 </head>
 
 <body>
