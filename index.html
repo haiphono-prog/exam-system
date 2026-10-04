@@ -97,27 +97,41 @@
             position: fixed !important;
             top: 0 !important;
             left: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
+            right: 0 !important;
+            bottom: 0 !important;
+            width: 100% !important;
+            height: 100dvh !important; /* 🌟 FIX: Dùng dvh để triệt tiêu lỗi thanh URL của điện thoại */
             z-index: 9999 !important;
             margin: 0 !important;
             padding: 0 !important;
-            max-width: 100% !important;
+            background: #212529 !important; /* Đảm bảo nền tối tuyệt đối */
         }
         #admin_dashboard .glass-panel {
-            border-radius: 0 !important;
-            height: 100vh !important;
+            height: 100% !important;
             display: flex !important;
             flex-direction: column !important;
+            border-radius: 0 !important;
             box-shadow: none !important;
         }
         #admin_dashboard .card-header {
             border-radius: 0 !important;
             padding: 12px 10px !important;
+            flex-shrink: 0 !important; /* Không cho header bị bẹp lại */
         }
         #admin_dashboard .card-body {
             flex-grow: 1 !important;
             overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important; /* 🚀 FIX LAG: Bật gia tốc cuộn mượt như App Native */
+            padding-bottom: 80px !important; /* 🌟 Khoảng thở đáy để thẻ cuối không bị nút che mất */
+        }
+        #admin_dashboard .card-footer {
+            position: fixed !important;
+            bottom: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            background: #1a1d20 !important; /* Nền tối để không bị lộ chữ ở dưới */
+            z-index: 10000 !important; /* Ép nổi bần bật lên trên cùng */
+            box-shadow: 0 -4px 15px rgba(0,0,0,0.5) !important; /* Đổ bóng tách biệt với nội dung */
         }
     }
 </style>
