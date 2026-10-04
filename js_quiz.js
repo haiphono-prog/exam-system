@@ -1,6 +1,139 @@
 // =========================================================================
-// HÀM VẼ CÂU HỎI QUIZ (HỖ TRỢ 5 DẠNG CÂU HỎI + HOTSPOT + SẮP XẾP)
+// 🚀 GIAO DIỆN LÀM BÀI QUIZ (TÍCH HỢP 3 MẪU UI ĐỘNG & CHUẨN SUPER APP)
 // =========================================================================
+
+// 1. Hàm phụ: Nhúng CSS cho giao diện (Chỉ chạy 1 lần)
+function inject_dynamic_ui_styles() {
+    if (document.getElementById('dynamic_ui_styles')) return;
+    
+    // 🌟 Tái cấu trúc DOM Header: Đưa Kỹ năng sang trái, Quà sang phải, ẩn Theme
+    let leftContainer = document.querySelector('#step_3 .text-start');
+    let rightContainer = document.querySelector('#step_3 .text-end');
+    let themeBtn = document.querySelector('button[onclick*="toggle_light_mode"]');
+    let skill5050 = document.querySelector('button[onclick*="use_skill_5050"]');
+    let skillTime = document.querySelector('button[onclick*="use_skill_time"]');
+    let invBadge = document.getElementById('mini_inventory_badge');
+    
+    if (themeBtn) themeBtn.style.setProperty('display', 'none', 'important'); // Ẩn mặt trăng mặt trời
+    
+    if (leftContainer && skill5050 && skillTime) {
+        leftContainer.appendChild(skill5050);
+        leftContainer.appendChild(skillTime);
+    }
+    
+    if (rightContainer && invBadge) {
+        rightContainer.insertBefore(invBadge, rightContainer.firstChild);
+        rightContainer.style.display = 'flex';
+        rightContainer.style.alignItems = 'center';
+        rightContainer.style.justifyContent = 'flex-end';
+        rightContainer.style.gap = '8px';
+    }
+
+    let style = document.createElement('style');
+    style.id = 'dynamic_ui_styles';
+    style.innerHTML = `
+        /* 🔵 HỆ THỐNG SUPER APP CSS (DÙNG CHUNG) */
+        @media (max-width: 767.98px) {
+            /* 🌟 Mở rộng lề an toàn 8px để không bị mất khung/mất chữ */
+            #step_3 .app-container { padding-left: 8px !important; padding-right: 8px !important; overflow-x: hidden; }
+            .mobile-mx-half { margin-left: 0 !important; margin-right: 0 !important; border-radius: 12px !important; }
+            
+            /* 🌟 Tối ưu Header: Bóp khoảng cách, định vị absolute để đồng hồ ra giữa tuyệt đối */
+            #step_3 .d-grid { display: flex !important; align-items: center !important; justify-content: space-between !important; padding: 10px 0 !important; position: relative; }
+            
+            /* LEFT GROUP: Nút Back, 50/50, +30s */
+            #step_3 .text-start { display: flex; gap: 6px; align-items: center; z-index: 2; }
+            #step_3 .text-start button { font-size: 0 !important; padding: 4px 6px !important; line-height: 0 !important; border: none !important; background: transparent !important; box-shadow: none !important; }
+            #step_3 .text-start button i { font-size: 1.4rem !important; margin: 0 !important; }
+            #step_3 .text-start button[onclick*="use_skill"] i { font-size: 1.2rem !important; }
+            #step_3 .text-start button span { display: none !important; } /* Ẩn chữ 50/50, +30s */
+            
+            /* CENTER GROUP: Chỉ chứa đồng hồ, ép ra giữa tuyệt đối */
+            #step_3 .text-center { position: absolute; left: 0; width: 100%; display: flex; justify-content: center; pointer-events: none; z-index: 1; }
+            #step_3 .text-center > * { pointer-events: auto; } /* Vẫn cho phép thao tác vào đồng hồ nếu cần */
+            
+            /* RIGHT GROUP: Hộp quà, Đổi chế độ */
+            #step_3 .text-end { display: flex; gap: 8px; align-items: center; z-index: 2; }
+            #step_3 .text-end button { font-size: 0 !important; padding: 4px 6px !important; line-height: 0 !important; border: none !important; background: transparent !important; box-shadow: none !important; }
+            #mode_text { font-size: 0 !important; line-height: 0 !important; }
+            #mode_text i { font-size: 1.4rem !important; margin: 0 !important; }
+            
+            /* Ép nút nộp bài âm lề 8px để nó bung vừa đúng sát viền điện thoại */
+            #submit_btn { margin-left: -8px !important; margin-right: -8px !important; margin-bottom: 0 !important; padding: 0 !important; }
+            #submit_btn button { border-radius: 0 !important; height: 56px !important; font-size: 1.05rem !important; letter-spacing: 1px; }
+        }
+        
+        /* 🌟 ĐỒNG HỒ ĐẾM NGƯỢC: Cố định độ rộng, xóa phông nền */
+        #prog_text {
+            font-variant-numeric: tabular-nums; /* Giữ các số có độ rộng bằng nhau chống giật */
+            font-family: monospace, sans-serif;
+            min-width: 55px;
+            text-align: center;
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            font-size: 1.1rem !important;
+            padding: 0 !important;
+            margin: 0;
+            display: inline-block;
+            letter-spacing: 1px;
+        }
+        
+        /* 🌟 TÚI QUÀ MINI: Xóa viền đứt nét, xóa phông nền */
+        #mini_inventory_badge {
+            border: none !important;
+            background: transparent !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            display: flex !important;
+            align-items: center;
+        }
+        #mini_inventory_badge span:first-child { font-size: 1.2rem !important; }
+        #mini_inventory_count { font-size: 0.9rem !important; margin-left: 2px; }
+
+        /* 🔵 NÚT CHỌN ĐÁP ÁN CHUẨN SUPER APP */
+        .super-opt-btn {
+            background: rgba(255, 255, 255, 0.03) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            color: #fff !important;
+            border-radius: 12px !important;
+            transition: all 0.2s ease;
+            text-align: left;
+            padding: 12px 16px !important;
+            margin-bottom: 12px;
+            width: 100%;
+            min-height: 52px;
+            display: flex;
+            align-items: center;
+            font-size: 0.95rem;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .super-opt-btn:active { transform: scale(0.98); }
+        .super-opt-btn.selected { background: rgba(14, 165, 233, 0.15) !important; border-color: #0ea5e9 !important; box-shadow: 0 0 0 2px rgba(14,165,233,0.3) !important; }
+
+        /* 🔵 UI MẶC ĐỊNH (UI 1) */
+        .glass-quiz-container { background: #121416; border: 1px solid #2b3035; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); padding: 20px; color: #fff; }
+
+        /* 🟢 UI CHUYÊN SÂU (UI 2) */
+        .ui2-clinical-container { background: #121416; border-radius: 16px; border: 1px solid #2b3035; box-shadow: 0 4px 15px rgba(0,0,0,0.2); overflow: hidden; color: #fff; border-top: 4px solid #0ea5e9; }
+        .ui2-case-panel { background: rgba(0,0,0,0.2); padding: 20px; height: 100%; border-right: 1px solid rgba(255, 255, 255, 0.05); }
+
+        /* 🟠 UI THỰC HÀNH (UI 3) */
+        .ui3-lab-container { background: #121416; border-radius: 16px; border: 1px solid #2b3035; box-shadow: 0 4px 15px rgba(0,0,0,0.2); padding: 20px; color: #fff; border-top: 4px solid #f59e0b; }
+        .ui3-image-stage { background: #000; border-radius: 12px; padding: 10px; text-align: center; border: 1px solid #1e293b; margin-bottom: 20px; }
+
+        /* 🌟 MÀU ĐÁP ÁN ĐÚNG/SAI BỌC THÉP */
+        .ui2-option-btn.correct, .ui3-option-btn.correct, .glass-option-btn.correct, .correct { background: rgba(16, 185, 129, 0.15) !important; border-color: #10b981 !important; color: #10b981 !important; box-shadow: 0 0 0 2px rgba(16,185,129,0.3) !important;}
+        .ui2-option-btn.wrong, .ui3-option-btn.wrong, .glass-option-btn.wrong, .wrong { background: rgba(239, 68, 68, 0.15) !important; border-color: #ef4444 !important; color: #ef4444 !important; box-shadow: 0 0 0 2px rgba(239,68,68,0.3) !important;}
+
+        @media (max-width: 768px) {
+            .ui2-case-panel { border-right: none; border-bottom: 1px solid rgba(255, 255, 255, 0.05); }
+        }
+    `;
+    document.head.appendChild(style);
+}
+
+// 2. HÀM VẼ CÂU HỎI QUIZ (HỖ TRỢ 5 DẠNG CÂU HỎI + HOTSPOT + SẮP XẾP)
 window.render_quiz = function() {
     if (typeof window.update_progress_bar === 'function') {
         window.update_progress_bar();
@@ -14,7 +147,6 @@ window.render_quiz = function() {
         ui_template = subjectConfig[currentSub].ui_template || '1';
     }
 
-    // 🌟 ĐÃ THÊM: Sắp xếp ưu tiên cho Hotspot và Arrange
     const typeOrder = { 
         'single': 1, 'mcq': 1, 
         'true_false': 2, 'tf': 2, 'đúng sai': 2, 
@@ -29,7 +161,7 @@ window.render_quiz = function() {
     });
 
     let html = '';
-    let last_type = ''; 
+    let last_type = 'NONE';
     
     const headers = { 
         'single': { title: 'CHỌN CÂU ĐÚNG NHẤT', color: '#38bdf8' }, 
@@ -55,10 +187,12 @@ window.render_quiz = function() {
         
         if (currentType !== last_type) {
             const header = headers[currentType] || { title: 'CÂU HỎI', color: '#38bdf8' };
-            html += `<div class="fw-bold mt-0 mb-2 text-center p-2 animate__animated animate__fadeIn" 
-                          style="background: transparent !important; border: none !important; box-shadow: none !important; color: ${header.color}; font-size: 1.15rem; letter-spacing: 1px; text-transform: uppercase; text-shadow: 0 0 12px ${header.color}80;">
+            html += `<div class="fw-bold mb-2 text-center px-2 animate__animated animate__fadeIn" 
+                          style="background: transparent !important; border: none !important; box-shadow: none !important; color: ${header.color}; font-size: 1.05rem; letter-spacing: 1px; text-transform: uppercase;">
                           <i class="bi bi-layers-half me-2"></i>${header.title}
-                     </div>`;
+                     </div>
+                     <!-- KHỐI TẠO KHOẢNG TRỐNG ÉP BUỘC (Đẩy câu 1 ra xa 30px) -->
+                     <div style="height: 30px; width: 100%; display: block; background: transparent;"></div>`;
             last_type = currentType;
         }
 
@@ -79,10 +213,9 @@ window.render_quiz = function() {
             let fillCount = 0;
             questionContent = questionContent.replace(/\[\.\.\.\]/g, () => {
                 let cIdx = fillCount++; 
-                let inputStyle = ui_template === '2' 
-                    ? `width: 45px; background: rgba(20, 184, 166, 0.15); border: 1px solid #2dd4bf; color: #fff; box-shadow: 0 0 10px rgba(45, 212, 191, 0.5); outline: none; border-radius: 6px; padding: 2px;`
-                    : `width: 45px; background: rgba(14,165,233,0.15); border: 1px solid #38bdf8; color: #fff; box-shadow: 0 0 10px rgba(56, 189, 248, 0.5); outline: none; border-radius: 6px; padding: 2px;`;
-                return `<input type="text" class="mx-1 text-center fw-bold" oninput="this.style.width = ((this.value.length + 1) * 10) + 'px'; set_fill_v2(this, ${i}, ${cIdx})" style="${inputStyle}" placeholder="...">`;
+                // 🌟 BẢN VÁ: min-width 70px và Math.max để luôn giữ dáng đẹp, không co rúm khi focus
+                let inputStyle = `min-width: 70px; width: 70px; background: #1a1d20; border: 1px solid #38bdf8; color: #fff; outline: none; border-radius: 8px; padding: 4px 8px; text-align: center; box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: 0.2s; display: inline-block;`;
+                return `<input type="text" class="mx-1 fw-bold" oninput="this.style.width = Math.max(70, (this.value.length + 1) * 12) + 'px'; set_fill_v2(this, ${i}, ${cIdx})" style="${inputStyle}" placeholder="...">`;
             });
         }
 
@@ -96,7 +229,7 @@ window.render_quiz = function() {
         
         let hintHtml = "";
         if (hasHint) {
-            hintHtml = `<div id="hint_box_${i}" class="d-none mt-3 p-3 text-start shadow-sm" style="background: rgba(250, 204, 21, 0.1); border-left: 4px solid #facc15; border-radius: 12px; backdrop-filter: blur(5px); cursor: pointer;" onclick="this.classList.add('d-none'); document.getElementById('bulb_icon_${i}').classList.remove('d-none');">
+            hintHtml = `<div id="hint_box_${i}" class="d-none mt-3 p-3 text-start shadow-sm" style="background: rgba(250, 204, 21, 0.1); border-left: 4px solid #facc15; border-radius: 12px; cursor: pointer;" onclick="this.classList.add('d-none'); document.getElementById('bulb_icon_${i}').classList.remove('d-none');">
                             <div class="fw-bold mb-2" style="color: #facc15; font-size: 0.85rem; text-transform: uppercase;">💡 Giải thích</div>
                             <div style="font-size: 0.95rem; color: rgba(255,255,255,0.9); line-height: 1.6;">${formattedHint}</div>
                         </div>`;
@@ -105,7 +238,6 @@ window.render_quiz = function() {
         let mediaHtml = render_media_for_card(q);
         let optionsHtml = '';
 
-        // 🌟 XỬ LÝ HTML CHO HOTSPOT VÀ SẮP XẾP TẠI ĐÂY
         if (currentType === 'hotspot') {
             let pureImg = "";
             if (q.image) {
@@ -120,16 +252,13 @@ window.render_quiz = function() {
                 </div>
             </div>
             <div class="text-white-50 small mt-2 text-center"><i class="bi bi-hand-index-thumb text-info"></i> Hãy chạm vào vị trí chính xác trên hình ảnh.</div>`;
-            mediaHtml = ''; // Ẩn thẻ ảnh mặc định
+            mediaHtml = '';
         }
         else if (currentType === 'clip_listen') {
-            // 🌟 ĐÃ FIX: Bảo toàn nguyên vẹn URL của Supabase, chỉ cắt chữ 'clip_' nếu đó là ID Google Drive cũ
             let safeVideoUrl = "";
             if (q.image) {
                 safeVideoUrl = String(q.image).trim();
-                if (!safeVideoUrl.startsWith('http') && safeVideoUrl.startsWith('clip_')) {
-                    safeVideoUrl = safeVideoUrl.replace('clip_', '');
-                }
+                if (!safeVideoUrl.startsWith('http') && safeVideoUrl.startsWith('clip_')) safeVideoUrl = safeVideoUrl.replace('clip_', '');
             }
             
             let timeSteps = (q.a || q.answer || "").split("|||");
@@ -174,7 +303,6 @@ window.render_quiz = function() {
                         <div class="spinner-grow text-warning mb-2"></div>
                         <div class="text-warning small fw-bold">Đang tải phim...</div>
                     </div>
-                    <!-- Khung Video có sẵn thanh điều khiển Controls để iPad tự bấm Play -->
                     <video id="student_clip_vid_${i}" controls playsinline webkit-playsinline class="w-100 h-100 object-fit-contain" style="display: none;"></video>
                 </div>
                 
@@ -185,11 +313,10 @@ window.render_quiz = function() {
                 </div>
                 
                 <div id="audio_action_container_${i}">
-                    <button class="btn w-100 fw-bold shadow-lg rounded-pill py-2 fs-5" style="background: linear-gradient(135deg, #22c55e, #16a34a); color: white;" onclick="window.check_audio_order(${i}, this)">
+                    <button class="btn w-100 fw-bold shadow-lg rounded-pill py-3 fs-6 mt-1" style="background: linear-gradient(135deg, #10b981, #059669); color: white;" onclick="window.check_audio_order(${i}, this)">
                         <i class="bi bi-check-circle-fill me-2"></i> KIỂM TRA ĐÁP ÁN
                     </button>
                 </div>
-
                 <img src="x" onerror="if(typeof window.init_clip_listen_ui === 'function') window.init_clip_listen_ui(${i}, '${safeVideoUrl}')" style="display:none;">
             </div>`;
             mediaHtml = '';
@@ -199,56 +326,79 @@ window.render_quiz = function() {
             optionsHtml = `
             <div class="mt-3" id="arrange_box_${i}">
                 <div class="text-white-50 small mb-2"><i class="bi bi-sort-numeric-down text-warning"></i> Chạm vào các bước dưới đây theo đúng thứ tự quy trình:</div>
-                <div class="d-flex flex-wrap gap-2 mb-3 align-items-center" id="arrange_result_${i}" style="min-height: 45px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 8px; border: 1px dashed rgba(255,255,255,0.2);"></div>
+                <div class="d-flex flex-wrap gap-2 mb-3 align-items-center" id="arrange_result_${i}" style="min-height: 48px; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 12px; border: 1px dashed rgba(255,255,255,0.2);"></div>
                 <div class="d-flex flex-column gap-2" id="arrange_pool_${i}">
-                    ${optList.map((o, idx) => `<button class="btn text-start p-3 w-100 stat-card-hover" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color:#fff;" onclick="window.select_arrange(this, ${i}, '${String.fromCharCode(65+idx)}')"><span class="badge bg-secondary me-2">${String.fromCharCode(65+idx)}</span> ${o}</button>`).join('')}
+                    ${optList.map((o, idx) => `<button class="btn super-opt-btn" onclick="window.select_arrange(this, ${i}, '${String.fromCharCode(65+idx)}')"><span class="badge bg-dark border border-secondary text-info me-3 flex-shrink-0 d-flex align-items-center justify-content-center" style="width: 30px; height: 30px; border-radius: 50%;">${String.fromCharCode(65+idx)}</span> <span class="flex-grow-1 text-wrap" style="line-height: 1.4;">${o}</span></button>`).join('')}
                 </div>
                 <div class="text-end mt-2"><button class="btn btn-sm btn-outline-warning rounded-pill" onclick="window.reset_arrange(${i})"><i class="bi bi-arrow-counterclockwise"></i> Làm lại câu này</button></div>
             </div>`;
         }
+        // 🌟 BẢN VÁ: THIẾT KẾ KHOANH TRÒN (BORDER-RADIUS: 50%) VÀ KÍCH THƯỚC 30x30
         else if (currentType === 'single' || currentType === 'mcq') {
-            if (ui_template === '2') {
-                optionsHtml = `<div class="mt-2">` + (q.opts ? q.opts.map(o => {
+            let btnClass = ui_template === '2' ? 'ui2-option-btn' : (ui_template === '3' ? 'ui3-option-btn' : 'glass-option-btn');
+            
+            let optListHtml = (q.opts || []).map((o, optIdx) => {
+                let safeVal = encodeURIComponent(o).replace(/'/g, "%27");
+                let letter = String.fromCharCode(65 + optIdx);
+                return `
+                <button class="option-btn super-opt-btn ${btnClass}" onclick="set_ans(this, decodeURIComponent('${safeVal}'), ${i})">
+                    <div class="d-flex align-items-center w-100">
+                        <span class="badge bg-dark border border-secondary text-info me-3 flex-shrink-0 d-flex align-items-center justify-content-center" style="width: 30px; height: 30px; font-size: 0.9rem; border-radius: 50%;">${letter}</span>
+                        <span class="flex-grow-1 text-wrap" style="line-height: 1.4;">${parseVocab(o)}</span>
+                    </div>
+                </button>`;
+            }).join('');
+
+            if (ui_template === '3') {
+                optionsHtml = `<div class="row g-2 mt-3">${(q.opts || []).map((o, optIdx) => {
                     let safeVal = encodeURIComponent(o).replace(/'/g, "%27");
-                    return `<button class="option-btn w-100 text-start ui2-option-btn shadow-sm mb-3 p-3" onclick="set_ans(this, decodeURIComponent('${safeVal}'), ${i})">${parseVocab(o)}</button>`;
-                }).join('') : '') + `</div>`;
-            } else if (ui_template === '3') {
-                optionsHtml = `<div class="row g-2 mt-2">` + (q.opts ? q.opts.map(o => {
-                    let safeVal = encodeURIComponent(o).replace(/'/g, "%27");
-                    return `<div class="col-12 col-md-6"><button class="option-btn w-100 h-100 text-start ui3-option-btn p-3" onclick="set_ans(this, decodeURIComponent('${safeVal}'), ${i})">${parseVocab(o)}</button></div>`;
-                }).join('') : '') + `</div>`;
+                    let letter = String.fromCharCode(65 + optIdx);
+                    return `<div class="col-12 col-md-6">
+                        <button class="option-btn super-opt-btn ui3-option-btn h-100 mb-0" onclick="set_ans(this, decodeURIComponent('${safeVal}'),${i})">
+                            <div class="d-flex align-items-center w-100">
+                                <span class="badge bg-dark border border-warning text-warning me-2 flex-shrink-0 d-flex align-items-center justify-content-center" style="width: 30px; height: 30px; font-size: 0.9rem; border-radius: 50%;">${letter}</span>
+                                <span class="flex-grow-1 text-wrap" style="line-height: 1.4;">${parseVocab(o)}</span>
+                            </div>
+                        </button>
+                    </div>`;
+                }).join('')}</div>`;
             } else {
-                optionsHtml = `<div class="mt-3">` + (q.opts ? q.opts.map(o => {
-                    let safeVal = encodeURIComponent(o).replace(/'/g, "%27");
-                    return `<button class="option-btn w-100 text-start glass-option-btn fw-bold p-3 mb-2" style="border-radius: 14px; font-size: 1rem;" onclick="set_ans(this, decodeURIComponent('${safeVal}'), ${i})">${parseVocab(o)}</button>`;
-                }).join('') : '') + `</div>`;
+                optionsHtml = `<div class="mt-3">${optListHtml}</div>`;
             }
         } 
+        // 🌟 FIX LỖI NÚT ĐÚNG/SAI: Tăng khoảng cách (gap) giữa 2 nút cho thoáng hơn (đổi g-3 thành g-4)
         else if (currentType === 'true_false' || currentType === 'tf' || currentType === 'đúng sai') {
-            if (ui_template === '2') {
-                optionsHtml = `<div class="d-flex gap-2 justify-content-center mt-3"><button class="option-btn flex-fill text-center ui2-option-btn fw-bold text-success p-3" onclick="set_ans(this, 'đúng', ${i})">ĐÚNG</button><button class="option-btn flex-fill text-center ui2-option-btn fw-bold text-danger p-3" onclick="set_ans(this, 'sai', ${i})">SAI</button></div>`;
-            } else if (ui_template === '3') {
-                optionsHtml = `<div class="d-flex gap-3 justify-content-center mt-3"><button class="option-btn flex-fill text-center ui3-option-btn fw-bold text-success p-3" onclick="set_ans(this, 'đúng', ${i})">ĐÚNG</button><button class="option-btn flex-fill text-center ui3-option-btn fw-bold text-danger p-3" onclick="set_ans(this, 'sai', ${i})">SAI</button></div>`;
-            } else {
-                optionsHtml = `<div class="d-flex gap-3 justify-content-center mt-3"><button class="option-btn flex-fill text-center glass-option-btn fw-bold p-3" onclick="set_ans(this, 'đúng', ${i})" style="color: #4ade80 !important; font-size: 1.1rem; border-radius: 14px;">ĐÚNG</button><button class="option-btn flex-fill text-center glass-option-btn fw-bold p-3" onclick="set_ans(this, 'sai', ${i})" style="color: #f87171 !important; font-size: 1.1rem; border-radius: 14px;">SAI</button></div>`;
-            }
+            let btnClass = ui_template === '2' ? 'ui2-option-btn' : (ui_template === '3' ? 'ui3-option-btn' : 'glass-option-btn');
+            optionsHtml = `
+            <div class="row g-4 mt-3">
+                <div class="col-6">
+                    <button class="option-btn super-opt-btn ${btnClass} justify-content-center w-100 fw-bold m-0 shadow-sm" style="min-height: 60px; font-size: 1.1rem; border-radius: 12px;" onclick="set_ans(this, 'đúng', ${i})">
+                        ĐÚNG
+                    </button>
+                </div>
+                <div class="col-6">
+                    <button class="option-btn super-opt-btn ${btnClass} justify-content-center w-100 fw-bold m-0 shadow-sm" style="min-height: 60px; font-size: 1.1rem; border-radius: 12px;" onclick="set_ans(this, 'sai', ${i})">
+                        SAI
+                    </button>
+                </div>
+            </div>`;
         }
 
         // =================================================================
-        // 🛠 LẮP RÁP KHUNG GIAO DIỆN CHUẨN
+        // 🛠 LẮP RÁP KHUNG GIAO DIỆN (CÓ THÊM mobile-mx-half TRÀN VIỀN)
         // =================================================================
-        if (ui_template === '2') {
-            let isEnglishSubject = (window.current_subject || '').toLowerCase().includes('tienganh');
-            let isEnglishMode = isEnglishSubject || hasVocabTag;
-            
-            let leftTitle = isEnglishMode ? '<i class="bi bi-translate me-1"></i> NỘI DUNG NGỮ LIỆU' : (currentType==='hotspot'||currentType==='arrange'||currentType==='sắp xếp') ? '<i class="bi bi-joystick me-1"></i> TƯƠNG TÁC LÂM SÀNG' : '<i class="bi bi-clipboard2-pulse me-1"></i> THÔNG TIN LÂM SÀNG';
-            let rightTitle = isEnglishMode ? '<i class="bi bi-patch-question me-1"></i> YÊU CẦU & CÂU HỎI' : 'CHỌN ĐÁP ÁN:';
+        let isEnglishSubject = (window.current_subject || '').toLowerCase().includes('tienganh');
+        let isEnglishMode = isEnglishSubject || hasVocabTag;
+        
+        let leftTitle = isEnglishMode ? '<i class="bi bi-translate me-1"></i> NGỮ LIỆU' : (currentType==='hotspot'||currentType==='arrange'||currentType==='sắp xếp') ? '<i class="bi bi-joystick me-1"></i> TƯƠNG TÁC' : '<i class="bi bi-clipboard2-pulse me-1"></i> LÂM SÀNG';
+        let rightTitle = isEnglishMode ? '<i class="bi bi-patch-question me-1"></i> CÂU HỎI' : 'CHỌN ĐÁP ÁN:';
 
+        if (ui_template === '2') {
             if (isFillInBlank || currentType==='hotspot' || currentType==='arrange' || currentType==='sắp xếp') {
-                html += `<div class="ui2-clinical-container question-card-tracker mb-4 animate__animated animate__fadeInUp" data-q-idx="${i}" style="animation-delay: ${i * 0.03}s">
+                html += `<div class="ui2-clinical-container mobile-mx-half question-card-tracker mb-4 animate__animated animate__fadeInUp" data-q-idx="${i}" style="animation-delay: ${i * 0.03}s">
                             <div class="p-4 ui2-case-panel" style="border-radius: 12px; background: rgba(0,0,0,0.1) !important;">
                                 <div class="mb-3 d-flex align-items-center">
-                                    <span class="badge text-white me-2" style="background: rgba(20, 184, 166, 0.4); border: 1px solid rgba(20, 184, 166, 0.8); font-size: 0.8rem; padding: 6px 8px;">Câu ${i + 1}</span>
+                                    <span class="badge text-white me-2" style="background: rgba(14, 165, 233, 0.2); border: 1px solid rgba(14, 165, 233, 0.5); font-size: 0.8rem; padding: 6px 8px;">Câu ${i + 1}</span>
                                     <span class="text-info fw-bold" style="font-size: 0.85rem; letter-spacing: 1px;">${leftTitle}</span>
                                     ${toolsHtml}
                                 </div>
@@ -259,11 +409,11 @@ window.render_quiz = function() {
                             </div>
                          </div>`;
             } else {
-                html += `<div class="ui2-clinical-container question-card-tracker mb-4 animate__animated animate__fadeInUp" data-q-idx="${i}" style="animation-delay: ${i * 0.03}s">
+                html += `<div class="ui2-clinical-container mobile-mx-half question-card-tracker mb-4 animate__animated animate__fadeInUp" data-q-idx="${i}" style="animation-delay: ${i * 0.03}s">
                             <div class="row g-0 h-100">
                                 <div class="col-12 col-md-7 ui2-case-panel p-4">
                                     <div class="mb-3 d-flex align-items-center">
-                                        <span class="badge text-white me-2" style="background: rgba(20, 184, 166, 0.4); border: 1px solid rgba(20, 184, 166, 0.8); font-size: 0.8rem; padding: 6px 8px;">Câu ${i + 1}</span>
+                                        <span class="badge text-white me-2" style="background: rgba(14, 165, 233, 0.2); border: 1px solid rgba(14, 165, 233, 0.5); font-size: 0.8rem; padding: 6px 8px;">Câu ${i + 1}</span>
                                         <span class="text-info fw-bold" style="font-size: 0.85rem; letter-spacing: 1px;">${leftTitle}</span>
                                         ${toolsHtml}
                                     </div>
@@ -273,7 +423,7 @@ window.render_quiz = function() {
                                 </div>
                                 <div class="col-12 col-md-5 p-4 d-flex flex-column justify-content-center" style="background: rgba(255,255,255,0.02); border-left: 1px solid rgba(255,255,255,0.05);">
                                     <div class="mb-3 pb-2 border-bottom border-secondary border-opacity-25">
-                                        <h6 class="fw-bold text-uppercase m-0" style="font-size: 0.8rem; color: #2dd4bf;">${rightTitle}</h6>
+                                        <h6 class="fw-bold text-uppercase m-0" style="font-size: 0.8rem; color: #0ea5e9;">${rightTitle}</h6>
                                     </div>
                                     ${optionsHtml}
                                 </div>
@@ -283,7 +433,7 @@ window.render_quiz = function() {
         } 
         else if (ui_template === '3') {
             let stageMedia = mediaHtml.trim() !== '' ? `<div class="ui3-image-stage shadow-lg mb-4 mt-2">${mediaHtml}</div>` : '';
-            html += `<div class="ui3-lab-container question-card-tracker mb-4 animate__animated animate__fadeInUp" data-q-idx="${i}" style="animation-delay: ${i * 0.03}s">
+            html += `<div class="ui3-lab-container mobile-mx-half question-card-tracker mb-4 animate__animated animate__fadeInUp" data-q-idx="${i}" style="animation-delay: ${i * 0.03}s">
                         <div class="mb-2">
                             <span class="badge border fw-bold me-2" style="background: rgba(255,255,255,0.05); color: #f59e0b; border-color: #f59e0b !important; font-size: 0.8rem; padding: 6px 8px;">Câu ${i + 1}</span>
                             ${toolsHtml}
@@ -297,7 +447,7 @@ window.render_quiz = function() {
                      </div>`;
         } 
         else {
-            html += `<div class="glass-quiz-container question-card-tracker p-3 mb-4 animate__animated animate__fadeInUp" data-q-idx="${i}" style="animation-delay: ${i * 0.03}s">`;
+            html += `<div class="glass-quiz-container mobile-mx-half question-card-tracker mb-4 animate__animated animate__fadeInUp" data-q-idx="${i}" style="animation-delay: ${i * 0.03}s">`;
             html += `<div class="mb-3" style="font-size: 1.05rem; color: #fff; line-height: 1.6; word-break: break-word;">
                         <span class="badge border fw-bold me-2" style="background: rgba(255,255,255,0.1); color: ${bloomColor}; border-color: ${bloomColor} !important; font-size: 0.8rem; padding: 6px 8px;">Câu ${i + 1}</span>
                         <span class="fw-bold text-white">${questionContent}</span>
@@ -309,6 +459,8 @@ window.render_quiz = function() {
             html += `</div>`; 
         }
     });
+    
+    // 🌟 KHÔNG sinh thêm nút Nộp bài bằng JS nữa. Trả lại quyền hiển thị cho nút Nộp bài có sẵn của index.html.
     
     window.scrollTo({ top: 0, behavior: 'instant' });
     document.getElementById('quiz_area').innerHTML = html;
@@ -328,48 +480,6 @@ window.render_quiz = function() {
         }
     }, 500);
 };
-    // =========================================================================
-// 🚀 GIAO DIỆN LÀM BÀI QUIZ (TÍCH HỢP 3 MẪU UI ĐỘNG - DYNAMIC TEMPLATES)
-// =========================================================================
-
-// Hàm phụ: Nhúng CSS cho 2 giao diện mới (Chỉ chạy 1 lần)
-function inject_dynamic_ui_styles() {
-    if (document.getElementById('dynamic_ui_styles')) return;
-    let style = document.createElement('style');
-    style.id = 'dynamic_ui_styles';
-    style.innerHTML = `
-        /* 🟢 UI 2: CHUYÊN SÂU (CLINICAL CASE) - Kính mờ Glassmorphism Tone Teal */
-        .ui2-clinical-container { background: rgba(15, 118, 110, 0.15); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-radius: 16px; border: 1px solid rgba(20, 184, 166, 0.3); box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2); overflow: hidden; color: #fff; }
-        .ui2-case-panel { background: rgba(0, 0, 0, 0.2); padding: 25px; height: 100%; border-right: 1px solid rgba(255, 255, 255, 0.1); }
-        
-        /* 🌟 Nút đáp án UI 2: Chuyển sang Glassmorphism */
-        .ui2-option-btn { background: rgba(255, 255, 255, 0.05) !important; border: 1px solid rgba(20, 184, 166, 0.4) !important; color: #fff !important; border-radius: 8px; transition: 0.2s; padding: 12px 15px; width: 100%; text-align: left; font-weight: 500 !important; }
-        .ui2-option-btn:hover { border-color: #2dd4bf !important; background: rgba(20, 184, 166, 0.2) !important; color: #fff !important; }
-        .ui2-option-btn.selected { background: rgba(20, 184, 166, 0.6) !important; color: #ffffff !important; border-color: #2dd4bf !important; }
-        
-        /* 🟠 UI 3: THỰC HÀNH (DARK LAB) - Nền đen sâu, viền Cam hổ phách */
-        .ui3-lab-container { background: #0f172a; border-radius: 16px; border: 1px solid #334155; box-shadow: 0 20px 50px rgba(0,0,0,0.5); padding: 25px; color: #e2e8f0; border-top: 5px solid #f59e0b; }
-        .ui3-image-stage { background: #000; border-radius: 12px; padding: 15px; text-align: center; border: 1px solid #1e293b; }
-        
-        /* Đảm bảo UI 3 cũng không bị dính CSS cũ */
-        .ui3-option-btn { background: #1e293b !important; border: 1px solid #475569 !important; color: #cbd5e1 !important; border-radius: 10px; transition: all 0.2s; padding: 12px 15px; width: 100%; text-align: left; font-weight: 500 !important; }
-        .ui3-option-btn:hover { background: #334155 !important; border-color: #f59e0b !important; color: #ffffff !important; }
-        .ui3-option-btn.selected { background: rgba(245, 158, 11, 0.2) !important; border-color: #f59e0b !important; color: #facc15 !important; }
-
-        /* 🌟 FIX: ĐÃ ÉP QUYỀN LỰC CAO NHẤT CHO MÀU XANH/ĐỎ TRÊN MỌI GIAO DIỆN */
-        .ui2-option-btn.correct, .ui3-option-btn.correct, .glass-option-btn.correct, .correct { background: rgba(34, 197, 94, 0.2) !important; border-color: #4ade80 !important; color: #4ade80 !important; }
-        .ui2-option-btn.wrong, .ui3-option-btn.wrong, .glass-option-btn.wrong, .wrong { background: rgba(239, 68, 68, 0.2) !important; border-color: #f87171 !important; color: #f87171 !important; }
-
-        @media (max-width: 768px) {
-            .ui2-case-panel { border-right: none; border-bottom: 1px solid rgba(255, 255, 255, 0.1); }
-            .ui2-clinical-container .border-start { border-left: none !important; }
-        }
-    `;
-    document.head.appendChild(style);
-}
-// =========================================================================
-// 🎯 HÀM CHỌN ĐÁP ÁN (TÍCH HỢP HỆ THỐNG COMBO, TÚI ĐỒ & ÂM THANH KILLSTREAK)
-// =========================================================================
 // =========================================================================
 // 🎯 HÀM CHỌN ĐÁP ÁN (TÍCH HỢP HỆ THỐNG COMBO, TÚI ĐỒ & ÂM THANH KILLSTREAK)
 // =========================================================================
