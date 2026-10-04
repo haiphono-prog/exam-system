@@ -6094,9 +6094,9 @@ window.show_exam_review_modal = function(questionList, onConfirmCallback) {
     <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center review-sheet-wrapper animate__animated animate__fadeIn" style="background: #212529; z-index: 100000;">
         <div class="d-flex flex-column w-100 review-mobile-sheet animate__animated animate__zoomIn" style="max-width: 800px; background: #212529 !important; overflow: hidden;">
             
-            <!-- HEADER TÀNG HÌNH ĐỒNG BỘ -->
+            <!-- 🌟 HEADER TÀNG HÌNH ĐỒNG BỘ (ĐÃ THÊM HIỆU ỨNG THOÁT MƯỢT) -->
             <div class="p-3 border-bottom flex-shrink-0 d-flex align-items-center" style="border-color: rgba(255,255,255,0.05) !important; background: transparent;">
-                <button class="btn btn-sm text-light fw-bold d-flex align-items-center p-1 shadow-none bg-transparent border-0" onclick="document.getElementById('${modalId}').remove()">
+                <button class="btn btn-sm text-light fw-bold d-flex align-items-center p-1 shadow-none bg-transparent border-0" onclick="let m = document.getElementById('${modalId}'); m.classList.replace('animate__fadeIn', 'animate__fadeOut'); m.children[0].classList.replace('animate__zoomIn', 'animate__slideOutDown'); setTimeout(() => m.remove(), 250)">
                     <i class="bi bi-chevron-left fs-4"></i><span class="d-none d-md-inline ms-1">Thoát</span>
                 </button>
                 
@@ -6332,9 +6332,9 @@ window.show_online_exam_modal = async function(defaultTime) {
                 </form>
             </div>
 
-            <!-- FOOTER TRÀN VIỀN -->
+            <!-- 🌟 FOOTER TRÀN VIỀN CÓ HIỆU ỨNG THOÁT SIÊU MƯỢT (FADE OUT) -->
             <div class="p-0 border-top flex-shrink-0 d-flex w-100" style="border-color: rgba(255,255,255,0.05) !important; background: transparent;">
-                <button class="btn py-3 fw-bold flex-grow-1 d-flex justify-content-center align-items-center text-danger bg-transparent border-0 border-end" style="border-color: rgba(255,255,255,0.05) !important; border-radius: 0;" onclick="document.getElementById('${modalId}').remove()">
+                <button class="btn py-3 fw-bold flex-grow-1 d-flex justify-content-center align-items-center text-danger bg-transparent border-0 border-end" style="border-color: rgba(255,255,255,0.05) !important; border-radius: 0;" onclick="let m = document.getElementById('${modalId}'); m.classList.replace('animate__fadeIn', 'animate__fadeOut'); m.children[0].classList.replace('animate__zoomIn', 'animate__slideOutDown'); setTimeout(() => m.remove(), 250)">
                     <i class="bi bi-x-lg fs-4 fs-md-5"></i> <span class="d-none d-md-inline ms-2">HỦY BỎ</span>
                 </button>
                 <button class="btn py-3 fw-bold flex-grow-1 d-flex justify-content-center align-items-center text-warning bg-transparent border-0" style="border-radius: 0;" onclick="window.submit_online_exam_to_server()">
