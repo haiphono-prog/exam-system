@@ -38,6 +38,21 @@
     <!-- 🌟 BẢN VÁ TOÀN CẦU V2: SIÊU MƯỢT, KHÔNG BỊ KHUẤT ĐÁY -->
     <!-- ========================================================= -->
     <style>
+        /* 🌟 ÉP NÚT NHẬN CLICK NGAY LẬP TỨC & NÉ VÙNG TRANH CHẤP CỦA TRÌNH DUYỆT */
+            #submit_btn, 
+            #exit_review_btn,
+            #admin_dashboard .card-footer {
+                /* Nâng nút lên cao hơn viền đáy một chút, tự động tính toán viền màn hình (tai thỏ/home bar) */
+                bottom: max(30px, env(safe-area-inset-bottom)) !important; 
+                /* Chặn trình duyệt nội suy thao tác, ép nhận Click tức thì */
+                touch-action: manipulation !important; 
+                z-index: 999999 !important;
+            }
+            
+            /* Tắt luôn tính năng nháy đúp phóng to (Double-tap to zoom) gây trễ 300ms ở TẤT CẢ các nút */
+            button, .btn, .class-pill, .student-subj-card {
+                touch-action: manipulation !important;
+            }
         @media (max-width: 767.98px) {
             /* 1. Trị dứt điểm lướt bị rít: Bật gia tốc phần cứng của thiết bị */
             .overflow-auto, 
