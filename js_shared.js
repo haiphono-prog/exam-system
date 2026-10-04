@@ -6066,19 +6066,24 @@ window.show_exam_review_modal = function(questionList, onConfirmCallback) {
 
     let html = `
     <style>
-        /* ÉP FULL-SCREEN NGUYÊN KHỐI TRÊN MOBILE */
+        /* ĐÃ VÁ LỖI KHUẤT ĐÁY VÀ LAG CUỘN TRÊN DI ĐỘNG */
         @media (max-width: 767.98px) {
             .review-sheet-wrapper { 
                 padding: 0 !important; 
-                align-items: flex-start !important; 
             }
             .review-mobile-sheet { 
-                height: 100vh !important; 
-                max-height: 100vh !important; 
+                height: 100dvh !important; 
+                max-height: 100dvh !important; 
                 border-radius: 0 !important; 
                 border: none !important; 
                 margin: 0 !important;
                 max-width: 100vw !important;
+                display: flex !important;
+                flex-direction: column !important;
+            }
+            #review_q_list {
+                -webkit-overflow-scrolling: touch !important; /* Chống lag cảm ứng */
+                padding-bottom: 20px !important; 
             }
         }
         .review-q-card { transition: 0.2s; border: 1px solid #343a40; background: rgba(255,255,255,0.02); cursor: pointer; }
@@ -6194,16 +6199,22 @@ window.show_online_exam_modal = async function(defaultTime) {
 
     let html = `
     <style>
-        /* ÉP FULL-SCREEN NGUYÊN KHỐI TRÊN MOBILE */
+        /* ĐÃ VÁ LỖI KHUẤT ĐÁY VÀ LAG CUỘN TRÊN DI ĐỘNG */
         @media (max-width: 767.98px) {
-            .create-sheet-wrapper { padding: 0 !important; align-items: flex-start !important; }
+            .create-sheet-wrapper { padding: 0 !important; }
             .create-mobile-sheet { 
-                height: 100vh !important; 
-                max-height: 100vh !important; 
+                height: 100dvh !important; 
+                max-height: 100dvh !important; 
                 border-radius: 0 !important; 
                 border: none !important; 
                 margin: 0 !important;
                 max-width: 100vw !important;
+                display: flex !important;
+                flex-direction: column !important;
+            }
+            .custom-scrollbar {
+                -webkit-overflow-scrolling: touch !important; /* Chống lag cảm ứng */
+                padding-bottom: 20px !important;
             }
         }
         .dark-input { background: rgba(0,0,0,0.2) !important; color: #fff !important; border: 1px solid rgba(255,255,255,0.1) !important; border-radius: 8px; font-size: 0.9rem; padding: 8px 12px; }
