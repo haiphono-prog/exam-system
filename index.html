@@ -314,9 +314,9 @@
         <!-- Nơi JS bơm câu hỏi vào -->
         <div id="quiz_area" style="display:none; width: 100%;"></div>
         
-        <!-- Nút Nộp Bài Tràn Viền Đáy -->
-        <div id="submit_btn" style="display:none;" class="mt-4 pt-4 border-top border-secondary text-center mb-0 pb-0 w-100">
-            <button class="btn w-100 fw-bold shadow-lg d-flex align-items-center justify-content-center" style="background: #ef4444; color: #fff; height: 56px; border-radius: 12px; font-size: 1.05rem; letter-spacing: 1px;" onclick="submit_final()">
+        <!-- 🌟 NÚT NỘP BÀI NỔI CỐ ĐỊNH TẠI ĐÁY (LUÔN BÁM THEO MÀN HÌNH) -->
+        <div id="submit_btn" style="display:none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 1040; width: 90%; max-width: 400px; padding: 0 10px;">
+            <button class="btn w-100 fw-bold shadow-lg d-flex align-items-center justify-content-center animate__animated animate__fadeInUp" style="background: rgba(239, 68, 68, 0.95); backdrop-filter: blur(10px); color: #fff; height: 56px; border-radius: 50px; font-size: 1.05rem; letter-spacing: 1px; border: 2px solid #fca5a5;" onclick="submit_final()">
                 <i class="bi bi-check2-circle fs-4 me-2"></i> KẾT THÚC & NỘP BÀI
             </button>
         </div>
