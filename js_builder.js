@@ -1,7 +1,8 @@
 // =========================================================================
-// ✍️ MODULE TRẠM DỊCH THUẬT & THÊM CÂU HỎI
+// ✍️ MODULE TRẠM DỊCH THUẬT & THÊM CÂU HỎI (UI SUPER APP - V8 FULL TRÀN VIỀN)
 // =========================================================================
 window.trans_sentences_data = [];
+window.single_trans_timers = {}; 
 
 window.openBuilderModule = function() {
     if (typeof closeReelsModule === 'function') closeReelsModule();
@@ -11,57 +12,99 @@ window.openBuilderModule = function() {
     if (!wrapper) {
         wrapper = document.createElement('div');
         wrapper.id = 'module_builder_wrapper';
-        wrapper.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 100005; overflow-y: auto; background-color: rgba(15, 23, 42, 0.95);  padding: 15px;';
+        
+        wrapper.className = 'position-fixed w-100 animate__animated animate__fadeInUp';
+        wrapper.style.cssText = 'top: 0; bottom: 0; left: 0; right: 0; background: #121212; z-index: 99999; overflow: hidden; display: none; flex-direction: column;';
         
         wrapper.innerHTML = `
-        <div class="glass-panel p-3 shadow-sm mx-auto d-flex flex-column" style="max-width: 1200px; border-radius: 16px; border: 1px solid rgba(56, 189, 248, 0.3); background: rgba(30, 41, 59, 0.85); height: 95vh;">
-            <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2" style="border-color: #2a2a2a !important;">
-                <h6 class="fw-bold text-info m-0"><i class="bi bi-translate me-2"></i>TRẠM DỊCH THUẬT & BÓC TÁCH CÂU</h6>
-                <button class="btn-close btn-close-white" onclick="document.getElementById('module_builder_wrapper').style.display='none'; document.body.style.overflow='';"></button>
-            </div>
+        <style>
+            .no-scrollbar::-webkit-scrollbar { display: none !important; }
+            .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
             
-            <div class="row g-3 mb-3">
-                <div class="col-md-6 d-flex flex-column">
-                    <label class="text-info small fw-bold mb-1">VĂN BẢN GỐC (Dán Tiếng Anh/Việt vào đây)</label>
-                    <textarea id="raw_trans_input" class="form-control bg-dark text-white flex-grow-1 custom-scrollbar" style="resize:none; border-radius:12px; min-height: 150px; border: 1px solid rgba(255,255,255,0.2);" placeholder="Dán văn bản vào đây..." oninput="window.auto_translate_on_type()"></textarea>
+            .editable-box {
+                min-height: 50px; 
+                max-height: 250px; 
+                overflow-y: auto; 
+                word-break: break-word; 
+                white-space: pre-wrap; 
+                outline: none !important; 
+                box-shadow: none !important;
+                transition: background 0.2s;
+                font-size: 1rem;
+            }
+            .editable-box:focus { background: rgba(14, 165, 233, 0.05) !important; }
+        </style>
+
+        <!-- HEADER -->
+        <div class="d-flex px-2 py-2 border-bottom border-secondary bg-dark flex-shrink-0 align-items-center" style="padding-top: max(env(safe-area-inset-top), 0.5rem) !important;">
+            <button type="button" onclick="document.getElementById('module_builder_wrapper').style.display='none'; document.body.style.overflow='';" class="btn btn-sm text-light fw-bold d-flex align-items-center p-2 bg-transparent border-0 shadow-none position-relative" style="z-index: 1050;">
+                <i class="bi bi-chevron-left fs-4"></i><span class="d-none d-md-inline ms-1">Thoát</span>
+            </button>
+            <h6 class="fw-bold mb-0 text-truncate flex-grow-1 text-center text-info" style="letter-spacing: 0.5px; font-size: 1.1rem; margin-right: 40px;">
+                TRẠM DỊCH & BÓC TÁCH
+            </h6>
+        </div>
+
+        <!-- BODY: Ẩn thanh cuộn -->
+        <div class="flex-grow-1 overflow-auto no-scrollbar bg-black d-flex flex-column pb-4">
+            
+            <!-- VĂN BẢN GỐC & DỊCH TỔNG QUAN -->
+            <div class="row g-0 flex-shrink-0">
+                <div class="col-md-6 border-bottom border-secondary">
+                    <div class="d-flex flex-column h-100 bg-dark position-relative">
+                        <div class="badge bg-secondary bg-opacity-50 text-info position-absolute top-0 start-0 m-2 ms-3" style="font-size:0.7rem; z-index:2;">VĂN BẢN GỐC</div>
+                        <textarea id="raw_trans_input" class="form-control border-0 bg-transparent text-white px-3 py-4 pt-5 no-scrollbar flex-grow-1 shadow-none" style="resize:none; min-height: 140px; border-radius: 0; font-size: 1rem;" placeholder="Dán văn bản vào đây..." oninput="window.auto_translate_on_type()"></textarea>
+                    </div>
                 </div>
-                <div class="col-md-6 d-flex flex-column">
-                    <label class="text-warning small fw-bold mb-1">BẢN DỊCH TỔNG (AI Tự dịch)</label>
-                    <textarea id="full_trans_output" class="form-control bg-dark text-warning flex-grow-1 custom-scrollbar" style="resize:none; border-radius:12px; min-height: 150px; border: 1px solid rgba(255,255,255,0.2);"></textarea>
+                <div class="col-md-6 border-bottom border-secondary">
+                    <div class="d-flex flex-column h-100 bg-dark position-relative">
+                        <div class="badge bg-secondary bg-opacity-50 text-warning position-absolute top-0 start-0 m-2 ms-3" style="font-size:0.7rem; z-index:2;">BẢN DỊCH AI</div>
+                        <textarea id="full_trans_output" class="form-control border-0 bg-transparent text-warning px-3 py-4 pt-5 no-scrollbar flex-grow-1 shadow-none" style="resize:none; min-height: 140px; border-radius: 0; font-size: 1rem;" placeholder="Kết quả tự dịch..." readonly></textarea>
+                    </div>
                 </div>
             </div>
 
-            <div class="d-flex justify-content-between align-items-center mb-2 px-1">
-                <div class="text-white-50 fw-bold small">BẢNG BÓC TÁCH CHI TIẾT (Click vào chữ để sửa)</div>
-                <div class="d-flex gap-2 flex-wrap justify-content-end">
-                    <button class="btn btn-sm btn-warning fw-bold shadow text-dark" onclick="window.save_full_paragraph()"><i class="bi bi-file-earmark-text-fill me-1"></i> LƯU NGUYÊN ĐOẠN</button>
-                    <button class="btn btn-sm btn-success fw-bold shadow" onclick="window.save_all_sentences()"><i class="bi bi-cloud-arrow-up-fill me-1"></i> LƯU TẤT CẢ CÂU</button>
+            <!-- BẢNG BÓC TÁCH CHI TIẾT (XÓA PADDING ĐỂ TRÀN VIỀN 100%) -->
+            <div class="d-flex flex-column flex-grow-1 mt-3">
+                <div class="d-flex justify-content-between align-items-center mb-3 px-3">
+                    <div class="text-white fw-bold"><i class="bi bi-collection-fill text-info me-2"></i>THẺ BÓC TÁCH</div>
+                    <span class="badge bg-dark border border-secondary text-white-50 fw-normal">Vuốt để xem • Sửa tự dịch</span>
+                </div>
+                
+                <!-- CONTAINER CHỨA CÁC CARD -->
+                <div id="trans_table_body" class="d-flex flex-column gap-3 pb-3 w-100">
+                    <div class="text-center text-white-50 py-5 bg-dark border-top border-bottom border-secondary w-100 shadow-sm">Chưa có dữ liệu bóc tách</div>
                 </div>
             </div>
+        </div>
 
-            <div class="table-responsive custom-scrollbar flex-grow-1 border rounded" style="border-color: #2a2a2a !important; background: rgba(0,0,0,0.3);">
-                <table class="table table-borderless text-white mb-0" style="min-width: 600px; --bs-table-bg: transparent;">
-                    <thead style="background: rgba(15, 23, 42, 0.95); position: sticky; top: 0; z-index: 10;">
-                        <tr class="border-bottom" style="border-color: rgba(56, 189, 248, 0.3) !important;">
-                            <th style="width: 5%;">STT</th><th style="width: 45%;">CÂU GỐC</th><th style="width: 45%;">BẢN DỊCH</th><th style="width: 5%;">XÓA</th>
-                        </tr>
-                    </thead>
-                    <tbody id="trans_table_body">
-                        <tr><td colspan="4" class="text-center text-white-50 py-5">Chưa có dữ liệu bóc tách</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>`;
+        <!-- FOOTER: Nút chốt đáy -->
+        <div class="d-flex w-100 bg-dark border-top border-secondary flex-shrink-0" style="padding-bottom: env(safe-area-inset-bottom); position: relative; z-index: 1050;">
+            <button type="button" onclick="window.save_full_paragraph()" class="btn py-3 fw-bold flex-grow-1 d-flex justify-content-center align-items-center text-warning bg-dark border-0 border-end border-secondary rounded-0" style="letter-spacing: 0.5px;">
+                <i class="bi bi-file-earmark-text-fill fs-5"></i> 
+                <span class="ms-2 d-none d-sm-inline">LƯU ĐOẠN</span>
+                <span class="ms-2 d-inline d-sm-none">LƯU ĐOẠN</span>
+            </button>
+            <button type="button" onclick="window.save_all_sentences()" class="btn py-3 fw-bold flex-grow-1 d-flex justify-content-center align-items-center text-success bg-dark border-0 rounded-0" style="letter-spacing: 0.5px;">
+                <i class="bi bi-cloud-arrow-up-fill fs-5"></i> 
+                <span class="ms-2 d-none d-sm-inline">LƯU TẤT CẢ CÂU</span>
+                <span class="ms-2 d-inline d-sm-none">LƯU CÂU</span>
+            </button>
+        </div>
+        `;
         document.body.appendChild(wrapper);
     }
     
-    wrapper.style.display = 'block';
+    wrapper.style.display = 'flex'; 
     document.body.style.overflow = 'hidden';
     document.getElementById('fab_menu_items').classList.add('d-none');
     
-    // Tự điền số bài/tên bài đang học
     if(window.selected_lessons_text) window.show_toast("📍 Đang thao tác trên Bài: " + window.selected_lessons_text);
 };
+
+// =========================================================================
+// LOGIC DỊCH THUẬT & RENDER GIAO DIỆN
+// =========================================================================
 
 window.process_split_sentences = async function() {
     let rawText = document.getElementById('raw_trans_input').value.trim();
@@ -71,20 +114,15 @@ window.process_split_sentences = async function() {
         return;
     }
     
-    // 🌟 TỰ ĐỘNG NHẬN DIỆN NGÔN NGỮ (Nhận diện dấu Tiếng Việt)
     let isVietnamese = /[àáãạảăắằẳẵặâấầẩẫậèéẹẻẽêềếểễệđìíĩỉịòóõọỏôốồổỗộơớờởỡợùúũụủưứừửữựỳýỹỷỵ]/i.test(rawText);
     let targetLang = isVietnamese ? 'en' : 'vi'; 
 
-    // 🌟 CÔNG THỨC BÓC TÁCH MỚI: Cắt chuẩn xác mọi dấu . ! ? ; / và xuống dòng (dù gõ dính liền)
     let matched = rawText.match(/[^.!?;\/\n]+[.!?;\/\n]*/g);
-    
-    // Lọc bỏ các khoảng trắng dư thừa
     let sentences = matched ? matched.map(s => s.trim()).filter(s => s.length > 0) : [rawText];
     
     window.trans_sentences_data = sentences.map(s => ({ original: s, translated: "⏳ Đang dịch...", isSaved: false }));
     window.render_trans_table();
     
-    // Dịch từng câu trong bảng
     for (let i = 0; i < window.trans_sentences_data.length; i++) {
         let text = window.trans_sentences_data[i].original;
         try {
@@ -97,7 +135,6 @@ window.process_split_sentences = async function() {
         window.render_trans_table(); 
     }
     
-    // Dịch luôn khung Văn bản Tổng
     try {
         let resTotal = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(rawText)}`);
         let dataTotal = await resTotal.json();
@@ -105,29 +142,112 @@ window.process_split_sentences = async function() {
     } catch(e) {}
 };
 
+// 🌟 HÀM RENDER THẺ TRÀN VIỀN (XÓA BO GÓC, CHỈ CÓ VIỀN TRÊN DƯỚI)
 window.render_trans_table = function() {
-    let tbody = document.getElementById('trans_table_body');
-    if (window.trans_sentences_data.length === 0) { tbody.innerHTML = `<tr><td colspan="4" class="text-center py-5">Trống</td></tr>`; return; }
+    let container = document.getElementById('trans_table_body');
+    if (window.trans_sentences_data.length === 0) { 
+        container.innerHTML = `<div class="text-center text-white-50 py-5 bg-dark border-top border-bottom border-secondary w-100 shadow-sm">Chưa có dữ liệu bóc tách</div>`; 
+        return; 
+    }
     
     let html = '';
     window.trans_sentences_data.forEach((item, index) => {
-        let bg = item.isSaved ? 'background: rgba(16, 185, 129, 0.1);' : '';
+        let borderClass = item.isSaved ? 'border-success' : 'border-secondary';
+        let shadowClass = item.isSaved ? 'shadow-lg' : 'shadow-sm';
+        
+        // Thêm rounded-0 và chỉ dùng border-top border-bottom
         html += `
-        <tr style="border-bottom: 1px dashed rgba(255,255,255,0.1); ${bg}">
-            <td class="text-center text-info fw-bold align-middle">${index + 1}</td>
-            <td class="align-middle"><div contenteditable="true" style="outline:none;" onblur="window.trans_sentences_data[${index}].original = this.innerText">${item.original}</div></td>
-            <td class="align-middle text-warning"><div contenteditable="true" style="outline:none;" onblur="window.trans_sentences_data[${index}].translated = this.innerText">${item.translated}</div></td>
-            <td class="text-center align-middle text-nowrap">
-                ${item.isSaved 
-                    ? '<i class="bi bi-check-circle-fill text-success fs-5" title="Đã lưu"></i>' 
-                    : `<button class="btn btn-sm text-success p-1 me-1 shadow-sm border border-success" title="Lưu câu này" onclick="window.save_single_sentence(${index})"><i class="bi bi-floppy-fill"></i></button>`
-                }
-                <button class="btn btn-sm text-danger p-1 shadow-sm border border-danger" title="Xóa" onclick="window.trans_sentences_data.splice(${index}, 1); window.render_trans_table()"><i class="bi bi-trash3"></i></button>
-            </td>
-        </tr>`;
+        <div class="d-flex flex-column bg-dark border-top border-bottom ${borderClass} ${shadowClass} overflow-hidden rounded-0">
+            <!-- THANH ĐIỀU KHIỂN CỦA CARD -->
+            <div class="d-flex justify-content-between align-items-center px-3 py-2 bg-black bg-opacity-25 border-bottom border-secondary">
+                <span class="badge bg-black text-info fw-bold px-2 py-1 fs-6">Câu ${index + 1}</span>
+                <div class="d-flex gap-2">
+                    ${item.isSaved 
+                        ? '<span class="badge bg-success d-flex align-items-center px-2 py-1"><i class="bi bi-check-circle-fill me-1"></i>Đã lưu</span>' 
+                        : `<button type="button" class="btn btn-sm btn-success py-1 px-3 rounded-pill fw-bold shadow-sm" onclick="window.save_single_sentence(${index})"><i class="bi bi-floppy-fill me-1"></i> Lưu</button>`
+                    }
+                    <button type="button" class="btn btn-sm btn-outline-danger py-1 px-2 rounded-pill shadow-sm" onclick="window.trans_sentences_data.splice(${index}, 1); window.render_trans_table()"><i class="bi bi-trash3"></i></button>
+                </div>
+            </div>
+            
+            <!-- NỬA TRÊN: CÂU GỐC -->
+            <div class="position-relative bg-dark">
+                <div class="badge bg-secondary bg-opacity-50 text-white-50 position-absolute top-0 start-0 m-2 ms-3" style="font-size:0.65rem; z-index:2;">CÂU GỐC</div>
+                <div contenteditable="true" class="form-control bg-transparent text-white border-0 editable-box px-3 py-4 pt-5 no-scrollbar shadow-none" 
+                     oninput="window.trigger_single_translate(${index}, this.innerText)">${item.original}</div>
+            </div>
+            
+            <!-- NỬA DƯỚI: BẢN DỊCH AI -->
+            <div class="position-relative border-top border-secondary bg-black">
+                <div class="badge bg-secondary bg-opacity-50 text-warning position-absolute top-0 start-0 m-2 ms-3" style="font-size:0.65rem; z-index:2;">BẢN DỊCH</div>
+                <div id="trans_box_${index}" contenteditable="true" class="form-control bg-transparent text-warning border-0 editable-box px-3 py-4 pt-5 no-scrollbar shadow-none" 
+                     oninput="window.trans_sentences_data[${index}].translated = this.innerText">${item.translated}</div>
+            </div>
+        </div>`;
     });
-    tbody.innerHTML = html;
+    container.innerHTML = html;
 };
+
+// 🌟 HÀM DỊCH TỰ ĐỘNG TỪNG CÂU (KHÔNG LÀM MẤT CHUỘT)
+window.trigger_single_translate = function(index, newText) {
+    window.trans_sentences_data[index].original = newText;
+    let transBox = document.getElementById(`trans_box_${index}`);
+    
+    if (!newText.trim()) {
+        window.trans_sentences_data[index].translated = "";
+        if (transBox) transBox.innerText = "";
+        return;
+    }
+
+    if (transBox) transBox.innerText = "⏳ Đang dịch...";
+    
+    clearTimeout(window.single_trans_timers[index]);
+    
+    window.single_trans_timers[index] = setTimeout(async () => {
+        let isVietnamese = /[àáãạảăắằẳẵặâấầẩẫậèéẹẻẽêềếểễệđìíĩỉịòóõọỏôốồổỗộơớờởỡợùúũụủưứừửữựỳýỹỷỵ]/i.test(newText);
+        let targetLang = isVietnamese ? 'en' : 'vi'; 
+        
+        try {
+            let res = await fetch(`https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${targetLang}&dt=t&q=${encodeURIComponent(newText)}`);
+            let data = await res.json();
+            let finalTranslation = data[0].map(x => x[0]).join('');
+            
+            window.trans_sentences_data[index].translated = finalTranslation;
+            if (document.getElementById(`trans_box_${index}`)) {
+                document.getElementById(`trans_box_${index}`).innerText = finalTranslation;
+            }
+        } catch(e) {
+             if (document.getElementById(`trans_box_${index}`)) {
+                 document.getElementById(`trans_box_${index}`).innerText = "❌ Lỗi mạng, không thể dịch.";
+             }
+        }
+    }, 1000);
+};
+
+window.trans_typing_timer = null;
+
+window.auto_translate_on_type = function() {
+    let rawText = document.getElementById('raw_trans_input').value.trim();
+    let outputBox = document.getElementById('full_trans_output');
+    
+    if (!rawText) {
+        outputBox.value = "";
+        window.trans_sentences_data = [];
+        window.render_trans_table();
+        return;
+    }
+
+    outputBox.value = "⏳ Đang đợi bạn gõ xong...";
+    clearTimeout(window.trans_typing_timer);
+
+    window.trans_typing_timer = setTimeout(() => {
+        window.process_split_sentences();
+    }, 1200); 
+};
+
+// =========================================================================
+// LƯU CƠ SỞ DỮ LIỆU
+// =========================================================================
 
 window.save_all_sentences = async function() {
     let unsaved = window.trans_sentences_data.filter(item => !item.isSaved && item.original);
@@ -141,7 +261,6 @@ window.save_all_sentences = async function() {
         lesson: currentLesson,
         type: 'phanxa',
         q: item.original,
-        a: item.translated,
         answer: item.translated
     }));
 
@@ -151,40 +270,12 @@ window.save_all_sentences = async function() {
         
         window.trans_sentences_data.forEach(i => i.isSaved = true);
         window.render_trans_table();
-        window.show_toast(`✅ Đã lưu ${payload.length} câu vào Bảng Phản Xạ (${subjKey})!`);
+        window.show_toast(`✅ Đã lưu ${payload.length} câu vào (${subjKey})!`);
     } catch(e) {
         window.show_toast("❌ Lỗi lưu dữ liệu: " + e.message, true);
     }
 };
 
-// Bộ đếm thời gian gõ phím
-window.trans_typing_timer = null;
-
-window.auto_translate_on_type = function() {
-    let rawText = document.getElementById('raw_trans_input').value.trim();
-    let outputBox = document.getElementById('full_trans_output');
-    
-    // Nếu xóa hết chữ thì làm sạch bảng và khung kết quả
-    if (!rawText) {
-        outputBox.value = "";
-        window.trans_sentences_data = [];
-        window.render_trans_table();
-        return;
-    }
-
-    // Báo hiệu hệ thống đang chờ
-    outputBox.value = "⏳ Đang đợi bạn gõ xong...";
-
-    // Hủy lệnh dịch cũ nếu bạn vẫn đang gõ liên tục
-    clearTimeout(window.trans_typing_timer);
-
-    // Hẹn giờ: Tròn 1.2 giây sau khi bạn NGỪNG GÕ, lệnh bóc tách và dịch sẽ tự động chạy
-    window.trans_typing_timer = setTimeout(() => {
-        window.process_split_sentences();
-    }, 1200); 
-};
-
-// HÀM LƯU NGUYÊN ĐOẠN VĂN BẢN LỚN
 window.save_full_paragraph = async function() {
     let rawText = document.getElementById('raw_trans_input').value.trim();
     let transText = document.getElementById('full_trans_output').value.trim();
@@ -198,20 +289,18 @@ window.save_full_paragraph = async function() {
         lesson: currentLesson, 
         type: 'phanxa',
         q: rawText, 
-        a: transText, 
         answer: transText
     }];
 
     try {
         const { error } = await db.from('phanxa_questions').insert(payload);
         if (error) throw error;
-        window.show_toast(`✅ Đã lưu NGUYÊN ĐOẠN vào Bảng Phản Xạ (${subjKey})!`);
+        window.show_toast(`✅ Đã lưu NGUYÊN ĐOẠN vào (${subjKey})!`);
     } catch(e) {
         window.show_toast("❌ Lỗi lưu dữ liệu: " + e.message, true);
     }
 };
 
-// HÀM LƯU CHỈ 1 CÂU TRONG BẢNG
 window.save_single_sentence = async function(index) {
     let item = window.trans_sentences_data[index];
     if (item.isSaved) return;
@@ -224,7 +313,6 @@ window.save_single_sentence = async function(index) {
         lesson: currentLesson, 
         type: 'phanxa',
         q: item.original, 
-        a: item.translated, 
         answer: item.translated
     }];
 
@@ -239,15 +327,27 @@ window.save_single_sentence = async function(index) {
         window.show_toast("❌ Lỗi lưu dữ liệu: " + e.message, true);
     }
 };
-// ĐOẠN MỚI BỔ SUNG: Tự tạo subject_key theo user (ví dụ phanxahai) hoặc phanxacongdong
+
 window.getPhanXaSubjectKey = function() {
-    let isPublic = document.getElementById('chk_phanxa_public') ? document.getElementById('chk_phanxa_public').checked : false;
-    if (isPublic) return 'phanxacongdong';
-    
-    let user = localStorage.getItem('username') || localStorage.getItem('user_id') || localStorage.getItem('user');
-    if (user) {
-        let cleanUser = user.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
-        return `phanxa${cleanUser}`;
+    let currentUser = localStorage.getItem('student_id') 
+                   || localStorage.getItem('username') 
+                   || localStorage.getItem('user_id')
+                   || sessionStorage.getItem('student_id');
+                   
+    let inputID = document.getElementById('student_id');
+    if (!currentUser && inputID && inputID.value) {
+        currentUser = inputID.value;
     }
-    return 'phanxacongdong';
+    
+    if (!currentUser || currentUser.trim() === '') {
+        currentUser = prompt("⚠️ Hệ thống chưa nhận diện được User của bạn.\nVui lòng nhập tên đăng nhập (VD: admin, mikel):", "admin");
+        if (currentUser) {
+            localStorage.setItem('username', currentUser);
+        } else {
+            return 'phanxakhachvanglai';
+        }
+    }
+    
+    let cleanUser = currentUser.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+    return `phanxa${cleanUser}`; 
 };

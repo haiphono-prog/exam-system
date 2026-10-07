@@ -1,5 +1,5 @@
 // =========================================================================
-// 🧠 MODULE HỌC PHẢN XẠ - ĐÓNG GÓI ĐỘC LẬP (ALL-IN-ONE)
+// 🧠 MODULE HỌC PHẢN XẠ - SUPER APP NATIVE UI (V14 - ÂM THANH 3 LỚP, GIỮ NGUYÊN LOGIC BÀI HỌC)
 // =========================================================================
 
 // 1. TỰ ĐỘNG BƠM CSS VÀO HỆ THỐNG
@@ -8,114 +8,164 @@
     const style = document.createElement('style');
     style.id = 'phanxa_styles';
     style.innerHTML = `
-        .px-wrapper { padding: 10px 0; text-align: center; width: 100%; box-sizing: border-box; }
-        .px-container { max-width: 1000px !important; width: 98%; margin: 0 auto; background: transparent !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15), inset 0 1px 1px rgba(255, 255, 255, 0.05) !important; color: #ffffff !important; border-radius: 16px !important; padding: 20px 15px 30px 15px; position: relative; display: flex; flex-direction: column; }
-        .px-learning-area { width: 100%; margin-bottom: 20px; }
-        .px-source-box, .px-correct-box { font-weight: 800; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; column-gap: 8px; row-gap: 12px; padding: 20px; line-height: 1.4; transition: 0.3s ease; border-radius: 16px; box-shadow: inset 0 0 20px rgba(0,0,0,0.05); text-shadow: 0 2px 10px rgba(0,0,0,0.5); }
-        .px-source-box { font-size: clamp(24px, 6vw, 40px); min-height: 120px; margin: 10px 0 20px 0; color: #38bdf8 !important; background: rgba(56, 189, 248, 0.03); border: 1px solid rgba(56, 189, 248, 0.15); }
-        .px-correct-box { font-size: clamp(22px, 5.5vw, 36px); min-height: 120px; margin: 0 0 15px 0; color: #4ade80 !important; background: rgba(74, 222, 128, 0.05); border: 1px solid rgba(74, 222, 128, 0.2); }
-        .px-correct-box.placeholder { color: rgba(255,255,255,0.2) !important; background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.05); text-shadow: none; font-size: clamp(18px, 4vw, 24px); cursor: default; }
-        .px-clickable-text { cursor: pointer; }
-        .px-clickable-text:hover { box-shadow: inset 0 0 30px rgba(255,255,255,0.05); transform: scale(1.01); }
-        .px-word { display: inline-block; position: relative; padding: 2px 6px; margin: 0; border-radius: 8px; transition: 0.2s; }
-        .px-source-box .px-word:hover { background: rgba(56, 189, 248, 0.2); color: #fff !important; transform: translateY(-2px); }
-        .px-correct-box .px-word:hover { background: rgba(74, 222, 128, 0.2); color: #fff !important; transform: translateY(-2px); }
-        .px-meaning { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font-size: 14px; color: #fff; line-height: 1.3; background: linear-gradient(135deg, #ef4444, #f97316); padding: 6px 12px; border-radius: 8px; white-space: nowrap; opacity: 0; pointer-events: none; transition: all 0.3s; box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4); border: 1px solid rgba(255, 255, 255, 0.2); z-index: 100; font-weight: bold; }
-        .px-meaning::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border-width: 6px; border-style: solid; border-color: #f97316 transparent transparent transparent; }
+        .no-scrollbar::-webkit-scrollbar { display: none !important; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        .px-word { display: inline-block; position: relative; padding: 2px 6px; margin: 0; border-radius: 8px; transition: 0.2s; cursor: pointer; }
+        .px-word:hover { background: rgba(255, 255, 255, 0.15); color: #fff !important; transform: translateY(-2px); }
+        .px-meaning { position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%); font-size: 14px; color: #fff; line-height: 1.3; background: linear-gradient(135deg, #0ea5e9, #3b82f6); padding: 6px 12px; border-radius: 8px; white-space: nowrap; opacity: 0; pointer-events: none; transition: all 0.3s; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.2); z-index: 100; font-weight: bold; margin-bottom: 5px; }
+        .px-meaning::after { content: ''; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border-width: 6px; border-style: solid; border-color: #3b82f6 transparent transparent transparent; }
         .px-word.show-meaning .px-meaning { opacity: 1; bottom: 100%; }
-        .px-action-bar { display: flex; justify-content: center; align-items: center; gap: 25px; margin-bottom: 20px; }
-        .px-action-btn { width: 48px; height: 48px; border-radius: 50%; background: transparent !important; border: 1px solid transparent !important; color: rgba(255,255,255,0.7) !important; font-size: 16px; cursor: pointer; transition: 0.2s; }
-        .px-action-btn:hover { background: #2a2a2a !important; border-color: rgba(255,255,255,0.4) !important; color: #fff !important; transform: scale(1.08); }
-        .px-center-slot { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; position: relative; }
-        .px-timer-compact { width: 55px; height: 55px; position: relative; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; }
-        .px-circle-bg { fill: none; stroke: rgba(255,255,255,0.15); stroke-width: 3; }
+
+        .px-timer-compact { width: 64px; height: 64px; position: relative; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: 0.2s; background: #000; border-radius: 50%; box-shadow: 0 0 20px rgba(0,0,0,0.5); border: 2px solid #334155; }
+        .px-circle-bg { fill: none; stroke: rgba(255,255,255,0.1); stroke-width: 3; }
         .px-circle { fill: none; stroke-width: 3; stroke-linecap: round; transition: stroke-dasharray 1s linear, stroke 0.5s ease; }
         .px-circle.running { stroke: #38bdf8; }
         .px-circle.ending { stroke: #ef4444; }
         .px-timer-text { font-size: 18px; font-weight: bold; color: #fff; z-index: 2; position: absolute; }
-        .px-btn-primary { background: transparent !important; color: #38bdf8 !important; border: 1px solid #38bdf8 !important; border-radius: 12px !important; font-weight: 600; padding: 12px 24px; font-size: 16px; transition: all 0.2s ease !important; width: 100%; max-width: 300px; margin: 0 auto 20px auto; cursor: pointer;}
-        .px-btn-primary:hover { background: rgba(56, 189, 248, 0.15) !important; color: #fff !important; transform: translateY(-2px); box-shadow: 0 0 20px rgba(56, 189, 248, 0.4) !important;}
-        .px-toolbar-wrapper { width: 100%; margin-top: 10px; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 20px; }
-        .px-settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
-        .px-config-group { background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; padding: 10px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
-        .px-mode-btn { background: transparent !important; border: 1px solid transparent !important; padding: 6px 15px !important; border-radius: 20px !important; font-size: 13px !important; font-weight: 700; cursor: pointer; transition: 0.3s; color: rgba(255,255,255,0.5) !important; }
-        .px-btn-loop { background: rgba(255,255,255,0.05) !important; border: 1px solid #2a2a2a !important; color: rgba(255, 255, 255, 0.7) !important; padding: 6px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 600; }
+        
+        .px-btn-loop { background: transparent !important; border: 1px solid #334155 !important; color: rgba(255, 255, 255, 0.7) !important; padding: 8px 12px; border-radius: 20px; cursor: pointer; font-size: 13px; font-weight: 600; flex-grow: 1; text-align: center; }
         .px-btn-loop.active-toggle { background: rgba(56, 189, 248, 0.15) !important; color: #38bdf8 !important; border-color: #38bdf8 !important; }
+        .px-mode-btn { background: rgba(0,0,0,0.3) !important; border: 1px solid rgba(255,255,255,0.1) !important; padding: 8px 15px !important; border-radius: 20px !important; font-size: 13px !important; font-weight: 700; cursor: pointer; color: #fff !important; }
     `;
     document.head.appendChild(style);
 })();
 
-// 2. TỰ ĐỘNG BƠM HTML KHI MỞ MODULE
-window.openPhanXaModule = function() {
+// 2. TỰ ĐỘNG BƠM HTML VÀ RESET TRẠNG THÁI UI KHI MỞ
+window.openPhanXaModule = function(isDirectMode = false) {
+    window.is_phanxa_direct = isDirectMode;
+
+    // 🌟 FIX LỖI MÀN HÌNH ĐEN: Đóng tất cả Modal "Chọn chế độ học" đang mở ngầm
+    try {
+        if (typeof bootstrap !== 'undefined') {
+            document.querySelectorAll('.modal.show').forEach(m => {
+                let instance = bootstrap.Modal.getInstance(m);
+                if (instance) instance.hide();
+            });
+        }
+        // Dọn dẹp phông nền đen (backdrop) nếu có
+        document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+    } catch(e) {}
+
     let wrapper = document.getElementById('phanxa_module_wrapper');
     if (!wrapper) {
         wrapper = document.createElement('div');
         wrapper.id = 'phanxa_module_wrapper';
-        wrapper.style.cssText = 'position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 99999; overflow-y: auto; background-color: rgba(15, 23, 42, 0.9); ';
+        
+        wrapper.className = 'position-fixed w-100 animate__animated animate__fadeInUp';
+        wrapper.style.cssText = 'top: 0; bottom: 0; left: 0; right: 0; background: #121212; z-index: 99999; overflow: hidden; display: none; flex-direction: column;';
         
         wrapper.innerHTML = `
-        <div class="position-absolute" style="top: 15px; right: 20px; z-index: 100000;">
-            <button type="button" class="btn-close btn-close-white shadow-none" style="width: 25px; height: 25px; background-color: rgba(255,255,255,0.2); border-radius: 50%;" onclick="closePhanXaModule()"></button>
+        <div class="d-flex px-2 py-2 border-bottom border-secondary bg-dark flex-shrink-0 align-items-center" style="padding-top: max(env(safe-area-inset-top), 0.5rem) !important;">
+            <button type="button" onclick="closePhanXaModule()" class="btn btn-sm text-light fw-bold d-flex align-items-center p-2 bg-transparent border-0 shadow-none position-relative" style="z-index: 1050;">
+                <i class="bi bi-chevron-left fs-4"></i><span class="d-none d-md-inline ms-1">Thoát</span>
+            </button>
+            <h6 class="fw-bold mb-0 text-truncate flex-grow-1 text-center text-info" style="letter-spacing: 0.5px; font-size: 1.1rem; margin-right: 40px;">
+                HỌC PHẢN XẠ
+            </h6>
         </div>
-        <div class="px-wrapper">
-          <div class="px-container" id="px_main_container">
-            <div class="px-learning-area">
-              <div class="px-source-box px-clickable-text" id="px_sourceBox" onclick="pxSpeakSourceOnClick()">Bấm nút bên dưới để tải dữ liệu...</div>
-              <button class="px-btn-primary" id="px_startBtn" onclick="pxInitExercise()">Bắt đầu huấn luyện</button>
-              <div class="px-action-bar" id="px_actionBar" style="display:none;">
-                <button id="pxBtnMediaBack" class="px-action-btn" onclick="pxMediaBack()">⏮️</button>
-                <div class="px-center-slot">
-                  <div id="px_timerWrapper" class="px-timer-compact" onclick="pxMediaTogglePause()">
-                    <svg class="px-circular-chart" viewBox="0 0 36 36">
-                      <path class="px-circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                      <path class="px-circle running" id="px_timerPath" stroke-dasharray="100, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                    </svg>
-                    <div class="px-timer-text" id="px_timerText">🔊</div>
-                  </div>
-                  <button id="pxBtnMediaPause" class="px-action-btn" onclick="pxMediaTogglePause()" style="display:none; font-size: 22px; color: #38bdf8 !important;">⏸️</button>
+
+        <div class="flex-grow-1 overflow-hidden bg-black d-flex flex-column pb-4 position-relative">
+            <div class="d-flex flex-column flex-grow-1 position-relative">
+                <div class="flex-grow-1 d-flex flex-column bg-dark position-relative overflow-auto no-scrollbar" style="flex-basis: 50%;">
+                    <div id="px_sourceBox" class="m-auto p-4 text-center text-info w-100" style="font-size: clamp(24px, 6vw, 36px); font-weight: 800; word-break: break-word; line-height: 1.4; cursor: pointer;" onclick="pxSpeakSourceOnClick()">
+                        <span class="opacity-50 fs-5">Bấm nút Bắt đầu bên dưới...</span>
+                    </div>
                 </div>
-                <button id="pxBtnMediaNext" class="px-action-btn" onclick="pxMediaNext()">⏭️</button>
-              </div>
-              <div id="px_resultPanel" class="px-result-panel">
-                <div class="px-correct-box placeholder" id="px_correctText" onclick="pxSpeakAnswerOnClick()">Đang chờ đáp án...</div>
-              </div>
+
+                <div id="px_center_timer_slot" class="position-absolute top-50 start-50 translate-middle" style="z-index: 10; display: none;">
+                    <div id="px_timerWrapper" class="px-timer-compact" onclick="pxMediaTogglePause()">
+                        <svg class="px-circular-chart position-absolute w-100 h-100" viewBox="0 0 36 36">
+                          <path class="px-circle-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                          <path class="px-circle running" id="px_timerPath" stroke-dasharray="100, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                        </svg>
+                        <div class="px-timer-text" id="px_timerText">🔊</div>
+                    </div>
+                    <div id="pxBtnMediaPause" class="px-timer-compact bg-dark text-info" onclick="pxMediaTogglePause()" style="display:none; font-size: 24px;">⏸</div>
+                </div>
+
+                <div class="flex-grow-1 d-flex flex-column position-relative overflow-auto no-scrollbar border-top border-secondary" style="background: #0a0a0a; flex-basis: 50%;">
+                    <div id="px_correctText" class="m-auto p-4 text-center text-white-50 w-100" style="font-size: clamp(20px, 5vw, 28px); font-weight: 700; word-break: break-word; line-height: 1.4; cursor: pointer;" onclick="pxSpeakAnswerOnClick()">
+                        Đang chờ dữ liệu...
+                    </div>
+                </div>
             </div>
-            <div class="px-toolbar-wrapper">
-              <div class="px-toolbar">
-                <div class="d-flex justify-content-center gap-2 flex-wrap mb-2">
+
+            <div class="mx-2 mx-md-3 mt-3 mb-3 bg-dark border border-secondary rounded-4 p-3 shadow flex-shrink-0">
+                <div class="d-flex justify-content-center gap-2 flex-wrap mb-3">
                   <button id="pxBtnMode" class="px-mode-btn mode-vi" onclick="togglePxMode()">🔄 Việt ➔ Anh</button>
                   <button id="pxBtnShuffle" class="px-mode-btn" onclick="togglePxShuffle()">⬇️ Thứ tự</button>
                 </div>
-                <div class="px-settings-grid">
-                  <div class="px-config-group">
-                    <div class="px-config-title" id="lbl_config_source">CÀI ĐẶT CÂU HỎI</div>
-                    <div id="panel_source" class="px-config-items">
-                      <button id="pxBtnTime_source" class="px-btn-loop" onclick="toggleConfig('source','time')">⏳ 5s</button>
-                      <button id="pxBtnSpeed_source" class="px-btn-loop" onclick="toggleConfig('source','speed')">🚀 1.0x</button>
-                      <button id="pxBtnRepeat_source" class="px-btn-loop" onclick="toggleConfig('source','repeat')">🔁 1 Lần</button>
-                      <button id="pxBtnAutoRead_source" class="px-btn-loop active-toggle" onclick="toggleConfig('source','auto')">🔊 Đọc</button>
+                
+                <div class="row g-3">
+                    <div class="col-6 d-flex flex-column gap-2 border-end border-secondary">
+                        <div class="text-white-50 small fw-bold text-center mb-1" id="lbl_config_source">ĐỌC CÂU GỐC</div>
+                        <div class="d-flex flex-wrap gap-2 justify-content-center">
+                            <button id="pxBtnTime_source" class="px-btn-loop" onclick="toggleConfig('source','time')">⏳ 5s</button>
+                            <button id="pxBtnSpeed_source" class="px-btn-loop" onclick="toggleConfig('source','speed')">🚀 1.0x</button>
+                            <button id="pxBtnRepeat_source" class="px-btn-loop" onclick="toggleConfig('source','repeat')">🔁 1 Lần</button>
+                            <button id="pxBtnAutoRead_source" class="px-btn-loop active-toggle" onclick="toggleConfig('source','auto')">🔊 Đọc</button>
+                        </div>
                     </div>
-                  </div>
-                  <div class="px-config-group">
-                    <div class="px-config-title" id="lbl_config_target">CÀI ĐẶT TRẢ LỜI</div>
-                    <div id="panel_target" class="px-config-items">
-                      <button id="pxBtnTime_target" class="px-btn-loop" onclick="toggleConfig('target','time')">⏳ 5s</button>
-                      <button id="pxBtnSpeed_target" class="px-btn-loop" onclick="toggleConfig('target','speed')">🚀 1.0x</button>
-                      <button id="pxBtnRepeat_target" class="px-btn-loop" onclick="toggleConfig('target','repeat')">🔁 1 Lần</button>
-                      <button id="pxBtnAutoRead_target" class="px-btn-loop active-toggle" onclick="toggleConfig('target','auto')">🔊 Đọc</button>
+                    <div class="col-6 d-flex flex-column gap-2">
+                        <div class="text-white-50 small fw-bold text-center mb-1" id="lbl_config_target">ĐỌC ĐÁP ÁN</div>
+                        <div class="d-flex flex-wrap gap-2 justify-content-center">
+                            <button id="pxBtnTime_target" class="px-btn-loop" onclick="toggleConfig('target','time')">⏳ 5s</button>
+                            <button id="pxBtnSpeed_target" class="px-btn-loop" onclick="toggleConfig('target','speed')">🚀 1.0x</button>
+                            <button id="pxBtnRepeat_target" class="px-btn-loop" onclick="toggleConfig('target','repeat')">🔁 1 Lần</button>
+                            <button id="pxBtnAutoRead_target" class="px-btn-loop active-toggle" onclick="toggleConfig('target','auto')">🔊 Đọc</button>
+                        </div>
                     </div>
-                  </div>
                 </div>
-              </div>
             </div>
-          </div>
-        </div>`;
+        </div>
+
+        <div id="px_footerStart" class="d-flex w-100 bg-dark border-top border-secondary flex-shrink-0" style="padding-bottom: env(safe-area-inset-bottom); position: relative; z-index: 1050;">
+            <button class="btn py-3 fw-bold flex-grow-1 text-info bg-dark border-0 rounded-0" style="letter-spacing: 0.5px; font-size: 1.1rem;" onclick="pxInitExercise()">
+                <i class="bi bi-play-circle-fill me-2 fs-4 align-middle"></i> BẮT ĐẦU HUẤN LUYỆN
+            </button>
+        </div>
+
+        <div id="px_footerControls" class="w-100 bg-dark border-top border-secondary flex-shrink-0" style="padding-bottom: env(safe-area-inset-bottom); position: relative; z-index: 1050; display: none;">
+            <div class="d-flex w-100">
+                <button class="btn py-3 fw-bold flex-grow-1 text-white-50 bg-dark border-0 border-end border-secondary rounded-0 fs-3" onclick="pxMediaBack()">
+                    <i class="bi bi-skip-backward-fill"></i>
+                </button>
+                <button class="btn py-3 fw-bold flex-grow-1 text-white-50 bg-dark border-0 rounded-0 fs-3" onclick="pxMediaNext()">
+                    <i class="bi bi-skip-forward-fill"></i>
+                </button>
+            </div>
+        </div>
+        `;
         document.body.appendChild(wrapper);
+    } else {
+        // Reset lại UI khi mở lần 2
+        let fStart = document.getElementById("px_footerStart");
+        if (fStart) { fStart.style.display = "flex"; fStart.classList.add("d-flex"); }
+        
+        let fCtrl = document.getElementById("px_footerControls");
+        if (fCtrl) { fCtrl.style.display = "none"; fCtrl.classList.remove("d-flex"); }
+        
+        let timerSlot = document.getElementById("px_center_timer_slot");
+        if (timerSlot) timerSlot.style.display = "none";
+        
+        let srcBox = document.getElementById("px_sourceBox");
+        if (srcBox) srcBox.innerHTML = "<span class='opacity-50 fs-5'>Bấm nút Bắt đầu bên dưới...</span>";
+        
+        let correctBox = document.getElementById("px_correctText");
+        if (correctBox) {
+            correctBox.innerText = "Đang chờ dữ liệu..."; 
+            correctBox.classList.add('text-white-50');
+            correctBox.classList.remove('text-warning');
+        }
     }
     
-    wrapper.style.display = 'block';
+    wrapper.style.display = 'flex';
     document.body.style.overflow = 'hidden';
-    document.getElementById('fab_menu_items').classList.add('d-none'); // Tắt sub-menu đi
+    
+    // Tạm ẩn menu tiện ích mở rộng nếu có
+    let fab = document.getElementById('fab_menu_items');
+    if(fab) fab.classList.add('d-none');
     
     if (typeof initPhanXaUI === 'function') initPhanXaUI();
 };
@@ -124,11 +174,19 @@ window.closePhanXaModule = function() {
     let wrapper = document.getElementById('phanxa_module_wrapper');
     if (wrapper) wrapper.style.display = 'none';
     document.body.style.overflow = '';
+    
+    // 🌟 FIX LỖI ẨN NÚT FAB: Khôi phục lại menu nổi khi thoát
+    let fab = document.getElementById('fab_menu_items');
+    if (fab) fab.classList.remove('d-none');
+    
+    // Xóa lớp phủ đen dự phòng
+    document.querySelectorAll('.modal-backdrop').forEach(b => b.remove());
+    
     if (typeof pxClearTimers === 'function') pxClearTimers();
 };
 
 // =========================================================================
-// 3. ĐỘNG CƠ XỬ LÝ LOGIC (CHUYỂN SANG ĐỌC TỪ SUPABASE/RAM)
+// 3. ĐỘNG CƠ XỬ LÝ LOGIC & DỮ LIỆU CHUẨN
 // =========================================================================
 window.px_allQuestions = [];
 window.px_currentIndex = 0;
@@ -151,11 +209,8 @@ window.pxConfig = { vi: { timeIndex: 1, speedIndex: 1, repeatIndex: 0, auto: tru
 window.px_extractContent = function(item, currentMode) {
     let q_raw = item.q || item.vi || ""; 
     let a_raw = item.answer || item.a || item.en || "";
-    let hint_raw = item.hint || "";
-    
     let q_clean = q_raw.replace(/<[^>]*>?/gm, '').trim();
     let a_clean = a_raw.replace(/<[^>]*>?/gm, '').trim();
-
     let vi_text = item.vi ? item.vi.replace(/<[^>]*>?/gm, '').trim() : q_clean;
     let en_text = item.en ? item.en.replace(/<[^>]*>?/gm, '').trim() : a_clean;
     let isViEn = (currentMode === 'vi-en');
@@ -182,16 +237,16 @@ window.togglePxShuffle = function() {
     window.px_isShuffle = !window.px_isShuffle;
     const btn = document.getElementById("pxBtnShuffle");
     if(!btn) return;
-    if (window.px_isShuffle) { btn.innerHTML = "🔀 Ngẫu nhiên"; btn.classList.add("active-shuffle"); } 
-    else { btn.innerHTML = "⬇️ Thứ tự"; btn.classList.remove("active-shuffle"); }
+    if (window.px_isShuffle) { btn.innerHTML = "🔀 Ngẫu nhiên"; btn.classList.add("text-info"); btn.classList.remove("text-white-50"); } 
+    else { btn.innerHTML = "⬇️ Thứ tự"; btn.classList.remove("text-info"); btn.classList.add("text-white-50"); }
 };
 
 window.updateConfigUI = function() {
     let lblSource = document.getElementById("lbl_config_source");
     if (!lblSource) return; 
     let keys = getLangKeys();
-    lblSource.innerText = `CÀI ĐẶT CÂU HỎI (${keys.sourceLang === 'vi' ? 'VI' : 'EN'})`;
-    document.getElementById("lbl_config_target").innerText = `CÀI ĐẶT TRẢ LỜI (${keys.targetLang === 'vi' ? 'VI' : 'EN'})`;
+    lblSource.innerText = `ĐỌC CÂU GỐC (${keys.sourceLang === 'vi' ? 'VI' : 'EN'})`;
+    document.getElementById("lbl_config_target").innerText = `ĐỌC ĐÁP ÁN (${keys.targetLang === 'vi' ? 'VI' : 'EN'})`;
 
     ['source', 'target'].forEach(type => {
         let lang = keys[`${type}Lang`];
@@ -222,11 +277,12 @@ window.toggleConfig = function(panelType, key) {
     updateConfigUI();
 };
 
-window.togglePxMode = function() { window.px_selectedMode = window.px_selectedMode === 'vi-en' ? 'en-vi' : 'vi-en'; updateModeButtonUI(); updateConfigUI(); };
-
 window.calculateSimulatedTime = function(text, speed) { return Math.ceil(text.trim().split(/\s+/).length / (3 * speed)); };
 
-window.pxInitExercise = function() {
+// =========================================================================
+// GIỮ NGUYÊN HOÀN TOÀN LOGIC TẢI DỮ LIỆU CỦA BẠN (V13)
+// =========================================================================
+window.pxInitExercise = async function() {
     try {
         window.px_globalAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
         window.px_globalAudio.play().catch(()=>{});
@@ -234,98 +290,127 @@ window.pxInitExercise = function() {
     } catch(e) {}
 
     pxClearTimers();
-    document.getElementById("px_startBtn").style.display = "none";
-    document.getElementById("px_sourceBox").classList.remove("px-clickable-text"); 
-    document.getElementById("px_actionBar").style.display = "flex";
-    document.getElementById("px_timerWrapper").style.display = "flex";
+    
+    document.getElementById("px_footerStart").style.display = "none";
+    document.getElementById("px_footerStart").classList.remove("d-flex");
+    let footerControls = document.getElementById("px_footerControls");
+    footerControls.style.display = "block";
+    footerControls.classList.add("d-flex");
+
+    document.getElementById("px_center_timer_slot").style.display = "flex";
     document.getElementById("pxBtnMediaPause").style.display = "none";
-    document.getElementById("px_timerText").innerHTML = `<span class="px-timer-reading">🔊</span>`;
-    document.getElementById("px_sourceBox").innerText = "Đang tải dữ liệu bài học...";
+    document.getElementById("px_timerWrapper").style.display = "flex";
+    document.getElementById("px_timerText").innerHTML = `🔊`;
+    document.getElementById("px_sourceBox").innerHTML = "<span class='spinner-border text-info'></span>";
     
     let correctBox = document.getElementById("px_correctText");
-    correctBox.innerText = "Đang tải..."; correctBox.className = "px-correct-box placeholder";
+    correctBox.innerText = "Đang tải dữ liệu..."; 
+    correctBox.classList.add('text-white-50');
+    correctBox.classList.remove('text-warning');
     
-    let currentLessonId = window.selected_lessons_text || "1";
-    let targetSubject = window.current_subject || "tienganh";
-    
-    setTimeout(() => {
-        let lessonData = [];
+    let lessonData = [];
+    let isDirectMode = window.is_phanxa_direct || (!window.questions || window.questions.length === 0);
+
+    if (isDirectMode) {
+        try {
+            let userKey = window.getPhanXaSubjectKey();
+            const { data, error } = await db.from('phanxa_questions').select('*').eq('subject_key', userKey);
+            if (data && !error) lessonData = data;
+        } catch (e) {
+            console.log("Lỗi tải Supabase Phản Xạ:", e);
+        }
+    } else {
+        let currentLessonId = window.selected_lessons_text || "";
+        let targetSubject = window.current_subject || "";
         
-        // 1. Lấy đúng mảng câu hỏi của môn hiện tại đang chọn
         if (window.px_custom_pool && window.px_custom_pool.length > 0) {
             lessonData = [...window.px_custom_pool];
         } else if (window.questions && window.questions.length > 0) {
             lessonData = [...window.questions];
         } else if (window.full_data && window.full_data[targetSubject]) {
             lessonData = window.full_data[targetSubject].filter(q => String(q.lesson).trim() === String(currentLessonId).trim());
+        } else if (targetSubject && currentLessonId) {
+            try {
+                const { data, error } = await db.from('questions')
+                    .select('*')
+                    .eq('subject_key', targetSubject)
+                    .eq('lesson', currentLessonId);
+                if (data && !error) lessonData = data;
+            } catch (e) { console.log("Lỗi tải bài học từ Supabase:", e); }
         }
+    }
 
-        if (lessonData.length === 0) {
-            if (typeof window.show_toast === 'function') {
-                window.show_toast("⚠️ Bài học này chưa có câu hỏi nào!");
-            }
-            document.getElementById("px_sourceBox").innerText = "Chưa có dữ liệu câu hỏi cho bài học này.";
-            return;
+    lessonData = lessonData.filter(q => {
+        let typeStr = String(q.type || '').toLowerCase();
+        return typeStr !== 'hotspot' && typeStr !== 'clip';
+    });
+
+    if (lessonData.length === 0) {
+        if (typeof window.show_toast === 'function') window.show_toast("⚠️ Chưa có dữ liệu hợp lệ (hoặc chỉ toàn Hotspot/Clip)!");
+        document.getElementById("px_sourceBox").innerHTML = "<span class='opacity-50 fs-5'>Không có dữ liệu văn bản.</span>";
+        correctBox.innerText = "";
+        
+        document.getElementById("px_footerStart").style.display = "flex";
+        document.getElementById("px_footerStart").classList.add("d-flex");
+        document.getElementById("px_footerControls").style.display = "none";
+        document.getElementById("px_footerControls").classList.remove("d-flex");
+        document.getElementById("px_center_timer_slot").style.display = "none";
+        return;
+    }
+
+    window.px_allQuestions = lessonData.map(q => {
+        let item = { ...q };
+        item.vi = q.vi || q.q || q.question || q[4] || q[3] || "Câu hỏi";
+        
+        let correctOpt = String(q.answer || q.a || q[8] || "").trim().toUpperCase();
+        let ansText = "";
+
+        if (q.opts && q.opts.length > 0) {
+            let idx = ['A', 'B', 'C', 'D'].indexOf(correctOpt);
+            ansText = (idx !== -1 && q.opts[idx]) ? q.opts[idx] : q.opts[0];
+        } 
+        else if (q.opt_a || q.opt_b || q.opt_c || q.opt_d || q.optA || q.optB || q.optC || q.optD) {
+            if (correctOpt === 'A') ansText = q.opt_a || q.optA;
+            else if (correctOpt === 'B') ansText = q.opt_b || q.optB;
+            else if (correctOpt === 'C') ansText = q.opt_c || q.optC;
+            else if (correctOpt === 'D') ansText = q.opt_d || q.optD;
         }
+        
+        item.en = ansText || q.en || q.answer || q.a || "Đáp án";
+        return item;
+    });
 
-        // 2. Chuyển đổi linh hoạt theo từng loại môn học:
-        window.px_allQuestions = lessonData.map(q => {
-            let item = { ...q };
+    window.px_currentIndex = 0;
+    window.pxStartPreload();
+};
 
-            // A. Lấy NỘI DUNG CÂU HỎI (mặt trước / câu đọc)
-            item.vi = q.vi || q.q || q.question || q[4] || q[3] || "Câu hỏi";
-
-            // B. Lấy ĐÁP ÁN ĐÚNG (mặt sau / câu trả lời)
-            let correctOpt = String(q.a || q.answer || q[8] || "").trim().toUpperCase();
-            let ansText = "";
-
-            // Nếu là câu hỏi Trắc nghiệm A, B, C, D (Môn Y học, Lý thuyết, v.v.)
-            if (q.opts && q.opts.length > 0) {
-                let idx = ['A', 'B', 'C', 'D'].indexOf(correctOpt);
-                if (idx !== -1 && q.opts[idx]) {
-                    ansText = q.opts[idx];
-                } else {
-                    ansText = q.opts[0];
-                }
-            } else if (q.optA || q.optB || q.optC || q.optD) {
-                if (correctOpt === 'A') ansText = q.optA;
-                else if (correctOpt === 'B') ansText = q.optB;
-                else if (correctOpt === 'C') ansText = q.optC;
-                else if (correctOpt === 'D') ansText = q.optD;
-            }
-
-            // Ưu tiên theo thứ tự: Nội dung đáp án trắc nghiệm -> en -> answer -> a
-            item.en = ansText || q.en || q.answer || q.a || "Đáp án";
-
-            return item;
-        });
-
-        window.px_currentIndex = 0;
-        window.pxStartPreload();
-    }, 300);
+window.getPhanXaSubjectKey = function() {
+    let currentUser = localStorage.getItem('student_id') || localStorage.getItem('username') || localStorage.getItem('user_id') || sessionStorage.getItem('student_id');
+    let inputID = document.getElementById('student_id');
+    if (!currentUser && inputID && inputID.value) currentUser = inputID.value;
+    
+    if (!currentUser || currentUser.trim() === '') return 'phanxakhachvanglai';
+    let cleanUser = currentUser.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+    return `phanxa${cleanUser}`; 
 };
 
 window.pxStartPreload = function() {
     window.px_preloadQueue = [];
     let uniqueItems = new Set();
-    
     window.px_allQuestions.forEach(q => {
         let extracted = px_extractContent(q, window.px_selectedMode);
         let cSource = window.pxConfig[extracted.sourceLang];
         let cTarget = window.pxConfig[extracted.targetLang];
-        let speedSource = window.pxOpts.speeds[cSource.speedIndex];
-        let speedTarget = window.pxOpts.speeds[cTarget.speedIndex];
         
         if (!window.px_audioCache[extracted.sourceText] && !uniqueItems.has(`S_${extracted.sourceText}`)) {
             uniqueItems.add(`S_${extracted.sourceText}`); 
-            window.px_preloadQueue.push({ text: extracted.sourceText, lang: extracted.sourceLang, speed: speedSource });
+            window.px_preloadQueue.push({ text: extracted.sourceText, lang: extracted.sourceLang, speed: window.pxOpts.speeds[cSource.speedIndex] });
         }
         if (!window.px_audioCache[extracted.targetText] && !uniqueItems.has(`T_${extracted.targetText}`)) {
             uniqueItems.add(`T_${extracted.targetText}`); 
-            window.px_preloadQueue.push({ text: extracted.targetText, lang: extracted.targetLang, speed: speedTarget });
+            window.px_preloadQueue.push({ text: extracted.targetText, lang: extracted.targetLang, speed: window.pxOpts.speeds[cTarget.speedIndex] });
         }
     });
-
     pxPlayCurrentIndex();
     if (window.px_preloadQueue.length > 0) pxProcessPreloadBatch(2); 
 };
@@ -334,25 +419,18 @@ window.pxProcessPreloadBatch = function(limit) {
     if (window.px_preloadQueue.length === 0) return;
     let batch = [];
     while (window.px_preloadQueue.length > 0 && batch.length < limit) batch.push(window.px_preloadQueue.shift());
-
-    // 🌟 VÌ KHÔNG CÒN GOOGLE SCRIPT, HỆ THỐNG SẼ ĐỌC BẰNG TRÍ TUỆ NHÂN TẠO (AI TTS) NỘI BỘ MÁY
-    // Ta cho bỏ qua bước đợi tải file mp3, để hàm chạy thẳng vào tiến trình đọc offline
-    setTimeout(() => {
-        window.pxProcessPreloadBatch(limit);
-    }, 50);
+    setTimeout(() => { window.pxProcessPreloadBatch(limit); }, 50);
 };
 
 window.pxRenderTextWithClickableWords = function(containerId, text, langCode, readSpeed) {
     const container = document.getElementById(containerId);
     container.innerHTML = "";
-
     if (langCode.includes('vi')) { container.innerText = text; return; }
     
     const words = text.split(/\s+/);
     words.forEach(word => {
         if(!word.trim()) return;
         let cleanWord = word.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()?"']/g,"");
-
         let wrapper = document.createElement("span");
         wrapper.className = "px-word";
         wrapper.innerHTML = `<span class="px-meaning"></span>${word}`;
@@ -374,20 +452,24 @@ window.pxRenderTextWithClickableWords = function(containerId, text, langCode, re
                                 let displayTxt = res.meaning;
                                 if(res.ipa && !res.ipa.includes("Lỗi")) displayTxt = `<span style="font-size:12px; color:#fef08a; font-weight:normal;">[${res.ipa}]</span><br>${res.meaning}`;
                                 meaningSpan.innerHTML = displayTxt; wrapper.dataset.translated = "true";
-                            } else { meaningSpan.innerHTML = "Từ điển ngoại tuyến"; }
+                            } else { meaningSpan.innerHTML = "Offline"; }
                         }).getVocabData(cleanWord);
-                    } else { meaningSpan.innerHTML = "Từ điển ngoại tuyến"; }
+                    } else { meaningSpan.innerHTML = "Offline"; }
                 }
             }
         };
         container.appendChild(wrapper);
+        container.appendChild(document.createTextNode(" "));
     });
 };
 
 window.pxPlayCurrentIndex = function() {
     pxClearTimers();
     let correctBox = document.getElementById("px_correctText");
-    correctBox.innerText = "Đang chờ đáp án..."; correctBox.className = "px-correct-box placeholder";
+    correctBox.innerText = "Đang chờ đáp án..."; 
+    correctBox.classList.add('text-white-50');
+    correctBox.classList.remove('text-warning');
+    
     window.px_currentData = window.px_allQuestions[window.px_currentIndex];
     pxDisplayQuestion();
 };
@@ -420,11 +502,10 @@ window.pxDisplayQuestion = function() {
     let c = window.pxConfig[extracted.sourceLang];
 
     pxRenderTextWithClickableWords("px_sourceBox", extracted.sourceText, sLangCode, window.pxOpts.speeds[c.speedIndex]);
-    document.getElementById("px_sourceBox").classList.add("px-clickable-text");
 
     document.getElementById("pxBtnMediaPause").style.display = "none";
     document.getElementById("px_timerWrapper").style.display = "flex";
-    document.getElementById("px_timerText").innerHTML = `<span class="px-timer-reading">🔊</span>`;
+    document.getElementById("px_timerText").innerHTML = `🔊`;
     document.getElementById("px_timerPath").setAttribute("stroke-dasharray", "100, 100");
     document.getElementById("px_timerPath").className.baseVal = "px-circle running";
 
@@ -458,12 +539,15 @@ window.pxRevealAnswer = function() {
     let tLangCode = extracted.targetLang === 'en' ? 'en-US' : 'vi-VN';
     let c = window.pxConfig[extracted.targetLang];
     
-    document.getElementById("px_correctText").className = "px-correct-box px-clickable-text"; 
+    let correctBox = document.getElementById("px_correctText");
+    correctBox.classList.remove('text-white-50');
+    correctBox.classList.add('text-warning');
+    
     pxRenderTextWithClickableWords("px_correctText", extracted.targetText, tLangCode, window.pxOpts.speeds[c.speedIndex]);
     
     document.getElementById("pxBtnMediaPause").style.display = "none";
     document.getElementById("px_timerWrapper").style.display = "flex";
-    document.getElementById("px_timerText").innerHTML = `<span class="px-timer-reading">🔊</span>`;
+    document.getElementById("px_timerText").innerHTML = `🔊`;
     document.getElementById("px_timerPath").setAttribute("stroke-dasharray", "100, 100");
     document.getElementById("px_timerPath").className.baseVal = "px-circle running";
 
@@ -519,7 +603,7 @@ window.pxMediaTogglePause = function() {
     if (window.px_isPaused) {
         window.speechSynthesis.cancel(); 
         if(window.px_globalAudio) window.px_globalAudio.pause();
-        if (pauseBtn) { pauseBtn.style.display = "flex"; pauseBtn.innerText = "▶️"; }
+        if (pauseBtn) pauseBtn.style.display = "flex";
         if (timerWrap) timerWrap.style.display = "none";
     } else {
         if (pauseBtn) pauseBtn.style.display = "none";
@@ -528,7 +612,7 @@ window.pxMediaTogglePause = function() {
         let extracted = px_extractContent(window.px_currentData, window.px_selectedMode);
         if (window.px_isAnswerPhase) {
             let c = window.pxConfig[extracted.targetLang];
-            document.getElementById("px_timerText").innerHTML = `<span class="px-timer-reading">🔊</span>`;
+            document.getElementById("px_timerText").innerHTML = `🔊`;
             document.getElementById("px_timerPath").setAttribute("stroke-dasharray", "100, 100");
             document.getElementById("px_timerPath").className.baseVal = "px-circle running";
             pxSpeakText(extracted.targetText, window.pxOpts.speeds[c.speedIndex], extracted.targetLang === 'en' ? 'en-US' : 'vi-VN', window.pxOpts.repeats[c.repeatIndex], function() {
@@ -536,7 +620,7 @@ window.pxMediaTogglePause = function() {
             });
         } else {
             let c = window.pxConfig[extracted.sourceLang];
-            document.getElementById("px_timerText").innerHTML = `<span class="px-timer-reading">🔊</span>`;
+            document.getElementById("px_timerText").innerHTML = `🔊`;
             document.getElementById("px_timerPath").setAttribute("stroke-dasharray", "100, 100");
             document.getElementById("px_timerPath").className.baseVal = "px-circle running";
             pxSpeakText(extracted.sourceText, window.pxOpts.speeds[c.speedIndex], extracted.sourceLang === 'vi' ? 'vi-VN' : 'en-US', window.pxOpts.repeats[c.repeatIndex], function() {
@@ -546,6 +630,9 @@ window.pxMediaTogglePause = function() {
     }
 };
 
+// =================================================================================
+// 🌟 THAY THẾ DUY NHẤT HÀM NÀY: KIẾN TRÚC ÂM THANH 3 LỚP
+// =================================================================================
 window.pxSpeakText = function(text, rate, langCode, repeatCount, onComplete) {
     window.speechSynthesis.cancel(); 
     if(window.px_globalAudio) { window.px_globalAudio.onended = null; window.px_globalAudio.pause(); }
@@ -562,13 +649,20 @@ window.pxSpeakText = function(text, rate, langCode, repeatCount, onComplete) {
         if (window.px_audioCache[text]) {
             playAudioFromCache(window.px_audioCache[text]);
         } else {
+            // LỚP 1: BẮT ĐÚNG HÀM TỪ FILE CODE ĐỂ LẤY FILE MP3
             if (typeof google !== 'undefined' && google.script) {
                 google.script.run.withSuccessHandler(function(base64Audio) {
                     if (mySession !== window.px_currentReadSession) return;
-                    if (base64Audio) { window.px_audioCache[text] = base64Audio; playAudioFromCache(base64Audio); } 
-                    else { fallbackToLocalVoice(); }
-                }).withFailureHandler(fallbackToLocalVoice).getPremiumAudioBase64(text, langCodeShort, 'female', rate);
-            } else { fallbackToLocalVoice(); }
+                    if (base64Audio) { 
+                        window.px_audioCache[text] = base64Audio; 
+                        playAudioFromCache(base64Audio); 
+                    } else { 
+                        fallbackToGoogleDirect(); // Nếu lỗi MP3, qua Lớp 2
+                    }
+                }).withFailureHandler(fallbackToGoogleDirect).getPremiumAudioBase64(text, langCodeShort, 'female', rate);
+            } else { 
+                fallbackToGoogleDirect(); 
+            }
         }
     }
 
@@ -576,21 +670,41 @@ window.pxSpeakText = function(text, rate, langCode, repeatCount, onComplete) {
         window.px_globalAudio.src = base64Audio;
         window.px_globalAudio.playbackRate = rate; 
         window.px_globalAudio.onended = () => { playCount++; setTimeout(playNextLoop, 400); };
-        window.px_globalAudio.play().catch(fallbackToLocalVoice);
+        window.px_globalAudio.play().catch(fallbackToGoogleDirect);
     }
     
+    // LỚP 2: BROWSER TỰ ĐỘNG KÉO FILE MP3 TỪ MÁY CHỦ GOOGLE NẾU LỚP 1 GẶP LỖI
+    function fallbackToGoogleDirect() {
+        if (mySession !== window.px_currentReadSession) return;
+        
+        let googleAudioUrl = "https://translate.googleapis.com/translate_tts?ie=UTF-8&client=tw-ob&tl=" + langCodeShort + "&q=" + encodeURIComponent(text);
+        
+        window.px_globalAudio.src = googleAudioUrl;
+        window.px_globalAudio.playbackRate = rate; 
+        window.px_globalAudio.onended = () => { playCount++; setTimeout(playNextLoop, 400); };
+        window.px_globalAudio.play().catch(fallbackToLocalVoice); // Lỗi mới qua Lớp 3
+    }
+
+    // LỚP 3: DỰ PHÒNG OFFLINE BẰNG GIỌNG CỦA MÁY
     function fallbackToLocalVoice() {
         if (mySession !== window.px_currentReadSession) return;
         const msg = new SpeechSynthesisUtterance(text);
-        msg.lang = langCode; msg.rate = rate; 
+        msg.lang = langCode; 
+        msg.rate = rate; 
+        
         let voices = window.speechSynthesis.getVoices();
         let langVoices = voices.filter(v => v.lang.toLowerCase().includes(langCodeShort));
-        if (langVoices.length > 0) msg.voice = langVoices[0];
+        
+        // Ưu tiên giọng tự nhiên nếu máy có cài
+        let premiumVoice = langVoices.find(v => v.name.includes('Google') || v.name.includes('Premium') || v.name.includes('Natural') || v.name.includes('Online'));
+        if (premiumVoice) { msg.voice = premiumVoice; } 
+        else if (langVoices.length > 0) { msg.voice = langVoices[0]; }
         
         msg.onend = () => { if (mySession !== window.px_currentReadSession) return; playCount++; setTimeout(playNextLoop, 400); };
         msg.onerror = () => { if (mySession !== window.px_currentReadSession) return; playCount++; playNextLoop(); };
         window.speechSynthesis.speak(msg);
     }
+    
     playNextLoop(); 
 };
 
