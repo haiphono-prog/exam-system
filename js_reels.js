@@ -338,7 +338,9 @@ window.loadSavedReels = async function() {
     listContainer.innerHTML = '<div class="text-center text-white-50 p-4"><span class="spinner-border spinner-border-sm me-2"></span>Đang tải danh sách clip...</div>';
 
     try {
-        const { data, error } = await db.from('reels')
+        // 🌟 BỌC THÉP KẾT NỐI SUPABASE
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        const { data, error } = await clientDb.from('reels')
                                         .select('*')
                                         .eq('library_id', targetLibrary)
                                         .order('created_at', { ascending: false });
@@ -405,7 +407,7 @@ window.playYouTubeSDK = function(videoId, retryCount) {
         try {
             window.ytPlayerInstance = new YT.Player('ytPlayerTarget', {
                 height: '100%', width: '100%', videoId: videoId,
-                playerVars: { 'autoplay': 1, 'playsinline': 1, 'rel': 0, 'modestbranding': 1, 'enablejsapi': 1 },
+                playerVars: { 'autoplay': 1, 'playsinline': 1, 'mute': 1, 'rel': 0, 'modestbranding': 1, 'enablejsapi': 1 },
                 events: {
                     'onReady': function(e) { e.target.playVideo(); },
                     'onStateChange': function(e) { if (e.data === YT.PlayerState.ENDED) window.playNextReel(); }
@@ -477,43 +479,39 @@ window.playSavedReel = function(encodedUrl, index, direction) {
     container.innerHTML = `<div class="text-white-50 text-center w-100 h-100 d-flex flex-column justify-content-center align-items-center"><span class="spinner-border text-info mb-3" style="width: 3rem; height: 3rem;"></span>Đang tải video...</div>${fallbackHtml}`;
     void container.offsetHeight; 
 
-    // Đợi giao diện dọn dẹp xong mới nạp video mới
-    setTimeout(() => {
-        let videoInfo = window.detectVideoPlatform(rawUrl);
-        if (!videoInfo) {
-            container.innerHTML = `<div class="text-white-50 text-center p-5 mt-5">Link chưa được hỗ trợ.</div>${fallbackHtml}`;
-            return;
-        }
+    // 🌟 KHÔNG DÙNG setTimeout ĐỂ BẢO TOÀN QUYỀN AUTOPLAY CỦA SAFARI TRÊN IPAD
+    let videoInfo = window.detectVideoPlatform(rawUrl);
+    if (!videoInfo) {
+        container.innerHTML = `<div class="text-white-50 text-center p-5 mt-5">Link chưa được hỗ trợ.</div>${fallbackHtml}`;
+        return;
+    }
 
-        let oldSpans = container.querySelectorAll('.spinner-border, .text-white-50.text-center:not(.small)');
-        oldSpans.forEach(el => el.remove());
+    let oldSpans = container.querySelectorAll('.spinner-border, .text-white-50.text-center:not(.small)');
+    oldSpans.forEach(el => el.remove());
 
-        if (videoInfo.platform === 'youtube') {
-            window.playYouTubeSDK(videoInfo.id);
-        } else {
-            let iframe = document.createElement('iframe');
-            iframe.style.cssText = 'width:100%;height:100%;border:none;overflow:hidden;-webkit-transform:translateZ(0);transform:translateZ(0);';
-            iframe.setAttribute('scrolling', 'no');
-            iframe.setAttribute('frameborder', '0');
-            iframe.setAttribute('playsinline', '1');
-            iframe.setAttribute('webkit-playsinline', '1');
-            iframe.setAttribute('allowfullscreen', 'true');
-            iframe.setAttribute('allow', 'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share');
-            
-            if (videoInfo.platform === 'facebook') {
-                // Tích hợp bộ cờ Sandbox tối đa cho Safari PWA/ITP (Tuyệt đối không dùng allow-top-navigation)
-                iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation allow-forms allow-storage-access-by-user-activation');
-                iframe.src = 'https://www.facebook.com/plugins/video.php?href=' + encodeURIComponent(videoInfo.url) + '&show_text=false&width=360';
-            } else if (videoInfo.platform === 'instagram') {
-                // Đổi sang cổng /p/ chuẩn xác hơn cho nhúng chéo trang
-                iframe.src = 'https://www.instagram.com/p/' + videoInfo.id + '/embed/';
-            } else if (videoInfo.platform === 'tiktok') {
-                iframe.src = 'https://www.tiktok.com/embed/v2/' + videoInfo.id;
-            }
-            
-            container.appendChild(iframe);
+    if (videoInfo.platform === 'youtube') {
+        window.playYouTubeSDK(videoInfo.id);
+    } else {
+        let iframe = document.createElement('iframe');
+        iframe.style.cssText = 'width:100%;height:100%;border:none;overflow:hidden;-webkit-transform:translateZ(0);transform:translateZ(0);';
+        iframe.setAttribute('scrolling', 'no');
+        iframe.setAttribute('frameborder', '0');
+        iframe.setAttribute('playsinline', '1');
+        iframe.setAttribute('webkit-playsinline', '1');
+        iframe.setAttribute('allowfullscreen', 'true');
+        iframe.setAttribute('allow', 'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share');
+        
+        if (videoInfo.platform === 'facebook') {
+            iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation allow-forms allow-storage-access-by-user-activation');
+            iframe.src = 'https://www.facebook.com/plugins/video.php?href=' + encodeURIComponent(videoInfo.url) + '&show_text=false&width=360';
+        } else if (videoInfo.platform === 'instagram') {
+            iframe.src = 'https://www.instagram.com/p/' + videoInfo.id + '/embed/';
+        } else if (videoInfo.platform === 'tiktok') {
+            iframe.src = 'https://www.tiktok.com/embed/v2/' + videoInfo.id;
         }
-    }, 100); // Tăng độ trễ lên xíu (100ms) để iPadOS kịp dọn RAM cũ
+        
+        container.appendChild(iframe);
+    }
 };
 
 window.playNextReel = function() {
