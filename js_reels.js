@@ -495,21 +495,21 @@ window.playSavedReel = function(encodedUrl, index, direction) {
             iframe.style.cssText = 'width:100%;height:100%;border:none;overflow:hidden;-webkit-transform:translateZ(0);transform:translateZ(0);';
             iframe.setAttribute('scrolling', 'no');
             iframe.setAttribute('frameborder', '0');
-            
-            // Đã có playsinline theo đúng mục 1 bạn nhắc
             iframe.setAttribute('playsinline', '1');
             iframe.setAttribute('webkit-playsinline', '1');
             iframe.setAttribute('allowfullscreen', 'true');
             iframe.setAttribute('allow', 'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share');
             
-            // Sandbox khóa nhảy trang
-            iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-presentation');
-            
+            // 🛑 XỬ LÝ RIÊNG BIỆT CHO SAFARI VÀ MÀN HÌNH CHÍNH (PWA)
             if (videoInfo.platform === 'facebook') {
+                // Chỉ trói Facebook. Thêm allow-forms để Safari/WebKit chấp nhận cho chạy
+                iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-presentation allow-forms');
                 iframe.src = 'https://www.facebook.com/plugins/video.php?href=' + encodeURIComponent(videoInfo.url) + '&show_text=false&width=360';
             } else if (videoInfo.platform === 'instagram') {
+                // Thả rông hoàn toàn cho IG để Safari không chặn
                 iframe.src = 'https://www.instagram.com/reel/' + videoInfo.id + '/embed/';
             } else if (videoInfo.platform === 'tiktok') {
+                // Thả rông hoàn toàn cho TikTok cổng V2
                 iframe.src = 'https://www.tiktok.com/embed/v2/' + videoInfo.id;
             }
             
