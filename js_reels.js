@@ -404,7 +404,7 @@ window.playYouTubeSDK = function(videoId, retryCount) {
     container.innerHTML = '<iframe src="https://www.youtube.com/embed/' + videoId + '?autoplay=1&playsinline=1" style="width:100%;height:100%;border:none;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen="true"></iframe>';
 };
 
-// HÀM PHÁT VIDEO (TRẢ LẠI LOGIC DOM CỦA BẢN GAS CŨ + GIỮ LẠI HIỆU ỨNG VUỐT TIKTOK)
+// HÀM PHÁT VIDEO (TRẢ LẠI LOGIC DOM CỦA BẢN GAS CŨ + CHỐNG VĂNG FACEBOOK)
 window.playSavedReel = function(encodedUrl, index, direction) {
     if (typeof index === 'undefined') index = -1;
     if (typeof direction === 'undefined') direction = 'next';
@@ -477,9 +477,11 @@ window.playSavedReel = function(encodedUrl, index, direction) {
             iframe.setAttribute('scrolling', 'no');
             iframe.setAttribute('frameborder', '0');
             iframe.setAttribute('allowfullscreen', 'true');
-            iframe.setAttribute('allow', 'clipboard-write; encrypted-media; picture-in-picture; web-share');
+            iframe.setAttribute('allow', 'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share');
             
-            // Xóa hết sandbox và playsinline bị thừa ở đây, trả về đúng bản chất GAS
+            // 🛑 CHÌA KHÓA CHỐNG ĐÁ VĂNG TRÊN IPAD (KHI CHẠY SUPABASE/LOCAL)
+            iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-presentation');
+            
             if (videoInfo.platform === 'facebook') {
                 iframe.src = 'https://www.facebook.com/plugins/video.php?href=' + encodeURIComponent(videoInfo.url) + '&show_text=false&width=360';
             } else if (videoInfo.platform === 'instagram') {
