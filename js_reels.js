@@ -500,16 +500,14 @@ window.playSavedReel = function(encodedUrl, index, direction) {
             iframe.setAttribute('allowfullscreen', 'true');
             iframe.setAttribute('allow', 'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share');
             
-            // 🛑 XỬ LÝ RIÊNG BIỆT CHO SAFARI VÀ MÀN HÌNH CHÍNH (PWA)
             if (videoInfo.platform === 'facebook') {
-                // Chỉ trói Facebook. Thêm allow-forms để Safari/WebKit chấp nhận cho chạy
-                iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-presentation allow-forms');
+                // Tích hợp bộ cờ Sandbox tối đa cho Safari PWA/ITP (Tuyệt đối không dùng allow-top-navigation)
+                iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation allow-forms allow-storage-access-by-user-activation');
                 iframe.src = 'https://www.facebook.com/plugins/video.php?href=' + encodeURIComponent(videoInfo.url) + '&show_text=false&width=360';
             } else if (videoInfo.platform === 'instagram') {
-                // Thả rông hoàn toàn cho IG để Safari không chặn
-                iframe.src = 'https://www.instagram.com/reel/' + videoInfo.id + '/embed/';
+                // Đổi sang cổng /p/ chuẩn xác hơn cho nhúng chéo trang
+                iframe.src = 'https://www.instagram.com/p/' + videoInfo.id + '/embed/';
             } else if (videoInfo.platform === 'tiktok') {
-                // Thả rông hoàn toàn cho TikTok cổng V2
                 iframe.src = 'https://www.tiktok.com/embed/v2/' + videoInfo.id;
             }
             
