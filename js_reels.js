@@ -53,6 +53,11 @@ window.openReelsModule = function() {
             .reel-thumb-img { width: 100%; height: 100%; object-fit: cover; opacity: 0.8; }
             .reel-thumb-overlay { position: absolute; bottom: 0; left: 0; right: 0; top: 0; background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.1) 60%, rgba(0,0,0,0.1) 100%); display: flex; flex-direction: column; justify-content: space-between; padding: 8px; pointer-events: none; }
             .reel-thumb-title { font-size: 0.75rem; font-weight: 600; color: #fff; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
+        /* Hiệu ứng vuốt chuyển bài mượt mà */
+            @keyframes slideInUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+            @keyframes slideInDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+            .slide-up-anim { animation: slideInUp 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
+            .slide-down-anim { animation: slideInDown 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
         </style>
 
         <div class="position-absolute top-0 start-0 w-100 h-100 d-flex flex-column">
@@ -120,7 +125,7 @@ window.openReelsModule = function() {
         <div id="playlistSheet" class="bottom-sheet flex-column">
             <div class="d-flex justify-content-between align-items-center p-3 border-bottom border-secondary bg-dark flex-shrink-0" style="border-radius: 20px 20px 0 0;">
                 <h6 class="mb-0 fw-bold text-info"><i class="bi bi-grid-3x3-gap-fill me-2"></i>Danh sách Clip (<span id="reelTotalCount">0</span>)</h6>
-                <button class="btn-close btn-close-white shadow-none" onclick="window.toggleSheet('playlistSheet')"></button>
+                <button class="btn shadow-none p-0 border-0 bg-transparent" onclick="window.toggleSheet('playlistSheet')"><i class="bi bi-x-circle-fill text-white-50 fs-4"></i></button>
             </div>
             <div class="p-3 flex-shrink-0 border-bottom border-dark">
                 <select id="librarySelector" class="form-select unified-input w-100" onchange="window.loadSavedReels()">
@@ -134,7 +139,7 @@ window.openReelsModule = function() {
         <div id="addLinkSheet" class="bottom-sheet">
             <div class="d-flex justify-content-between align-items-center p-3 border-bottom border-secondary bg-dark flex-shrink-0" style="border-radius: 20px 20px 0 0;">
                 <h6 class="mb-0 fw-bold text-info"><i class="bi bi-link-45deg me-2 fs-5"></i>Phát từ Link</h6>
-                <button class="btn-close btn-close-white shadow-none" onclick="window.toggleSheet('addLinkSheet')"></button>
+                <button class="btn shadow-none p-0 border-0 bg-transparent" onclick="window.toggleSheet('addLinkSheet')"><i class="bi bi-x-circle-fill text-white-50 fs-4"></i></button>
             </div>
             <div class="p-4 flex-grow-1" style="padding-bottom: max(env(safe-area-inset-bottom), 3rem) !important;">
                 <div class="dark-label">DÁN LINK YOUTUBE / FB / TIKTOK VÀO ĐÂY:</div>
@@ -370,8 +375,36 @@ window.loadSavedReels = async function() {
     }
 };
 
-window.playSavedReel = function(encodedUrl, index) {
+// HÀM YOUTUBE SDK ĐỂ TRỊ LỖI IPAD
+window.playYouTubeSDK = function(videoId, retryCount) {
+    if (typeof retryCount === 'undefined') retryCount = 0;
+    if (!window.isYtApiReady && (typeof YT === 'undefined' || !YT.Player)) {
+        if (retryCount < 15) { setTimeout(function() { window.playYouTubeSDK(videoId, retryCount + 1); }, 150); return; }
+    }
+    let container = document.getElementById('videoContainer');
+    if (!container) return;
+    if (!document.getElementById('ytPlayerTarget')) container.innerHTML = '<div id="ytPlayerTarget"></div>';
+
+    if (typeof YT !== 'undefined' && YT.Player) {
+        try {
+            window.ytPlayerInstance = new YT.Player('ytPlayerTarget', {
+                height: '100%', width: '100%', videoId: videoId,
+                playerVars: { 'autoplay': 1, 'playsinline': 1, 'rel': 0, 'modestbranding': 1, 'enablejsapi': 1 },
+                events: {
+                    'onReady': function(e) { e.target.playVideo(); },
+                    'onStateChange': function(e) { if (e.data === YT.PlayerState.ENDED) window.playNextReel(); }
+                }
+            });
+            return;
+        } catch(e) { console.warn("Lỗi SDK", e); }
+    }
+    // Fallback an toàn (Có Sandbox và Playsinline)
+    container.innerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1" style="width:100%;height:100%;border:none;" allow="autoplay; encrypted-media; picture-in-picture" playsinline webkit-playsinline sandbox="allow-scripts allow-same-origin allow-popups allow-presentation"></iframe>`;
+};
+
+window.playSavedReel = function(encodedUrl, index, direction) {
     if (typeof index === 'undefined') index = -1;
+    if (typeof direction === 'undefined') direction = 'next';
     window.currentReelIndex = index;
     
     let rawUrl = encodedUrl;
@@ -380,7 +413,6 @@ window.playSavedReel = function(encodedUrl, index) {
     let inputEl = document.getElementById('reelUrl');
     if (inputEl) inputEl.value = rawUrl;
 
-    // Cập nhật tiêu đề hiển thị dưới chân màn hình
     let titleEl = document.getElementById('currentReelTitle');
     if (titleEl && window.currentReelsList[index]) {
         titleEl.innerText = window.currentReelsList[index].title;
@@ -396,73 +428,81 @@ window.playSavedReel = function(encodedUrl, index) {
 
     let container = document.getElementById('videoContainer');
     if (!container) return;
+
+    // HIỆU ỨNG VUỐT TIKTOK
+    container.classList.remove('slide-up-anim', 'slide-down-anim');
+    void container.offsetWidth; 
+    if (direction === 'next') container.classList.add('slide-up-anim');
+    else if (direction === 'prev') container.classList.add('slide-down-anim');
     
     if (window.ytPlayerInstance) {
         try { if (typeof window.ytPlayerInstance.destroy === 'function') window.ytPlayerInstance.destroy(); } catch(err) {}
         window.ytPlayerInstance = null;
     }
 
-    container.innerHTML = `<div class="text-white-50 text-center w-100 h-100 d-flex flex-column justify-content-center align-items-center"><span class="spinner-border text-info mb-3" style="width: 3rem; height: 3rem;"></span>Đang tải video...</div>`;
+    // Fallback HTML nếu video lỗi
+    let fallbackHtml = `
+        <div class="mt-3 text-center position-absolute w-100" style="bottom: 25%; z-index: 10;">
+            <p class="small text-white-50 mb-1" style="text-shadow: 1px 1px 2px #000;">Nếu video đen màn hình:</p>
+            <a href="${rawUrl}" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3 shadow-lg" style="background: rgba(0,0,0,0.5); backdrop-filter: blur(5px);">
+                <i class="bi bi-box-arrow-up-right me-1"></i> Mở nguồn gốc
+            </a>
+        </div>
+    `;
+
+    container.innerHTML = `<div class="text-white-50 text-center w-100 h-100 d-flex flex-column justify-content-center align-items-center"><span class="spinner-border text-info mb-3" style="width: 3rem; height: 3rem;"></span>Đang tải video...</div>${fallbackHtml}`;
     void container.offsetHeight;
 
     setTimeout(() => {
-        let embedHtml = "";
-        let fallbackHtml = `
-            <div class="mt-3 text-center position-absolute w-100" style="bottom: 25%; z-index: 10;">
-                <p class="small text-white-50 mb-1" style="text-shadow: 1px 1px 2px #000;">Nếu video đen màn hình:</p>
-                <a href="${rawUrl}" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3 shadow-lg" style="background: rgba(0,0,0,0.5); backdrop-filter: blur(5px);">
-                    <i class="bi bi-box-arrow-up-right me-1"></i> Mở nguồn video gốc
-                </a>
-            </div>
-        `;
-
-        let ytMatch = rawUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:embed\/|v\/|shorts\/|live\/|watch\?v=|watch\?.+&v=))([\w-]{11})/);
-        if (!ytMatch) {
-            let directMatch = rawUrl.match(/^([a-zA-Z0-9_-]{11})$/);
-            if (directMatch) ytMatch = directMatch;
+        let videoInfo = window.detectVideoPlatform(rawUrl);
+        if (!videoInfo) {
+            container.innerHTML = `<div class="text-white-50 text-center p-5 mt-5">Link chưa được hỗ trợ.</div>${fallbackHtml}`;
+            return;
         }
 
-        let isFbReel = /facebook\.com\/reel\//i.test(rawUrl) || /facebook\.com\/[^/]+\/reels\//i.test(rawUrl);
-        let isFbVideo = rawUrl.includes('facebook.com') || rawUrl.includes('fb.watch');
-        let tkMatch = rawUrl.match(/tiktok\.com\/.*video\/(\d+)/);
-        let domainOrigin = window.location.origin || "https://vercel.com";
+        let oldSpans = container.querySelectorAll('.spinner-border, .text-white-50.text-center:not(.small)');
+        oldSpans.forEach(el => el.remove());
 
-        if (ytMatch) {
-            embedHtml = `<iframe src="https://www.youtube-nocookie.com/embed/${ytMatch[1]}?rel=0&playsinline=1&enablejsapi=1&autoplay=1&origin=${encodeURIComponent(domainOrigin)}" style="width:100%;height:100%;border:none;" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>`;
-        } else if (isFbReel || isFbVideo) {
-            // Ép dùng cổng video.php thay vì post.php để tránh lỗi Refused to connect của FB Reels
-            let fbUrl = `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(rawUrl)}&show_text=false&width=350`;
-            
-            embedHtml = `<iframe src="${fbUrl}" 
-                style="width:100%;height:100%;border:none;overflow:hidden;" 
-                scrolling="no" 
-                frameborder="0" 
-                allowfullscreen="true" 
-                allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share">
-            </iframe>`;
-        } else if (tkMatch) {
-            embedHtml = `<iframe src="https://www.tiktok.com/player/v1/${tkMatch[1]}?controls=1&description=0&music_info=0&autoplay=1" style="width:100%;height:100%;border:none;" allow="autoplay; fullscreen" allowfullscreen title="TikTok video"></iframe>`;
-        } else if (rawUrl.includes('instagram.com')) {
-            let igMatch = rawUrl.match(/instagram\.com\/(?:reel|p)\/([a-zA-Z0-9_-]+)/);
-            if(igMatch) embedHtml = `<iframe src="https://www.instagram.com/reel/${igMatch[1]}/embed/" style="width:100%;height:100%;border:none;overflow:hidden;" scrolling="no" frameborder="0" allowfullscreen="true" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"></iframe>`;
-            else embedHtml = `<div class="text-white-50 text-center p-5 mt-5">Link Instagram không đúng.</div>`;
+        // LOGIC CHỐNG VĂNG IPAD VÀ LỖI SAFARI FULLSCREEN
+        if (videoInfo.platform === 'youtube') {
+            window.playYouTubeSDK(videoInfo.id);
         } else {
-            embedHtml = `<div class="text-white-50 text-center p-5 mt-5">Link chưa được hỗ trợ.</div>`;
+            let iframe = document.createElement('iframe');
+            iframe.style.cssText = 'width:100%;height:100%;border:none;overflow:hidden;-webkit-transform:translateZ(0);transform:translateZ(0);';
+            iframe.setAttribute('scrolling', 'no');
+            iframe.setAttribute('frameborder', '0');
+            
+            // Chống Fullscreen Safari
+            iframe.setAttribute('playsinline', '1');
+            iframe.setAttribute('webkit-playsinline', '1');
+            
+            // Chống nhảy trang iPad (Frame-busting Sandbox)
+            iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-presentation');
+            iframe.setAttribute('allow', 'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share');
+            
+            if (videoInfo.platform === 'facebook') {
+                iframe.src = 'https://www.facebook.com/plugins/video.php?href=' + encodeURIComponent(videoInfo.url) + '&show_text=false&width=360';
+            } else if (videoInfo.platform === 'instagram') {
+                iframe.src = 'https://www.instagram.com/reel/' + videoInfo.id + '/embed/';
+            } else if (videoInfo.platform === 'tiktok') {
+                // Trả về cổng V2 an toàn cho iPad
+                iframe.src = 'https://www.tiktok.com/embed/v2/' + videoInfo.id;
+            }
+            
+            container.appendChild(iframe);
         }
-
-        container.innerHTML = embedHtml + fallbackHtml;
     }, 50); 
 };
 
 window.playNextReel = function() {
     if (window.currentReelsList.length === 0) return;
     window.currentReelIndex = (window.currentReelIndex + 1) % window.currentReelsList.length; 
-    window.playSavedReel(encodeURIComponent(window.currentReelsList[window.currentReelIndex].url), window.currentReelIndex);
+    window.playSavedReel(encodeURIComponent(window.currentReelsList[window.currentReelIndex].url), window.currentReelIndex, 'next');
 };
 window.playPrevReel = function() {
     if (window.currentReelsList.length === 0) return;
     window.currentReelIndex = (window.currentReelIndex - 1 + window.currentReelsList.length) % window.currentReelsList.length; 
-    window.playSavedReel(encodeURIComponent(window.currentReelsList[window.currentReelIndex].url), window.currentReelIndex);
+    window.playSavedReel(encodeURIComponent(window.currentReelsList[window.currentReelIndex].url), window.currentReelIndex, 'prev');
 };
 
 window.openReelsModal = function() {
