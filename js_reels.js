@@ -206,9 +206,22 @@ window.closeReelsModule = function() {
     document.body.style.overflow = ''; 
     let fab = document.getElementById('fab_menu_items');
     if (fab) fab.classList.remove('d-none');
+    
     let container = document.getElementById('videoContainer');
-    if (container) container.innerHTML = '';
-    if (window.ytPlayerInstance) { try { window.ytPlayerInstance.destroy(); } catch(e){} window.ytPlayerInstance = null; }
+    if (container) {
+        // 🛑 DIỆT LỖI TRÀN RAM IPAD KHI THOÁT
+        let oldIframes = container.querySelectorAll('iframe');
+        oldIframes.forEach(ifr => { 
+            ifr.src = 'about:blank'; // Ép Safari cắt đứt luồng tải video
+            ifr.remove(); 
+        });
+        container.innerHTML = '';
+    }
+    
+    if (window.ytPlayerInstance) { 
+        try { window.ytPlayerInstance.destroy(); } catch(e){} 
+        window.ytPlayerInstance = null; 
+    }
 };
 
 // =========================================================================
@@ -404,7 +417,7 @@ window.playYouTubeSDK = function(videoId, retryCount) {
     container.innerHTML = '<iframe src="https://www.youtube.com/embed/' + videoId + '?autoplay=1&playsinline=1" style="width:100%;height:100%;border:none;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen="true"></iframe>';
 };
 
-// HÀM PHÁT VIDEO (TRẢ LẠI LOGIC DOM CỦA BẢN GAS CŨ + CHỐNG VĂNG FACEBOOK)
+// HÀM PHÁT VIDEO (ĐÃ TÍCH HỢP DỌN RAM CHỐNG VĂNG IPAD VÀ SANDBOX)
 window.playSavedReel = function(encodedUrl, index, direction) {
     if (typeof index === 'undefined') index = -1;
     if (typeof direction === 'undefined') direction = 'next';
@@ -438,10 +451,18 @@ window.playSavedReel = function(encodedUrl, index, direction) {
     if (direction === 'next') container.classList.add('slide-up-anim');
     else if (direction === 'prev') container.classList.add('slide-down-anim');
     
+    // 🛑 BÍ QUYẾT DIỆT LỖI RAM IPAD TỪ GỢI Ý CỦA BẠN 🛑
+    // Phá hủy Player Youtube cũ
     if (window.ytPlayerInstance) {
         try { if (typeof window.ytPlayerInstance.destroy === 'function') window.ytPlayerInstance.destroy(); } catch(err) {}
         window.ytPlayerInstance = null;
     }
+    // Ép nhả RAM cho tất cả Iframe (Facebook, TikTok, IG) đang chạy ngầm
+    let oldIframes = container.querySelectorAll('iframe');
+    oldIframes.forEach(ifr => {
+        ifr.src = 'about:blank'; // Cắt luồng dữ liệu lập tức
+        ifr.remove(); // Xóa khỏi DOM
+    });
 
     // Fallback UI
     let fallbackHtml = `
@@ -456,7 +477,7 @@ window.playSavedReel = function(encodedUrl, index, direction) {
     container.innerHTML = `<div class="text-white-50 text-center w-100 h-100 d-flex flex-column justify-content-center align-items-center"><span class="spinner-border text-info mb-3" style="width: 3rem; height: 3rem;"></span>Đang tải video...</div>${fallbackHtml}`;
     void container.offsetHeight; 
 
-    // Đợi UI render xong rồi mới load iframe
+    // Đợi giao diện dọn dẹp xong mới nạp video mới
     setTimeout(() => {
         let videoInfo = window.detectVideoPlatform(rawUrl);
         if (!videoInfo) {
@@ -464,11 +485,9 @@ window.playSavedReel = function(encodedUrl, index, direction) {
             return;
         }
 
-        // Xóa icon loading
         let oldSpans = container.querySelectorAll('.spinner-border, .text-white-50.text-center:not(.small)');
         oldSpans.forEach(el => el.remove());
 
-        // LOGIC TẠO THẺ CỦA BẢN GAS CŨ ĐỂ CHỐNG VĂNG TRÊN IPAD
         if (videoInfo.platform === 'youtube') {
             window.playYouTubeSDK(videoInfo.id);
         } else {
@@ -476,10 +495,14 @@ window.playSavedReel = function(encodedUrl, index, direction) {
             iframe.style.cssText = 'width:100%;height:100%;border:none;overflow:hidden;-webkit-transform:translateZ(0);transform:translateZ(0);';
             iframe.setAttribute('scrolling', 'no');
             iframe.setAttribute('frameborder', '0');
+            
+            // Đã có playsinline theo đúng mục 1 bạn nhắc
+            iframe.setAttribute('playsinline', '1');
+            iframe.setAttribute('webkit-playsinline', '1');
             iframe.setAttribute('allowfullscreen', 'true');
             iframe.setAttribute('allow', 'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share');
             
-            // 🛑 CHÌA KHÓA CHỐNG ĐÁ VĂNG TRÊN IPAD (KHI CHẠY SUPABASE/LOCAL)
+            // Sandbox khóa nhảy trang
             iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-presentation');
             
             if (videoInfo.platform === 'facebook') {
@@ -492,7 +515,7 @@ window.playSavedReel = function(encodedUrl, index, direction) {
             
             container.appendChild(iframe);
         }
-    }, 50); 
+    }, 100); // Tăng độ trễ lên xíu (100ms) để iPadOS kịp dọn RAM cũ
 };
 
 window.playNextReel = function() {
