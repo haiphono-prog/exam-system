@@ -378,7 +378,7 @@ window.loadSavedReels = async function() {
 
 
 
-// HÀM YOUTUBE SDK ĐỂ TRỊ LỖI IPAD
+// HÀM YOUTUBE SDK (CHUẨN TỪ BẢN GAS CŨ)
 window.playYouTubeSDK = function(videoId, retryCount) {
     if (typeof retryCount === 'undefined') retryCount = 0;
     if (!window.isYtApiReady && (typeof YT === 'undefined' || !YT.Player)) {
@@ -401,10 +401,10 @@ window.playYouTubeSDK = function(videoId, retryCount) {
             return;
         } catch(e) { console.warn("Lỗi SDK", e); }
     }
-    container.innerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1" style="width:100%;height:100%;border:none;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
+    container.innerHTML = '<iframe src="https://www.youtube.com/embed/' + videoId + '?autoplay=1&playsinline=1" style="width:100%;height:100%;border:none;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen="true"></iframe>';
 };
 
-// HÀM PHÁT VIDEO (TRẢ VỀ ĐÚNG CÁCH TẠO DOM CỦA BẢN CŨ ĐỂ CHỐNG VĂNG IPAD)
+// HÀM PHÁT VIDEO (TRẢ LẠI LOGIC DOM CỦA BẢN GAS CŨ + GIỮ LẠI HIỆU ỨNG VUỐT TIKTOK)
 window.playSavedReel = function(encodedUrl, index, direction) {
     if (typeof index === 'undefined') index = -1;
     if (typeof direction === 'undefined') direction = 'next';
@@ -443,6 +443,7 @@ window.playSavedReel = function(encodedUrl, index, direction) {
         window.ytPlayerInstance = null;
     }
 
+    // Fallback UI
     let fallbackHtml = `
         <div class="mt-3 text-center position-absolute w-100" style="bottom: 25%; z-index: 10;">
             <p class="small text-white-50 mb-1" style="text-shadow: 1px 1px 2px #000;">Nếu video đen màn hình:</p>
@@ -455,6 +456,7 @@ window.playSavedReel = function(encodedUrl, index, direction) {
     container.innerHTML = `<div class="text-white-50 text-center w-100 h-100 d-flex flex-column justify-content-center align-items-center"><span class="spinner-border text-info mb-3" style="width: 3rem; height: 3rem;"></span>Đang tải video...</div>${fallbackHtml}`;
     void container.offsetHeight; 
 
+    // Đợi UI render xong rồi mới load iframe
     setTimeout(() => {
         let videoInfo = window.detectVideoPlatform(rawUrl);
         if (!videoInfo) {
@@ -462,9 +464,11 @@ window.playSavedReel = function(encodedUrl, index, direction) {
             return;
         }
 
+        // Xóa icon loading
         let oldSpans = container.querySelectorAll('.spinner-border, .text-white-50.text-center:not(.small)');
         oldSpans.forEach(el => el.remove());
 
+        // LOGIC TẠO THẺ CỦA BẢN GAS CŨ ĐỂ CHỐNG VĂNG TRÊN IPAD
         if (videoInfo.platform === 'youtube') {
             window.playYouTubeSDK(videoInfo.id);
         } else {
@@ -472,20 +476,21 @@ window.playSavedReel = function(encodedUrl, index, direction) {
             iframe.style.cssText = 'width:100%;height:100%;border:none;overflow:hidden;-webkit-transform:translateZ(0);transform:translateZ(0);';
             iframe.setAttribute('scrolling', 'no');
             iframe.setAttribute('frameborder', '0');
-            iframe.setAttribute('allowfullscreen', 'true'); // Trả lại thuộc tính cũ
-            iframe.setAttribute('allow', 'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share'); 
+            iframe.setAttribute('allowfullscreen', 'true');
+            iframe.setAttribute('allow', 'clipboard-write; encrypted-media; picture-in-picture; web-share');
             
+            // Xóa hết sandbox và playsinline bị thừa ở đây, trả về đúng bản chất GAS
             if (videoInfo.platform === 'facebook') {
                 iframe.src = 'https://www.facebook.com/plugins/video.php?href=' + encodeURIComponent(videoInfo.url) + '&show_text=false&width=360';
             } else if (videoInfo.platform === 'instagram') {
                 iframe.src = 'https://www.instagram.com/reel/' + videoInfo.id + '/embed/';
             } else if (videoInfo.platform === 'tiktok') {
-                iframe.src = 'https://www.tiktok.com/embed/v2/' + videoInfo.id; // TRẢ LẠI CỔNG V2
+                iframe.src = 'https://www.tiktok.com/embed/v2/' + videoInfo.id;
             }
             
             container.appendChild(iframe);
         }
-    }, 50);
+    }, 50); 
 };
 
 window.playNextReel = function() {
