@@ -2,10 +2,6 @@
 // 🎬 MODULE LUYỆN NGHE REELS - GIAO DIỆN TIKTOK TRÀN VIỀN & VUỐT (BẢN CHUẨN IPAD/SAFARI)
 // =========================================================================
 
-// [DEBUG TẬN GỐC] Bẫy lỗi Safari
-window.addEventListener('error', e => alert('JS lỗi: ' + e.message + ' (dòng ' + e.lineno + ')'));
-window.addEventListener('unhandledrejection', e => alert('Promise lỗi: ' + e.reason));
-
 window.currentReelsList = []; 
 window.currentReelIndex = -1; 
 window.ytPlayerInstance = null;
@@ -484,10 +480,6 @@ window.playSavedReel = function(encodedUrl, index, direction) {
     // Đợi giao diện dọn dẹp xong mới nạp video mới
     setTimeout(() => {
         let videoInfo = window.detectVideoPlatform(rawUrl);
-        
-        // [BẪY LỖI 1]: Kiểm tra hàm detectVideoPlatform có sống sót và tách đúng ID không
-        alert('DEBUG 1 - videoInfo: ' + JSON.stringify(videoInfo));
-
         if (!videoInfo) {
             container.innerHTML = `<div class="text-white-50 text-center p-5 mt-5">Link chưa được hỗ trợ.</div>${fallbackHtml}`;
             return;
@@ -500,33 +492,28 @@ window.playSavedReel = function(encodedUrl, index, direction) {
             window.playYouTubeSDK(videoInfo.id);
         } else {
             let iframe = document.createElement('iframe');
-            
-            // Ép layout cứng để trị lỗi container xẹp về 0px của Safari, gỡ bỏ translateZ
-            iframe.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0;';
-            iframe.setAttribute('allowfullscreen', '');
-            iframe.setAttribute('allow', 'autoplay; encrypted-media; picture-in-picture; web-share');
-            iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+            iframe.style.cssText = 'width:100%;height:100%;border:none;overflow:hidden;-webkit-transform:translateZ(0);transform:translateZ(0);';
+            iframe.setAttribute('scrolling', 'no');
+            iframe.setAttribute('frameborder', '0');
+            iframe.setAttribute('playsinline', '1');
+            iframe.setAttribute('webkit-playsinline', '1');
+            iframe.setAttribute('allowfullscreen', 'true');
+            iframe.setAttribute('allow', 'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share');
             
             if (videoInfo.platform === 'facebook') {
+                // Tích hợp bộ cờ Sandbox tối đa cho Safari PWA/ITP (Tuyệt đối không dùng allow-top-navigation)
                 iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation allow-forms allow-storage-access-by-user-activation');
                 iframe.src = 'https://www.facebook.com/plugins/video.php?href=' + encodeURIComponent(videoInfo.url) + '&show_text=false&width=360';
             } else if (videoInfo.platform === 'instagram') {
+                // Đổi sang cổng /p/ chuẩn xác hơn cho nhúng chéo trang
                 iframe.src = 'https://www.instagram.com/p/' + videoInfo.id + '/embed/';
             } else if (videoInfo.platform === 'tiktok') {
                 iframe.src = 'https://www.tiktok.com/embed/v2/' + videoInfo.id;
             }
             
-            // [BẪY LỖI 2]: Xác nhận iframe nạp xong nội dung chưa bị chặn ITP
-            iframe.onload = () => alert('DEBUG 3 - iframe đã tải xong mạng');
-            
-            // Đảm bảo container cha làm gốc tọa độ cho inset:0
-            container.style.position = 'relative';
             container.appendChild(iframe);
-            
-            // [BẪY LỖI 3]: Bắt bệnh chiều cao 0px của Safari
-            alert('DEBUG 2 - Kích thước container: ' + container.offsetWidth + 'x' + container.offsetHeight);
         }
-    }, 50);
+    }, 100); // Tăng độ trễ lên xíu (100ms) để iPadOS kịp dọn RAM cũ
 };
 
 window.playNextReel = function() {
