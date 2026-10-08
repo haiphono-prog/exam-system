@@ -376,6 +376,8 @@ window.loadSavedReels = async function() {
     }
 };
 
+
+
 // HÀM YOUTUBE SDK ĐỂ TRỊ LỖI IPAD
 window.playYouTubeSDK = function(videoId, retryCount) {
     if (typeof retryCount === 'undefined') retryCount = 0;
@@ -399,10 +401,10 @@ window.playYouTubeSDK = function(videoId, retryCount) {
             return;
         } catch(e) { console.warn("Lỗi SDK", e); }
     }
-    // Fallback an toàn (Có Sandbox và Playsinline)
-    container.innerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1" style="width:100%;height:100%;border:none;" allow="autoplay; encrypted-media; picture-in-picture" playsinline webkit-playsinline sandbox="allow-scripts allow-same-origin allow-popups allow-presentation"></iframe>`;
+    container.innerHTML = `<iframe src="https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1" style="width:100%;height:100%;border:none;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen></iframe>`;
 };
 
+// HÀM PHÁT VIDEO (TRẢ VỀ ĐÚNG CÁCH TẠO DOM CỦA BẢN CŨ ĐỂ CHỐNG VĂNG IPAD)
 window.playSavedReel = function(encodedUrl, index, direction) {
     if (typeof index === 'undefined') index = -1;
     if (typeof direction === 'undefined') direction = 'next';
@@ -430,7 +432,7 @@ window.playSavedReel = function(encodedUrl, index, direction) {
     let container = document.getElementById('videoContainer');
     if (!container) return;
 
-    // HIỆU ỨNG VUỐT TIKTOK
+    // HIỆU ỨNG VUỐT
     container.classList.remove('slide-up-anim', 'slide-down-anim');
     void container.offsetWidth; 
     if (direction === 'next') container.classList.add('slide-up-anim');
@@ -441,18 +443,17 @@ window.playSavedReel = function(encodedUrl, index, direction) {
         window.ytPlayerInstance = null;
     }
 
-    // Fallback HTML nếu video lỗi
     let fallbackHtml = `
         <div class="mt-3 text-center position-absolute w-100" style="bottom: 25%; z-index: 10;">
             <p class="small text-white-50 mb-1" style="text-shadow: 1px 1px 2px #000;">Nếu video đen màn hình:</p>
             <a href="${rawUrl}" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3 shadow-lg" style="background: rgba(0,0,0,0.5); backdrop-filter: blur(5px);">
-                <i class="bi bi-box-arrow-up-right me-1"></i> Mở nguồn gốc
+                <i class="bi bi-box-arrow-up-right me-1"></i> Mở nguồn video gốc
             </a>
         </div>
     `;
 
     container.innerHTML = `<div class="text-white-50 text-center w-100 h-100 d-flex flex-column justify-content-center align-items-center"><span class="spinner-border text-info mb-3" style="width: 3rem; height: 3rem;"></span>Đang tải video...</div>${fallbackHtml}`;
-    void container.offsetHeight;
+    void container.offsetHeight; 
 
     setTimeout(() => {
         let videoInfo = window.detectVideoPlatform(rawUrl);
@@ -464,7 +465,6 @@ window.playSavedReel = function(encodedUrl, index, direction) {
         let oldSpans = container.querySelectorAll('.spinner-border, .text-white-50.text-center:not(.small)');
         oldSpans.forEach(el => el.remove());
 
-        // LOGIC CHỐNG VĂNG IPAD VÀ LỖI SAFARI FULLSCREEN
         if (videoInfo.platform === 'youtube') {
             window.playYouTubeSDK(videoInfo.id);
         } else {
@@ -472,27 +472,20 @@ window.playSavedReel = function(encodedUrl, index, direction) {
             iframe.style.cssText = 'width:100%;height:100%;border:none;overflow:hidden;-webkit-transform:translateZ(0);transform:translateZ(0);';
             iframe.setAttribute('scrolling', 'no');
             iframe.setAttribute('frameborder', '0');
-            
-            // Chống Fullscreen Safari
-            iframe.setAttribute('playsinline', '1');
-            iframe.setAttribute('webkit-playsinline', '1');
-            
-            // Chống nhảy trang iPad (Frame-busting Sandbox)
-            iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-presentation');
-            iframe.setAttribute('allow', 'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share');
+            iframe.setAttribute('allowfullscreen', 'true'); // Trả lại thuộc tính cũ
+            iframe.setAttribute('allow', 'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share'); 
             
             if (videoInfo.platform === 'facebook') {
                 iframe.src = 'https://www.facebook.com/plugins/video.php?href=' + encodeURIComponent(videoInfo.url) + '&show_text=false&width=360';
             } else if (videoInfo.platform === 'instagram') {
                 iframe.src = 'https://www.instagram.com/reel/' + videoInfo.id + '/embed/';
             } else if (videoInfo.platform === 'tiktok') {
-                // Trả về cổng V2 an toàn cho iPad
-                iframe.src = 'https://www.tiktok.com/embed/v2/' + videoInfo.id;
+                iframe.src = 'https://www.tiktok.com/embed/v2/' + videoInfo.id; // TRẢ LẠI CỔNG V2
             }
             
             container.appendChild(iframe);
         }
-    }, 50); 
+    }, 50);
 };
 
 window.playNextReel = function() {
