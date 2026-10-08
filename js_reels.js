@@ -1,5 +1,5 @@
 // =========================================================================
-// 🎬 MODULE LUYỆN NGHE REELS - GIAO DIỆN TIKTOK TRÀN VIỀN & VUỐT
+// 🎬 MODULE LUYỆN NGHE REELS - GIAO DIỆN TIKTOK TRÀN VIỀN & VUỐT (BẢN CHUẨN IPAD/SAFARI)
 // =========================================================================
 
 window.currentReelsList = []; 
@@ -53,7 +53,8 @@ window.openReelsModule = function() {
             .reel-thumb-img { width: 100%; height: 100%; object-fit: cover; opacity: 0.8; }
             .reel-thumb-overlay { position: absolute; bottom: 0; left: 0; right: 0; top: 0; background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.1) 60%, rgba(0,0,0,0.1) 100%); display: flex; flex-direction: column; justify-content: space-between; padding: 8px; pointer-events: none; }
             .reel-thumb-title { font-size: 0.75rem; font-weight: 600; color: #fff; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-shadow: 0 1px 3px rgba(0,0,0,0.8); }
-        /* Hiệu ứng vuốt chuyển bài mượt mà */
+            
+            /* Hiệu ứng vuốt chuyển bài mượt mà */
             @keyframes slideInUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
             @keyframes slideInDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
             .slide-up-anim { animation: slideInUp 0.35s cubic-bezier(0.4, 0, 0.2, 1); }
