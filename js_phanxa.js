@@ -226,11 +226,36 @@ window.px_extractContent = function(item, currentMode) {
 
 window.getLangKeys = function() { return { sourceLang: window.px_selectedMode === 'vi-en' ? 'vi' : 'en', targetLang: window.px_selectedMode === 'vi-en' ? 'en' : 'vi' }; };
 
+window.togglePxMode = function() {
+    if (window.px_selectedMode === 'vi-en') {
+        window.px_selectedMode = 'en-vi';
+    } else {
+        window.px_selectedMode = 'vi-en';
+    }
+    
+    // Cập nhật giao diện nút
+    window.updateModeButtonUI();
+    // Cập nhật nhãn cấu hình thời gian/tốc độ đọc
+    window.updateConfigUI();
+    
+    // Nếu đang trong bài học thì load lại thẻ hiện tại
+    if (window.px_allQuestions && window.px_allQuestions.length > 0) {
+        window.pxPlayCurrentIndex();
+    }
+};
+
 window.updateModeButtonUI = function() {
     const btn = document.getElementById("pxBtnMode");
     if (!btn) return; 
-    if (window.px_selectedMode === 'vi-en') { btn.innerHTML = `🔄 Việt ➔ Anh`; btn.className = "px-mode-btn mode-vi"; } 
-    else { btn.innerHTML = `🔄 Anh ➔ Việt`; btn.className = "px-mode-btn mode-en"; }
+    
+    // Sửa lại cho đúng logic hiển thị
+    if (window.px_selectedMode === 'vi-en') { 
+        btn.innerHTML = `🔄 Việt ➔ Anh`; 
+        btn.className = "px-mode-btn mode-vi text-warning"; 
+    } else { 
+        btn.innerHTML = `🔄 Anh ➔ Việt`; 
+        btn.className = "px-mode-btn mode-en text-info"; 
+    }
 };
 
 window.togglePxShuffle = function() {
@@ -360,8 +385,11 @@ window.pxInitExercise = async function() {
 
     window.px_allQuestions = lessonData.map(q => {
         let item = { ...q };
-        item.vi = q.vi || q.q || q.question || q[4] || q[3] || "Câu hỏi";
         
+        // 1. Lấy nội dung thô của Câu hỏi (cột q)
+        let questionText = q.q || q.question || q[4] || q[3] || "Câu hỏi";
+        
+        // 2. Lấy nội dung thô của Đáp án (dựa vào cột answer và opt_a, b, c, d)
         let correctOpt = String(q.answer || q.a || q[8] || "").trim().toUpperCase();
         let ansText = "";
 
@@ -374,9 +402,31 @@ window.pxInitExercise = async function() {
             else if (correctOpt === 'B') ansText = q.opt_b || q.optB;
             else if (correctOpt === 'C') ansText = q.opt_c || q.optC;
             else if (correctOpt === 'D') ansText = q.opt_d || q.optD;
+            else ansText = q.answer || q.a || ""; 
+        }
+        // Fallback nếu không có opt_a, opt_b... thì lấy trực tiếp text trong cột answer
+        ansText = ansText || q.answer || q.a || "Đáp án";
+
+        // 3. 🌟 NHẬN DIỆN THÔNG MINH: Tự động phân bổ lại vị trí Anh - Việt
+        let isAnswerVN = typeof window.isVietnameseTextPx === 'function' ? window.isVietnameseTextPx(ansText) : false;
+        let isQuestionVN = typeof window.isVietnameseTextPx === 'function' ? window.isVietnameseTextPx(questionText) : true; // Mặc định q là VN nếu không check được
+
+        // Nếu Đáp án rõ ràng là Tiếng Việt, còn Câu hỏi thì không -> Đảo ngược
+        if (isAnswerVN && !isQuestionVN) {
+            item.vi = ansText;
+            item.en = questionText;
+        } 
+        // Nếu Câu hỏi rõ ràng là Tiếng Việt, còn Đáp án thì không -> Giữ nguyên
+        else if (isQuestionVN && !isAnswerVN) {
+            item.vi = questionText;
+            item.en = ansText;
+        } 
+        // Nếu cả 2 đều là VN / đều là EN / không rõ ràng -> Giữ thứ tự gốc của Database
+        else {
+            item.vi = questionText;
+            item.en = ansText;
         }
         
-        item.en = ansText || q.en || q.answer || q.a || "Đáp án";
         return item;
     });
 
@@ -560,21 +610,38 @@ window.pxRevealAnswer = function() {
     }
 };
 
+// Hàm regex tự động phát hiện Tiếng Việt
+window.isVietnameseTextPx = function(text) {
+    if (!text) return false;
+    const vnRegex = /[àáãạảăắằẳẵặâấầẩẫậèéẹẻẽêềếểễệđìíĩỉịòóõọỏôốồổỗộơớờởỡợùúũụủưứừửữựỳýỹỷỵ]/i;
+    return vnRegex.test(text);
+};
+
 window.pxSpeakSourceOnClick = function() {
     if (!window.px_currentData) return;
     if (!window.px_isPaused) pxMediaTogglePause(); 
     document.querySelectorAll('.px-word.show-meaning').forEach(w => w.classList.remove('show-meaning'));
+    
     let extracted = px_extractContent(window.px_currentData, window.px_selectedMode);
     let c = window.pxConfig[extracted.sourceLang];
-    pxSpeakText(extracted.sourceText, window.pxOpts.speeds[c.speedIndex], extracted.sourceLang === 'vi' ? 'vi-VN' : 'en-US', 1, null);
+    
+    // Tự động nhận diện ngôn ngữ thay vì ép cứng
+    let langCode = window.isVietnameseTextPx(extracted.sourceText) ? 'vi-VN' : 'en-US';
+    
+    pxSpeakText(extracted.sourceText, window.pxOpts.speeds[c.speedIndex], langCode, 1, null);
 };
 
 window.pxSpeakAnswerOnClick = function() {
     if(!window.px_currentData) return;
     if (!window.px_isPaused) pxMediaTogglePause(); 
+    
     let extracted = px_extractContent(window.px_currentData, window.px_selectedMode);
     let c = window.pxConfig[extracted.targetLang];
-    pxSpeakText(extracted.targetText, window.pxOpts.speeds[c.speedIndex], extracted.targetLang === 'en' ? 'en-US' : 'vi-VN', 1, null);
+    
+    // Tự động nhận diện ngôn ngữ thay vì ép cứng
+    let langCode = window.isVietnameseTextPx(extracted.targetText) ? 'vi-VN' : 'en-US';
+    
+    pxSpeakText(extracted.targetText, window.pxOpts.speeds[c.speedIndex], langCode, 1, null);
 };
 
 window.pxStartAutoNext = function(seconds) {
