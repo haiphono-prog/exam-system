@@ -496,25 +496,15 @@ window.pxRenderTextWithClickableWords = function(containerId, text, langCode, re
                 let meaningSpan = wrapper.querySelector('.px-meaning');
                 if (!wrapper.dataset.translated) {
                     meaningSpan.innerText = "⏳...";
-                    
-                    // SỬ DỤNG FETCH API TRỰC TIẾP THAY CHO GOOGLE.SCRIPT
-                    let translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=${encodeURIComponent(cleanWord)}`;
-                    
-                    fetch(translateUrl)
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data && data[0] && data[0][0] && data[0][0][0]) {
-                                let translatedText = data[0][0][0];
-                                meaningSpan.innerHTML = `<span style="font-size:14px; font-weight:bold;">${translatedText}</span>`; 
-                                wrapper.dataset.translated = "true";
-                            } else { 
-                                meaningSpan.innerHTML = "Không tìm thấy"; 
-                            }
-                        })
-                        .catch(err => {
-                            console.error("Lỗi dịch từ:", err);
-                            meaningSpan.innerHTML = "Lỗi mạng";
-                        });
+                    if (typeof google !== 'undefined' && google.script) {
+                        google.script.run.withSuccessHandler(res => {
+                            if (res && res.meaning) {
+                                let displayTxt = res.meaning;
+                                if(res.ipa && !res.ipa.includes("Lỗi")) displayTxt = `<span style="font-size:12px; color:#fef08a; font-weight:normal;">[${res.ipa}]</span><br>${res.meaning}`;
+                                meaningSpan.innerHTML = displayTxt; wrapper.dataset.translated = "true";
+                            } else { meaningSpan.innerHTML = "Offline"; }
+                        }).getVocabData(cleanWord);
+                    } else { meaningSpan.innerHTML = "Offline"; }
                 }
             }
         };
