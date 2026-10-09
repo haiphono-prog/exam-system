@@ -496,15 +496,25 @@ window.pxRenderTextWithClickableWords = function(containerId, text, langCode, re
                 let meaningSpan = wrapper.querySelector('.px-meaning');
                 if (!wrapper.dataset.translated) {
                     meaningSpan.innerText = "⏳...";
-                    if (typeof google !== 'undefined' && google.script) {
-                        google.script.run.withSuccessHandler(res => {
-                            if (res && res.meaning) {
-                                let displayTxt = res.meaning;
-                                if(res.ipa && !res.ipa.includes("Lỗi")) displayTxt = `<span style="font-size:12px; color:#fef08a; font-weight:normal;">[${res.ipa}]</span><br>${res.meaning}`;
-                                meaningSpan.innerHTML = displayTxt; wrapper.dataset.translated = "true";
-                            } else { meaningSpan.innerHTML = "Offline"; }
-                        }).getVocabData(cleanWord);
-                    } else { meaningSpan.innerHTML = "Offline"; }
+                    
+                    // SỬ DỤNG FETCH API TRỰC TIẾP THAY CHO GOOGLE.SCRIPT
+                    let translateUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=vi&dt=t&q=${encodeURIComponent(cleanWord)}`;
+                    
+                    fetch(translateUrl)
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data && data[0] && data[0][0] && data[0][0][0]) {
+                                let translatedText = data[0][0][0];
+                                meaningSpan.innerHTML = `<span style="font-size:14px; font-weight:bold;">${translatedText}</span>`; 
+                                wrapper.dataset.translated = "true";
+                            } else { 
+                                meaningSpan.innerHTML = "Không tìm thấy"; 
+                            }
+                        })
+                        .catch(err => {
+                            console.error("Lỗi dịch từ:", err);
+                            meaningSpan.innerHTML = "Lỗi mạng";
+                        });
                 }
             }
         };
@@ -698,7 +708,7 @@ window.pxMediaTogglePause = function() {
 };
 
 // =================================================================================
-// 🌟 THAY THẾ DUY NHẤT HÀM NÀY: KIẾN TRÚC ÂM THANH 3 LỚP
+// 🌟 KIẾN TRÚC ÂM THANH MỚI (KHÔNG CẦN GAS) - TỐI ƯU ĐỘ MƯỢT CHO WEB ĐỘC LẬP
 // =================================================================================
 window.pxSpeakText = function(text, rate, langCode, repeatCount, onComplete) {
     window.speechSynthesis.cancel(); 
@@ -716,20 +726,8 @@ window.pxSpeakText = function(text, rate, langCode, repeatCount, onComplete) {
         if (window.px_audioCache[text]) {
             playAudioFromCache(window.px_audioCache[text]);
         } else {
-            // LỚP 1: BẮT ĐÚNG HÀM TỪ FILE CODE ĐỂ LẤY FILE MP3
-            if (typeof google !== 'undefined' && google.script) {
-                google.script.run.withSuccessHandler(function(base64Audio) {
-                    if (mySession !== window.px_currentReadSession) return;
-                    if (base64Audio) { 
-                        window.px_audioCache[text] = base64Audio; 
-                        playAudioFromCache(base64Audio); 
-                    } else { 
-                        fallbackToGoogleDirect(); // Nếu lỗi MP3, qua Lớp 2
-                    }
-                }).withFailureHandler(fallbackToGoogleDirect).getPremiumAudioBase64(text, langCodeShort, 'female', rate);
-            } else { 
-                fallbackToGoogleDirect(); 
-            }
+            // Không còn GAS, gọi trực tiếp API MP3 của Google Translate (Mượt, cần mạng)
+            fallbackToGoogleDirect(); 
         }
     }
 
@@ -740,7 +738,7 @@ window.pxSpeakText = function(text, rate, langCode, repeatCount, onComplete) {
         window.px_globalAudio.play().catch(fallbackToGoogleDirect);
     }
     
-    // LỚP 2: BROWSER TỰ ĐỘNG KÉO FILE MP3 TỪ MÁY CHỦ GOOGLE NẾU LỚP 1 GẶP LỖI
+    // LỚP 1 MỚI: Kéo file MP3 trực tiếp từ máy chủ Google (Thường cho giọng rất tự nhiên)
     function fallbackToGoogleDirect() {
         if (mySession !== window.px_currentReadSession) return;
         
@@ -749,10 +747,12 @@ window.pxSpeakText = function(text, rate, langCode, repeatCount, onComplete) {
         window.px_globalAudio.src = googleAudioUrl;
         window.px_globalAudio.playbackRate = rate; 
         window.px_globalAudio.onended = () => { playCount++; setTimeout(playNextLoop, 400); };
-        window.px_globalAudio.play().catch(fallbackToLocalVoice); // Lỗi mới qua Lớp 3
+        
+        // Nếu trình duyệt chặn phát MP3 do chính sách CORS/Autoplay, sẽ rớt xuống Lớp 2
+        window.px_globalAudio.play().catch(fallbackToLocalVoice); 
     }
 
-    // LỚP 3: DỰ PHÒNG OFFLINE BẰNG GIỌNG CỦA MÁY
+    // LỚP 2 MỚI: Nâng cấp giọng đọc Offline của thiết bị
     function fallbackToLocalVoice() {
         if (mySession !== window.px_currentReadSession) return;
         const msg = new SpeechSynthesisUtterance(text);
@@ -762,8 +762,15 @@ window.pxSpeakText = function(text, rate, langCode, repeatCount, onComplete) {
         let voices = window.speechSynthesis.getVoices();
         let langVoices = voices.filter(v => v.lang.toLowerCase().includes(langCodeShort));
         
-        // Ưu tiên giọng tự nhiên nếu máy có cài
-        let premiumVoice = langVoices.find(v => v.name.includes('Google') || v.name.includes('Premium') || v.name.includes('Natural') || v.name.includes('Online'));
+        // 🛑 BÍ QUYẾT: Ép trình duyệt tìm các giọng đọc "Xịn" (Premium/Siri) thay vì giọng Robot mặc định
+        let premiumVoice = langVoices.find(v => 
+            v.name.includes('Premium') || 
+            v.name.includes('Siri') || 
+            v.name.includes('Natural') || 
+            v.name.includes('Google') || 
+            v.name.includes('Linh') // Giọng xịn của Apple Tiếng Việt
+        );
+        
         if (premiumVoice) { msg.voice = premiumVoice; } 
         else if (langVoices.length > 0) { msg.voice = langVoices[0]; }
         
@@ -772,7 +779,12 @@ window.pxSpeakText = function(text, rate, langCode, repeatCount, onComplete) {
         window.speechSynthesis.speak(msg);
     }
     
-    playNextLoop(); 
+    // Fix lỗi Safari đôi khi tải danh sách giọng nói bị trễ
+    if (window.speechSynthesis.getVoices().length === 0) {
+        window.speechSynthesis.onvoiceschanged = () => { playNextLoop(); window.speechSynthesis.onvoiceschanged = null; };
+    } else {
+        playNextLoop(); 
+    }
 };
 
 window.pxClearTimers = function() {
