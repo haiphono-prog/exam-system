@@ -1,7 +1,15 @@
-// --- BẢN CẬP NHẬT: HEADER GỐC, ĐẶC TRỊ GƯƠNG SOI MATHJAX & FOOTER ICON TRÀN VIỀN ---
+// --- BẢN CẬP NHẬT: FOOTER BÁM ĐÁY TUYỆT ĐỐI, HEADER RESPONSIVE & ĐẶC TRỊ LỖI GƯƠNG SOI MATHJAX ---
+
 function render_flashcard_mode(idx) {
     if (typeof window.update_progress_bar === 'function') {
         window.update_progress_bar(); 
+    }
+
+    // 🌟 1. THỐNG NHẤT RESPONSIVE CHỮ TRÊN HEADER (Chỉ hiện Icon trên Mobile)
+    let modeTextEl = document.getElementById('mode_text');
+    if (modeTextEl && !modeTextEl.innerHTML.includes('d-md-inline')) {
+        // Tách icon và bọc phần chữ phía sau vào thẻ span tự ẩn trên màn hình nhỏ
+        modeTextEl.innerHTML = modeTextEl.innerHTML.replace(/(<\/i>)\s*(.+)/i, '$1 <span class="d-none d-md-inline ms-1">$2</span>');
     }
 
     let direction = "next";
@@ -21,7 +29,7 @@ function render_flashcard_mode(idx) {
     let btnPrevDisabled = (idx === 0) ? "opacity: 0.3; pointer-events: none;" : "";
     let btnNextDisabled = (idx === questions.length - 1) ? "opacity: 0.3; pointer-events: none;" : "";
 
-    // 1. Xử lý Giải thích (Hint)
+    // 2. Xử lý Hint (Giải thích)
     let rawHint = q.hint || "";
     let formattedHint = "";
     let hasHint = rawHint.trim() !== "";
@@ -34,21 +42,20 @@ function render_flashcard_mode(idx) {
         );
     }
 
-    // 2. Bóc tách đáp án (Không để trống)
+    // 3. Bóc tách Đáp án
     let correctAns = q.a || q.answer || q.en || q[4] || "Chưa cập nhật";
     if (/^[A-D]$/i.test(correctAns) && q.opts && q.opts.length > 0) {
         let letterIdx = correctAns.toUpperCase().charCodeAt(0) - 65;
         if (q.opts[letterIdx]) correctAns = q.opts[letterIdx];
     }
 
-    // 3. THIẾT LẬP KHUNG QUIZ AREA NHƯ CŨ (Giữ nguyên Header)
     let quizArea = document.getElementById('quiz_area');
-    quizArea.style.height = 'calc(100dvh - 90px)'; 
+    quizArea.style.height = '100%'; 
     quizArea.style.display = 'flex';
     quizArea.style.flexDirection = 'column';
     quizArea.style.overscrollBehavior = 'none';
 
-    // 4. CSS 3D VÀ BỘ LỌC ĐẶC TRỊ GƯƠNG SOI
+    // 4. CSS 3D VÀ BỘ LỌC ĐẶC TRỊ GƯƠNG SOI (Chống xuyên thấu cho cả MathJax)
     if (!document.getElementById('flashcard_3d_css')) {
         let style3D = document.createElement('style');
         style3D.id = 'flashcard_3d_css';
@@ -67,13 +74,13 @@ function render_flashcard_mode(idx) {
             }
             .flip-card-back { transform: rotateY(180deg); }
             
-            /* 🌟 ĐẶC TRỊ SAFARI: Ẩn tàng hình luôn mặt thẻ bị úp để MathJax không xuyên qua được */
+            /* 🌟 ĐẶC TRỊ SAFARI & MATHJAX GƯƠNG SOI: Ẩn tàng hình luôn mặt thẻ bị úp */
             .flip-card:not(.flipped) .flip-card-back { visibility: hidden; transition: visibility 0s 0.2s; }
             .flip-card.flipped .flip-card-back { visibility: visible; transition: visibility 0s 0s; }
             .flip-card.flipped .flip-card-front { visibility: hidden; transition: visibility 0s 0.2s; }
             .flip-card:not(.flipped) .flip-card-front { visibility: visible; transition: visibility 0s 0s; }
 
-            /* CSS Nút Footer */
+            /* CSS Nút Footer Tối giản */
             .fc-footer-btn { background: transparent; transition: 0.2s; color: #fff; font-size: 1.5rem; }
             .fc-footer-btn:active { background: rgba(255,255,255,0.1) !important; }
         `;
@@ -86,10 +93,12 @@ function render_flashcard_mode(idx) {
             <div id="flashcard_track" class="flex-grow-1 position-relative w-100 mx-auto fc-perspective pt-3"
                  style="max-width: 800px; overflow: hidden; touch-action: pan-y;
                         padding-left: max(8px, env(safe-area-inset-left));
-                        padding-right: max(8px, env(safe-area-inset-right));"></div>
+                        padding-right: max(8px, env(safe-area-inset-right));
+                        min-height: calc(100dvh - 180px); margin-bottom: 70px;"></div>
             
-            <div id="flashcard_nav" class="w-100 border-top border-secondary bg-dark flex-shrink-0 mt-auto"
-                 style="margin-left: -0.5px; margin-right: -0.5px;"></div>
+            <!-- 🌟 FOOTER FIXED BOTTOM ÉP SÁT TẬN CÙNG ĐÁY MÀN HÌNH -->
+            <div id="flashcard_nav" class="position-fixed bottom-0 start-0 w-100 border-top border-secondary bg-dark d-flex"
+                 style="z-index: 1040; margin: 0; padding-bottom: env(safe-area-inset-bottom);"></div>
         `;
         if (typeof initSwipeFlashcard === 'function') initSwipeFlashcard(); 
     }
@@ -99,20 +108,18 @@ function render_flashcard_mode(idx) {
 
     // 5. FOOTER CHUẨN SUPER APP: 4 ICON TO BẢN, TRÀN VIỀN ĐÁY
     nav.innerHTML = `
-        <div class="d-flex w-100">
-            <button id="fc_btn_prev" class="btn py-3 flex-grow-1 fc-footer-btn border-0 border-end border-secondary" style="border-radius: 0; ${btnPrevDisabled}" onclick="event.stopPropagation(); if(window.current_fc_idx > 0) render_flashcard_mode(window.current_fc_idx - 1);">
-                <i class="bi bi-chevron-left"></i>
-            </button>
-            <button class="btn py-3 flex-grow-1 fc-footer-btn border-0 border-end border-secondary" style="border-radius: 0;" onclick="let fc = document.querySelector('.flip-card'); if(fc) fc.classList.remove('flipped');">
-                <i class="bi bi-arrow-counterclockwise"></i>
-            </button>
-            <button class="btn py-3 flex-grow-1 fc-footer-btn border-0 border-end border-secondary text-info" style="border-radius: 0;" onclick="let fc = document.querySelector('.flip-card'); if(fc) fc.classList.add('flipped');">
-                <i class="bi bi-arrow-clockwise"></i>
-            </button>
-            <button id="fc_btn_next" class="btn py-3 flex-grow-1 fc-footer-btn border-0" style="border-radius: 0; ${btnNextDisabled}" onclick="event.stopPropagation(); if(window.current_fc_idx < window.questions.length - 1) render_flashcard_mode(window.current_fc_idx + 1);">
-                <i class="bi bi-chevron-right"></i>
-            </button>
-        </div>
+        <button id="fc_btn_prev" class="btn py-3 flex-grow-1 fc-footer-btn border-0 border-end border-secondary" style="border-radius: 0; ${btnPrevDisabled}" onclick="event.stopPropagation(); if(window.current_fc_idx > 0) render_flashcard_mode(window.current_fc_idx - 1);">
+            <i class="bi bi-chevron-left"></i>
+        </button>
+        <button class="btn py-3 flex-grow-1 fc-footer-btn border-0 border-end border-secondary" style="border-radius: 0;" onclick="let fc = document.querySelector('.flip-card'); if(fc) fc.classList.remove('flipped');">
+            <i class="bi bi-arrow-counterclockwise"></i>
+        </button>
+        <button class="btn py-3 flex-grow-1 fc-footer-btn border-0 border-end border-secondary text-info" style="border-radius: 0;" onclick="let fc = document.querySelector('.flip-card'); if(fc) fc.classList.add('flipped');">
+            <i class="bi bi-arrow-clockwise"></i>
+        </button>
+        <button id="fc_btn_next" class="btn py-3 flex-grow-1 fc-footer-btn border-0" style="border-radius: 0; ${btnNextDisabled}" onclick="event.stopPropagation(); if(window.current_fc_idx < window.questions.length - 1) render_flashcard_mode(window.current_fc_idx + 1);">
+            <i class="bi bi-chevron-right"></i>
+        </button>
     `;
 
     // 6. GIẢI THÍCH (HINT) & CẤU TRÚC THẺ BÀI
