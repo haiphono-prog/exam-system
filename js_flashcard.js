@@ -1,25 +1,25 @@
-    // --- BẢN CẬP NHẬT: PURE GLASS (TRONG SUỐT 100%) & TỐI ƯU HÓA HIỆU NĂNG MATHJAX ---
+// --- BẢN CẬP NHẬT: PURE GLASS (TRONG SUỐT 100%) & TỐI ƯU HÓA HIỆU NĂNG MATHJAX & LẬT THẺ 3D ---
 function render_flashcard_mode(idx) {
-  if (typeof window.update_progress_bar === 'function') {
-        window.update_progress_bar(); 
+    if (typeof window.update_progress_bar === 'function') {
+        window.update_progress_bar();
     }
 
     let direction = "next";
     // Ép biến lên cấp cao nhất (window) để nhận diện xuyên file
     window.current_fc_idx = window.current_fc_idx || 0;
     let previousIdx = window.current_fc_idx;
-    
+
     if (idx < previousIdx) {
         direction = "prev";
     }
 
     let old_idx = window.current_fc_idx;
     localStorage.setItem('last_idx_' + window.current_subject + '_' + window.selected_lessons_text, idx);
-    window.current_fc_idx = idx; 
-    
-    let q = window.questions[idx]; 
-    q.visited = true; 
-    
+    window.current_fc_idx = idx;
+
+    let q = window.questions[idx];
+    q.visited = true;
+
     let bloomColor = getLevelColor(q.level);
     let btnPrevDisabled = (idx === 0) ? "disabled" : "";
     let btnNextDisabled = (idx === questions.length - 1) ? "disabled" : "";
@@ -29,26 +29,57 @@ function render_flashcard_mode(idx) {
     let hasHint = rawHint.trim() !== "";
     if (hasHint) {
         // Giữ nguyên viền sáng Neon của Thầy
-        formattedHint = rawHint.replace(/#([^\s.,;!?"'()[\]{}]+)/g, 
+        formattedHint = rawHint.replace(/#([^\s.,;!?"'()[\]{}]+)/g,
             '<mark style="background: transparent; color: #facc15; padding: 2px 6px; margin: 0 2px; border-radius: 6px; font-weight: 800; border: 1px solid rgba(250, 204, 21, 0.5); box-shadow: 0 0 10px rgba(250, 204, 21, 0.2);">$1</mark>'
         );
-        
+
         // 🌟 BỔ SUNG THÊM DÒNG NÀY ĐỂ HIỆN MAGIC VOCAB TRONG GIẢI THÍCH
-        formattedHint = formattedHint.replace(/\{\{(.*?)::(.*?)::(.*?)\}\}/g, 
+        formattedHint = formattedHint.replace(/\{\{(.*?)::(.*?)::(.*?)\}\}/g,
             `<span class="vocab-highlight" onclick="event.stopPropagation(); if(window.play_vocab_audio) window.play_vocab_audio('$1', '$2', '$3', event)">$1 <i class="bi bi-volume-up-fill small opacity-75"></i></span>`
         );
     }
 
     let quizArea = document.getElementById('quiz_area');
-    quizArea.style.height = 'calc(100dvh - 90px)'; 
+    quizArea.style.height = 'calc(100dvh - 90px)';
     quizArea.style.display = 'flex';
     quizArea.style.flexDirection = 'column';
     quizArea.style.overscrollBehavior = 'none';
 
+    // 🌟 Thêm CSS cho không gian 3D
+    if (!document.getElementById('flashcard_3d_css')) {
+        let style3D = document.createElement('style');
+        style3D.id = 'flashcard_3d_css';
+        style3D.innerHTML = `
+            .fc-perspective {
+                perspective: 1000px; /* Tạo độ sâu không gian 3D */
+            }
+            .flip-card {
+                transform-style: preserve-3d;
+                transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1); /* Hiệu ứng lật mượt */
+            }
+            .flip-card.flipped {
+                transform: rotateY(180deg);
+            }
+            .flip-card-front, .flip-card-back {
+                backface-visibility: hidden;
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                transform-style: preserve-3d; /* Đảm bảo các con bên trong cũng giữ được hiệu ứng 3D nếu cần */
+            }
+            .flip-card-back {
+                transform: rotateY(180deg);
+            }
+        `;
+        document.head.appendChild(style3D);
+    }
+
     if (!document.getElementById('flashcard_track')) {
         window.scrollTo({ top: 0, behavior: 'instant' });
         quizArea.innerHTML = `
-            <div id="flashcard_track" class="flex-grow-1 position-relative w-100 mx-auto"
+            <div id="flashcard_track" class="flex-grow-1 position-relative w-100 mx-auto fc-perspective"
                  style="max-width: 800px; overflow: hidden; touch-action: pan-y;
                         padding-left: max(8px, env(safe-area-inset-left));
                         padding-right: max(8px, env(safe-area-inset-right));"></div>
@@ -58,12 +89,12 @@ function render_flashcard_mode(idx) {
                         padding-left: max(8px, env(safe-area-inset-left));
                         padding-right: max(8px, env(safe-area-inset-right));"></div>
         `;
-        if (typeof initSwipeFlashcard === 'function') initSwipeFlashcard(); 
+        if (typeof initSwipeFlashcard === 'function') initSwipeFlashcard();
     }
 
     let track = document.getElementById('flashcard_track');
     let nav = document.getElementById('flashcard_nav');
-    
+
     // 🌟 ĐÃ SỬA: Ép thanh điều hướng dưới cùng trong suốt 100%, đồng bộ Glass-btn
     nav.innerHTML = `
         <div class="d-grid align-items-center w-100" style="grid-template-columns: 1fr auto 1fr;">
@@ -97,56 +128,53 @@ function render_flashcard_mode(idx) {
         </div>
     `;
 
-    // 🌟 ĐÃ SỬA: Chuyển toàn bộ thẻ Flashcard thành Pure Glass, xóa nền đen thừa
+    // 🌟 ĐÃ SỬA: Thêm class .flip-card và .flip-card-inner cho khối 3D, thêm box-shadow nổi khối
     let cardHtml = `
     <div class="fc-slide-item pb-2 px-1 px-md-2" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; will-change: transform;">
         <div class="flip-card flex-grow-1 w-100 h-100" onclick="this.classList.toggle('flipped')">
-            <div class="flip-card-inner w-100 h-100">
-                
-                <div class="flip-card-front glass-panel d-flex flex-column p-2 p-md-3 h-100 shadow" 
-                     style="position: relative; border: 1px solid rgba(255,255,255,0.2) !important; border-radius: 20px;">
-                    <div class="badge text-white mb-2 px-3 py-1 shadow-sm flex-shrink-0 align-self-center" style="background: transparent; border: 1px solid rgba(255,255,255,0.3); border-radius: 12px; font-size: 0.95rem; z-index: 5;">
-                        Câu ${idx + 1}
-                    </div>
-                    
-                    <div class="flex-grow-1 w-100 overflow-auto custom-scrollbar" style="-webkit-overflow-scrolling: touch; display: block; min-height: 0; height: 0; padding-bottom: 35px;">
-                        <div class="fs-5 fw-bold text-center w-100 mb-3 px-1" style="color: ${bloomColor}; word-break: break-word; line-height: 1.4;">
-                            ${(q.q || "").replace(/\{\{(.*?)::(.*?)::(.*?)\}\}/g, `<span class="vocab-highlight" onclick="if(window.play_vocab_audio) window.play_vocab_audio('$1', '$2', '$3', event)">$1 <i class="bi bi-volume-up-fill small opacity-75"></i></span>`)}
-                        </div>
-                        
-                        ${render_media_for_card(q)}
-                    </div>
-                    
-                    <small class="text-white-50 w-100 text-center" style="opacity:0.8; font-size: 0.75rem; position: absolute; bottom: 10px; left: 0; pointer-events: none; font-weight: 600; z-index: 5;">
-                        <i class="bi bi-hand-index-thumb"></i> Chạm để lật • Vuốt trái/phải
-                    </small>
+            <div class="flip-card-front glass-panel d-flex flex-column p-2 p-md-3 h-100 shadow-lg" 
+                 style="position: relative; border: 1px solid rgba(255,255,255,0.2) !important; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important;">
+                <div class="badge text-white mb-2 px-3 py-1 shadow-sm flex-shrink-0 align-self-center" style="background: transparent; border: 1px solid rgba(255,255,255,0.3); border-radius: 12px; font-size: 0.95rem; z-index: 5;">
+                    Câu ${idx + 1}
                 </div>
                 
-                <div class="flip-card-back glass-panel d-flex flex-column align-items-center p-2 p-md-3 h-100 shadow" style="border: 1px solid rgba(255,255,255,0.2) !important; border-radius: 20px;">
-                    <div class="badge mb-2 px-3 py-1 shadow-sm flex-shrink-0" style="background: transparent; border: 1px solid #4ade80; color: #4ade80 !important; border-radius: 12px; box-shadow: 0 0 10px rgba(74, 222, 128, 0.2);">
-                        <i class="bi bi-check-circle-fill text-success me-1"></i> Đáp án
+                <!-- 🌟 ĐÃ SỬA: Thêm d-flex, flex-column và justify-content-center để ép câu hỏi nằm giữa -->
+                <div class="d-flex flex-column justify-content-center align-items-center flex-grow-1 w-100 overflow-auto custom-scrollbar" style="-webkit-overflow-scrolling: touch; min-height: 0; height: 0; padding-bottom: 35px;">
+                    <div class="fs-5 fw-bold text-center w-100 mb-3 px-1" style="color: ${bloomColor}; word-break: break-word; line-height: 1.4;">
+                        ${(q.q || "").replace(/\{\{(.*?)::(.*?)::(.*?)\}\}/g, `<span class="vocab-highlight" onclick="if(window.play_vocab_audio) window.play_vocab_audio('$1', '$2', '$3', event)">$1 <i class="bi bi-volume-up-fill small opacity-75"></i></span>`)}
                     </div>
                     
-                    <div class="d-flex flex-column justify-content-center align-items-center flex-grow-1 w-100 overflow-auto px-1 custom-scrollbar" style="-webkit-overflow-scrolling: touch; min-height: 0; height: 0;">
-                        <div class="mb-2 fs-4 fw-bold text-center w-100 text-white" style="word-break: break-word;">
-                            ${(q.a || "Chưa cập nhật").replace(/\{\{(.*?)::(.*?)::(.*?)\}\}/g, `<span class="vocab-highlight" onclick="if(window.play_vocab_audio) window.play_vocab_audio('$1', '$2', '$3', event)">$1 <i class="bi bi-volume-up-fill small opacity-75"></i></span>`)}
-                        </div>
-                    </div>
-                    
-                    <div class="mt-2 w-100 flex-shrink-0" style="max-height: 60%; overflow-y: auto; -webkit-overflow-scrolling: touch;">
-                        <div class="p-2 p-md-3 text-start hint-fog-container ${!hasHint ? 'revealed' : ''}" 
-                             onclick="if(!this.classList.contains('revealed')) { event.stopPropagation(); this.classList.add('revealed'); }"
-                             style="background: transparent; border-radius: 16px; border: 1px dashed rgba(255, 255, 255, 0.2);">
-                            <div class="fw-bold mb-1 position-relative" style="color: #38bdf8; font-size: 0.85rem; text-transform: uppercase; z-index: 3;">
-                                💡 Giải thích
-                            </div>
-                            <div class="text-white-50 hint-fog-text" style="font-size: 0.95rem; line-height: 1.6; word-break: break-word;">
-                                ${formattedHint}
-                            </div>
-                        </div>
+                    ${render_media_for_card(q)}
+                </div>
+                
+                <small class="text-white-50 w-100 text-center" style="opacity:0.8; font-size: 0.75rem; position: absolute; bottom: 10px; left: 0; pointer-events: none; font-weight: 600; z-index: 5;">
+                    <i class="bi bi-hand-index-thumb"></i> Chạm để lật • Vuốt trái/phải
+                </small>
+            </div>
+            
+            <div class="flip-card-back glass-panel d-flex flex-column align-items-center p-2 p-md-3 h-100 shadow-lg" style="border: 1px solid rgba(255,255,255,0.2) !important; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important;">
+                <div class="badge mb-2 px-3 py-1 shadow-sm flex-shrink-0" style="background: transparent; border: 1px solid #4ade80; color: #4ade80 !important; border-radius: 12px; box-shadow: 0 0 10px rgba(74, 222, 128, 0.2);">
+                    <i class="bi bi-check-circle-fill text-success me-1"></i> Đáp án
+                </div>
+                
+                <div class="d-flex flex-column justify-content-center align-items-center flex-grow-1 w-100 overflow-auto px-1 custom-scrollbar" style="-webkit-overflow-scrolling: touch; min-height: 0; height: 0;">
+                    <div class="mb-2 fs-4 fw-bold text-center w-100 text-white" style="word-break: break-word;">
+                        ${(q.a || "Chưa cập nhật").replace(/\{\{(.*?)::(.*?)::(.*?)\}\}/g, `<span class="vocab-highlight" onclick="if(window.play_vocab_audio) window.play_vocab_audio('$1', '$2', '$3', event)">$1 <i class="bi bi-volume-up-fill small opacity-75"></i></span>`)}
                     </div>
                 </div>
                 
+                <div class="mt-2 w-100 flex-shrink-0" style="max-height: 60%; overflow-y: auto; -webkit-overflow-scrolling: touch;">
+                    <div class="p-2 p-md-3 text-start hint-fog-container ${!hasHint ? 'revealed' : ''}" 
+                         onclick="if(!this.classList.contains('revealed')) { event.stopPropagation(); this.classList.add('revealed'); }"
+                         style="background: transparent; border-radius: 16px; border: 1px dashed rgba(255, 255, 255, 0.2);">
+                        <div class="fw-bold mb-1 position-relative" style="color: #38bdf8; font-size: 0.85rem; text-transform: uppercase; z-index: 3;">
+                            💡 Giải thích
+                        </div>
+                        <div class="text-white-50 hint-fog-text" style="font-size: 0.95rem; line-height: 1.6; word-break: break-word;">
+                            ${formattedHint}
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>`;
@@ -165,44 +193,45 @@ function render_flashcard_mode(idx) {
     };
 
     if (oldCards.length === 0 || old_idx === idx) {
-        track.innerHTML = ''; 
-        track.appendChild(newCard); 
-        triggerMathJax(newCard); 
+        track.innerHTML = '';
+        track.appendChild(newCard);
+        triggerMathJax(newCard);
         return;
     }
 
     let startTransform = direction === "next" ? "translateX(100%)" : "translateX(-100%)";
     let endTransformOld = direction === "next" ? "translateX(-100%)" : "translateX(100%)";
-    
+
     newCard.style.transform = startTransform;
     track.appendChild(newCard);
     track.style.pointerEvents = 'none';
 
     requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-            let transitionStyle = "transform 0.4s cubic-bezier(0.25, 1, 0.5, 1)"; 
+            let transitionStyle = "transform 0.4s cubic-bezier(0.25, 1, 0.5, 1)";
             newCard.style.transition = transitionStyle;
             newCard.style.transform = "translateX(0)";
-            
+
             oldCards.forEach(card => {
                 card.style.transition = transitionStyle;
                 card.style.transform = endTransformOld;
                 setTimeout(() => { if (card && card.parentNode) card.parentNode.removeChild(card); }, 450);
             });
-            
-            setTimeout(() => { track.style.pointerEvents = 'auto'; }, 450); 
+
+            setTimeout(() => { track.style.pointerEvents = 'auto'; }, 450);
         });
     });
 
     triggerMathJax(newCard);
 }
+
 function initSwipeFlashcard() {
     let track = document.getElementById('flashcard_track');
     if (!track) return;
 
     let touchStartX = 0;
     let touchStartY = 0;
-    
+
     track.addEventListener('touchstart', function(e) {
         touchStartX = e.changedTouches[0].screenX;
         touchStartY = e.changedTouches[0].screenY;
@@ -211,10 +240,10 @@ function initSwipeFlashcard() {
     track.addEventListener('touchend', function(e) {
         let touchEndX = e.changedTouches[0].screenX;
         let touchEndY = e.changedTouches[0].screenY;
-        
+
         let deltaX = touchStartX - touchEndX;
         let deltaY = touchStartY - touchEndY;
-        
+
         if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
             if (deltaX > 0) {
                 if (typeof window.current_fc_idx !== 'undefined' && window.current_fc_idx < window.questions.length - 1) {
