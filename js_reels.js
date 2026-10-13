@@ -206,22 +206,9 @@ window.closeReelsModule = function() {
     document.body.style.overflow = ''; 
     let fab = document.getElementById('fab_menu_items');
     if (fab) fab.classList.remove('d-none');
-    
     let container = document.getElementById('videoContainer');
-    if (container) {
-        // 🛑 DIỆT LỖI TRÀN RAM IPAD KHI THOÁT
-        let oldIframes = container.querySelectorAll('iframe');
-        oldIframes.forEach(ifr => { 
-            ifr.src = 'about:blank'; // Ép Safari cắt đứt luồng tải video
-            ifr.remove(); 
-        });
-        container.innerHTML = '';
-    }
-    
-    if (window.ytPlayerInstance) { 
-        try { window.ytPlayerInstance.destroy(); } catch(e){} 
-        window.ytPlayerInstance = null; 
-    }
+    if (container) container.innerHTML = '';
+    if (window.ytPlayerInstance) { try { window.ytPlayerInstance.destroy(); } catch(e){} window.ytPlayerInstance = null; }
 };
 
 // =========================================================================
@@ -338,9 +325,7 @@ window.loadSavedReels = async function() {
     listContainer.innerHTML = '<div class="text-center text-white-50 p-4"><span class="spinner-border spinner-border-sm me-2"></span>Đang tải danh sách clip...</div>';
 
     try {
-        // 🌟 BỌC THÉP KẾT NỐI SUPABASE
-        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
-        const { data, error } = await clientDb.from('reels')
+        const { data, error } = await db.from('reels')
                                         .select('*')
                                         .eq('library_id', targetLibrary)
                                         .order('created_at', { ascending: false });
@@ -407,7 +392,7 @@ window.playYouTubeSDK = function(videoId, retryCount) {
         try {
             window.ytPlayerInstance = new YT.Player('ytPlayerTarget', {
                 height: '100%', width: '100%', videoId: videoId,
-                playerVars: { 'autoplay': 1, 'playsinline': 1, 'mute': 1, 'rel': 0, 'modestbranding': 1, 'enablejsapi': 1 },
+                playerVars: { 'autoplay': 1, 'playsinline': 1, 'rel': 0, 'modestbranding': 1, 'enablejsapi': 1 },
                 events: {
                     'onReady': function(e) { e.target.playVideo(); },
                     'onStateChange': function(e) { if (e.data === YT.PlayerState.ENDED) window.playNextReel(); }
@@ -419,7 +404,7 @@ window.playYouTubeSDK = function(videoId, retryCount) {
     container.innerHTML = '<iframe src="https://www.youtube.com/embed/' + videoId + '?autoplay=1&playsinline=1" style="width:100%;height:100%;border:none;" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen="true"></iframe>';
 };
 
-// HÀM PHÁT VIDEO (ĐÃ TÍCH HỢP DỌN RAM CHỐNG VĂNG IPAD VÀ SANDBOX)
+// HÀM PHÁT VIDEO (TRẢ LẠI LOGIC DOM CỦA BẢN GAS CŨ + GIỮ LẠI HIỆU ỨNG VUỐT TIKTOK)
 window.playSavedReel = function(encodedUrl, index, direction) {
     if (typeof index === 'undefined') index = -1;
     if (typeof direction === 'undefined') direction = 'next';
@@ -453,24 +438,16 @@ window.playSavedReel = function(encodedUrl, index, direction) {
     if (direction === 'next') container.classList.add('slide-up-anim');
     else if (direction === 'prev') container.classList.add('slide-down-anim');
     
-    // 🛑 BÍ QUYẾT DIỆT LỖI RAM IPAD TỪ GỢI Ý CỦA BẠN 🛑
-    // Phá hủy Player Youtube cũ
     if (window.ytPlayerInstance) {
         try { if (typeof window.ytPlayerInstance.destroy === 'function') window.ytPlayerInstance.destroy(); } catch(err) {}
         window.ytPlayerInstance = null;
     }
-    // Ép nhả RAM cho tất cả Iframe (Facebook, TikTok, IG) đang chạy ngầm
-    let oldIframes = container.querySelectorAll('iframe');
-    oldIframes.forEach(ifr => {
-        ifr.src = 'about:blank'; // Cắt luồng dữ liệu lập tức
-        ifr.remove(); // Xóa khỏi DOM
-    });
 
     // Fallback UI
     let fallbackHtml = `
-        <div class="mt-3 text-center position-absolute w-100" style="bottom: 25%; z-index: 10;">
+        <div class="mt-3 text-center position-absolute w-100" style="bottom: 25%; z-index: 10; pointer-events: none;">
             <p class="small text-white-50 mb-1" style="text-shadow: 1px 1px 2px #000;">Nếu video đen màn hình:</p>
-            <a href="${rawUrl}" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3 shadow-lg" style="background: rgba(0,0,0,0.5); backdrop-filter: blur(5px);">
+            <a href="${rawUrl}" target="_blank" class="btn btn-sm btn-outline-info rounded-pill px-3 shadow-lg" style="background: rgba(0,0,0,0.5); backdrop-filter: blur(5px); pointer-events: auto;">
                 <i class="bi bi-box-arrow-up-right me-1"></i> Mở nguồn video gốc
             </a>
         </div>
@@ -479,39 +456,56 @@ window.playSavedReel = function(encodedUrl, index, direction) {
     container.innerHTML = `<div class="text-white-50 text-center w-100 h-100 d-flex flex-column justify-content-center align-items-center"><span class="spinner-border text-info mb-3" style="width: 3rem; height: 3rem;"></span>Đang tải video...</div>${fallbackHtml}`;
     void container.offsetHeight; 
 
-    // 🌟 KHÔNG DÙNG setTimeout ĐỂ BẢO TOÀN QUYỀN AUTOPLAY CỦA SAFARI TRÊN IPAD
-    let videoInfo = window.detectVideoPlatform(rawUrl);
-    if (!videoInfo) {
-        container.innerHTML = `<div class="text-white-50 text-center p-5 mt-5">Link chưa được hỗ trợ.</div>${fallbackHtml}`;
-        return;
-    }
-
-    let oldSpans = container.querySelectorAll('.spinner-border, .text-white-50.text-center:not(.small)');
-    oldSpans.forEach(el => el.remove());
-
-    if (videoInfo.platform === 'youtube') {
-        window.playYouTubeSDK(videoInfo.id);
-    } else {
-        let iframe = document.createElement('iframe');
-        iframe.style.cssText = 'width:100%;height:100%;border:none;overflow:hidden;-webkit-transform:translateZ(0);transform:translateZ(0);';
-        iframe.setAttribute('scrolling', 'no');
-        iframe.setAttribute('frameborder', '0');
-        iframe.setAttribute('playsinline', '1');
-        iframe.setAttribute('webkit-playsinline', '1');
-        iframe.setAttribute('allowfullscreen', 'true');
-        iframe.setAttribute('allow', 'autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share');
-        
-        if (videoInfo.platform === 'facebook') {
-            iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-presentation allow-forms allow-storage-access-by-user-activation');
-            iframe.src = 'https://www.facebook.com/plugins/video.php?href=' + encodeURIComponent(videoInfo.url) + '&show_text=false&width=360';
-        } else if (videoInfo.platform === 'instagram') {
-            iframe.src = 'https://www.instagram.com/p/' + videoInfo.id + '/embed/';
-        } else if (videoInfo.platform === 'tiktok') {
-            iframe.src = 'https://www.tiktok.com/embed/v2/' + videoInfo.id;
+    // Đợi UI render xong rồi mới load iframe
+    setTimeout(() => {
+        let videoInfo = window.detectVideoPlatform(rawUrl);
+        if (!videoInfo) {
+            container.innerHTML = `<div class="text-white-50 text-center p-5 mt-5">Link chưa được hỗ trợ.</div>${fallbackHtml}`;
+            return;
         }
-        
-        container.appendChild(iframe);
-    }
+
+        // Xóa icon loading
+        let oldSpans = container.querySelectorAll('.spinner-border, .text-white-50.text-center:not(.small)');
+        oldSpans.forEach(el => el.remove());
+
+        // LOGIC TẠO THẺ CỦA BẢN GAS CŨ ĐỂ CHỐNG VĂNG TRÊN IPAD
+        if (videoInfo.platform === 'youtube') {
+            window.playYouTubeSDK(videoInfo.id);
+        } else {
+            // KHUNG 9:16 CAN GIUA: embed FB/IG/TikTok co be rong co dinh, khong tu gian theo iframe
+            let availW = container.clientWidth || window.innerWidth;
+            let availH = container.clientHeight || window.innerHeight;
+            let boxW = Math.floor(Math.min(availW, availH * 9 / 16, 420));
+            let boxH = Math.floor(boxW * 16 / 9);
+            if (boxH > availH) { boxH = Math.floor(availH); boxW = Math.floor(boxH * 9 / 16); }
+            let fbW = Math.max(220, Math.min(750, boxW)); // Facebook chi nhan width 220-750
+
+            let box = document.createElement('div');
+            box.style.cssText = 'position:absolute;top:0;right:0;bottom:0;left:0;margin:auto;width:' + boxW + 'px;height:' + boxH + 'px;';
+
+            let iframe = document.createElement('iframe');
+            iframe.style.cssText = 'width:100%;height:100%;border:none;overflow:hidden;-webkit-transform:translateZ(0);transform:translateZ(0);';
+            iframe.setAttribute('scrolling', 'no');
+            iframe.setAttribute('frameborder', '0');
+            iframe.setAttribute('allowfullscreen', 'true');
+            iframe.setAttribute('allow', 'clipboard-write; encrypted-media; picture-in-picture; web-share');
+            // SANDBOX GIONG GAS: ban GAS chay trong iframe sandbox cua Google, iframe FB/IG/TikTok long ben trong
+            // THUA HUONG sandbox do. Khong co allow-top-navigation => embed khong the tu chuyen huong ca trang
+            // (vd. mo app Facebook / trang dang nhap) -> khong bi 'da' ra ngoai.
+            iframe.setAttribute('sandbox', 'allow-same-origin allow-forms allow-scripts allow-popups allow-downloads allow-modals allow-popups-to-escape-sandbox');
+
+            if (videoInfo.platform === 'facebook') {
+                iframe.src = 'https://www.facebook.com/plugins/video.php?href=' + encodeURIComponent(videoInfo.url) + '&show_text=false&width=' + fbW + '&height=' + boxH;
+            } else if (videoInfo.platform === 'instagram') {
+                iframe.src = 'https://www.instagram.com/reel/' + videoInfo.id + '/embed/';
+            } else if (videoInfo.platform === 'tiktok') {
+                iframe.src = 'https://www.tiktok.com/embed/v2/' + videoInfo.id;
+            }
+
+            box.appendChild(iframe);
+            container.appendChild(box);
+        }
+    }, 50); 
 };
 
 window.playNextReel = function() {
