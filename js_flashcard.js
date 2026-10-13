@@ -1,181 +1,171 @@
-// --- BẢN CẬP NHẬT: PURE GLASS (TRONG SUỐT 100%) & TỐI ƯU HÓA HIỆU NĂNG MATHJAX & LẬT THẺ 3D ---
+// --- BẢN CẬP NHẬT: TRẢ LẠI HEADER GỐC, 4 NÚT ĐIỀU KHIỂN & HIỂN THỊ HINT TRỰC TIẾP ---
+
 function render_flashcard_mode(idx) {
     if (typeof window.update_progress_bar === 'function') {
-        window.update_progress_bar();
+        window.update_progress_bar(); 
     }
 
     let direction = "next";
-    // Ép biến lên cấp cao nhất (window) để nhận diện xuyên file
     window.current_fc_idx = window.current_fc_idx || 0;
     let previousIdx = window.current_fc_idx;
-
-    if (idx < previousIdx) {
-        direction = "prev";
-    }
+    
+    if (idx < previousIdx) { direction = "prev"; }
 
     let old_idx = window.current_fc_idx;
     localStorage.setItem('last_idx_' + window.current_subject + '_' + window.selected_lessons_text, idx);
-    window.current_fc_idx = idx;
-
-    let q = window.questions[idx];
-    q.visited = true;
-
+    window.current_fc_idx = idx; 
+    
+    let q = window.questions[idx]; 
+    q.visited = true; 
+    
     let bloomColor = getLevelColor(q.level);
-    let btnPrevDisabled = (idx === 0) ? "disabled" : "";
-    let btnNextDisabled = (idx === questions.length - 1) ? "disabled" : "";
+    let btnPrevDisabled = (idx === 0) ? "opacity: 0.3; pointer-events: none;" : "";
+    let btnNextDisabled = (idx === questions.length - 1) ? "opacity: 0.3; pointer-events: none;" : "";
 
+    // Xử lý Hint (Giải thích)
     let rawHint = q.hint || "";
-    let formattedHint = "<span style='opacity: 0.6;'>Không có giải thích chi tiết.</span>";
+    let formattedHint = "";
     let hasHint = rawHint.trim() !== "";
     if (hasHint) {
-        // Giữ nguyên viền sáng Neon của Thầy
-        formattedHint = rawHint.replace(/#([^\s.,;!?"'()[\]{}]+)/g,
+        formattedHint = rawHint.replace(/#([^\s.,;!?"'()[\]{}]+)/g, 
             '<mark style="background: transparent; color: #facc15; padding: 2px 6px; margin: 0 2px; border-radius: 6px; font-weight: 800; border: 1px solid rgba(250, 204, 21, 0.5); box-shadow: 0 0 10px rgba(250, 204, 21, 0.2);">$1</mark>'
         );
-
-        // 🌟 BỔ SUNG THÊM DÒNG NÀY ĐỂ HIỆN MAGIC VOCAB TRONG GIẢI THÍCH
-        formattedHint = formattedHint.replace(/\{\{(.*?)::(.*?)::(.*?)\}\}/g,
+        formattedHint = formattedHint.replace(/\{\{(.*?)::(.*?)::(.*?)\}\}/g, 
             `<span class="vocab-highlight" onclick="event.stopPropagation(); if(window.play_vocab_audio) window.play_vocab_audio('$1', '$2', '$3', event)">$1 <i class="bi bi-volume-up-fill small opacity-75"></i></span>`
         );
     }
 
+    // Bộ lọc tìm đúng text đáp án cho mặt sau thẻ
+    let correctAns = q.a || q.answer || q.en || q[4] || "Chưa cập nhật";
+    if (/^[A-D]$/i.test(correctAns) && q.opts && q.opts.length > 0) {
+        let letterIdx = correctAns.toUpperCase().charCodeAt(0) - 65;
+        if (q.opts[letterIdx]) correctAns = q.opts[letterIdx];
+    }
+
     let quizArea = document.getElementById('quiz_area');
-    quizArea.style.height = 'calc(100dvh - 90px)';
+    // Tính toán chiều cao để nhường không gian cho Header gốc
+    quizArea.style.height = 'calc(100dvh - 90px)'; 
     quizArea.style.display = 'flex';
     quizArea.style.flexDirection = 'column';
     quizArea.style.overscrollBehavior = 'none';
 
-    // 🌟 Thêm CSS cho không gian 3D
+    // Thêm CSS 3D
     if (!document.getElementById('flashcard_3d_css')) {
         let style3D = document.createElement('style');
         style3D.id = 'flashcard_3d_css';
         style3D.innerHTML = `
-            .fc-perspective {
-                perspective: 1000px; /* Tạo độ sâu không gian 3D */
-            }
-            .flip-card {
-                transform-style: preserve-3d;
-                transition: transform 0.6s cubic-bezier(0.4, 0.2, 0.2, 1); /* Hiệu ứng lật mượt */
-            }
-            .flip-card.flipped {
-                transform: rotateY(180deg);
-            }
+            .fc-perspective { perspective: 1500px; }
+            .flip-card { transform-style: preserve-3d; transition: transform 0.5s cubic-bezier(0.4, 0.2, 0.2, 1); width: 100%; height: 100%; cursor: pointer; }
+            .flip-card.flipped { transform: rotateY(180deg); }
             .flip-card-front, .flip-card-back {
+                -webkit-backface-visibility: hidden;
                 backface-visibility: hidden;
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                transform-style: preserve-3d; /* Đảm bảo các con bên trong cũng giữ được hiệu ứng 3D nếu cần */
+                position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+                transform-style: preserve-3d;
+                background: #1a1d20; 
+                border-radius: 24px;
             }
-            .flip-card-back {
-                transform: rotateY(180deg);
-            }
+            .flip-card-back { transform: rotateY(180deg); }
         `;
         document.head.appendChild(style3D);
     }
 
+    // Dựng khung nếu chưa có
     if (!document.getElementById('flashcard_track')) {
         window.scrollTo({ top: 0, behavior: 'instant' });
         quizArea.innerHTML = `
-            <div id="flashcard_track" class="flex-grow-1 position-relative w-100 mx-auto fc-perspective"
+            <div id="flashcard_track" class="flex-grow-1 position-relative w-100 mx-auto fc-perspective py-2"
                  style="max-width: 800px; overflow: hidden; touch-action: pan-y;
                         padding-left: max(8px, env(safe-area-inset-left));
                         padding-right: max(8px, env(safe-area-inset-right));"></div>
             
-            <div id="flashcard_nav" class="w-100 pb-3 pt-2 mx-auto flex-shrink-0"
+            <div id="flashcard_nav" class="w-100 pb-3 pt-2 mx-auto flex-shrink-0 mt-auto"
                  style="max-width: 800px; z-index: 10; background: transparent;
                         padding-left: max(8px, env(safe-area-inset-left));
                         padding-right: max(8px, env(safe-area-inset-right));"></div>
         `;
-        if (typeof initSwipeFlashcard === 'function') initSwipeFlashcard();
+        if (typeof initSwipeFlashcard === 'function') initSwipeFlashcard(); 
     }
 
     let track = document.getElementById('flashcard_track');
     let nav = document.getElementById('flashcard_nav');
 
-    // 🌟 ĐÃ SỬA: Ép thanh điều hướng dưới cùng trong suốt 100%, đồng bộ Glass-btn
+    // 🌟 KHU VỰC 4 NÚT ĐIỀU KHIỂN BÊN DƯỚI
     nav.innerHTML = `
-        <div class="d-grid align-items-center w-100" style="grid-template-columns: 1fr auto 1fr;">
-            <div class="text-start">
-                <button class="btn btn-sm fw-bold glass-btn-action shadow" 
-                        style="padding: 6px 16px; border-radius: 20px;" 
-                        onclick="event.stopPropagation(); if(${idx} > 0) render_flashcard_mode(${idx - 1});" ${btnPrevDisabled}>
-                    <i class="bi bi-chevron-left"></i> Trước
+        <div class="row g-2 w-100 m-0">
+            <div class="col-6">
+                <button class="btn w-100 fw-bold py-2 shadow-sm text-white" style="background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.15); border-radius: 12px;" onclick="let fc = document.querySelector('.flip-card'); if(fc) fc.classList.remove('flipped');">
+                    <i class="bi bi-arrow-counterclockwise"></i> MẶT TRƯỚC
                 </button>
             </div>
-
-            <div class="text-center">
-                <div class="d-inline-flex align-items-center shadow" 
-                     style="background: transparent; border-radius: 20px; border: 1px solid rgba(14, 165, 233, 0.4); padding: 4px 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
-                    <input type="number" min="1" max="${questions.length}" value="${idx + 1}" 
-                           onfocus="this.select(); event.stopPropagation();"
-                           onclick="event.stopPropagation();"
-                           onchange="let val = parseInt(this.value) - 1; if(val >= 0 && val < questions.length) { render_flashcard_mode(val); } else { this.value = ${idx + 1}; }" 
-                           style="width: 40px; background: transparent; border: none; font-weight: 800; color: #38bdf8; text-align: center; font-size: 1.1rem; padding: 0; outline: none; text-shadow: 0 0 8px rgba(56,189,248,0.6);">
-                    <span style="font-size: 1rem; font-weight: bold; color: rgba(255,255,255,0.7); padding-left: 4px;">/ ${questions.length}</span>
-                </div>
+            <div class="col-6">
+                <button class="btn w-100 fw-bold py-2 shadow-sm text-info" style="background: rgba(14, 165, 233, 0.1); border: 1px solid rgba(14, 165, 233, 0.3); border-radius: 12px;" onclick="let fc = document.querySelector('.flip-card'); if(fc) fc.classList.add('flipped');">
+                    MẶT SAU <i class="bi bi-arrow-clockwise"></i>
+                </button>
             </div>
-
-            <div class="text-end">
-                <button class="btn btn-sm fw-bold glass-btn-action shadow" 
-                        style="padding: 6px 16px; border-radius: 20px;" 
-                        onclick="event.stopPropagation(); if(${idx} < ${questions.length - 1}) render_flashcard_mode(${idx + 1});" ${btnNextDisabled}>
-                    Sau <i class="bi bi-chevron-right"></i>
+            <div class="col-6">
+                <button class="btn w-100 fw-bold py-3 shadow-sm text-white" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; ${btnPrevDisabled}" onclick="event.stopPropagation(); if(${idx} > 0) render_flashcard_mode(${idx - 1});">
+                    <i class="bi bi-chevron-left fs-5"></i> CÂU TRƯỚC
+                </button>
+            </div>
+            <div class="col-6">
+                <button class="btn w-100 fw-bold py-3 shadow-sm text-white" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; ${btnNextDisabled}" onclick="event.stopPropagation(); if(${idx} < ${questions.length - 1}) render_flashcard_mode(${idx + 1});">
+                    CÂU TIẾP <i class="bi bi-chevron-right fs-5"></i>
                 </button>
             </div>
         </div>
+        <div class="text-center mt-3">
+            <span class="text-info fw-bold font-monospace" style="font-size: 1.1rem; background: rgba(0,0,0,0.3); padding: 4px 16px; border-radius: 20px; border: 1px solid rgba(56, 189, 248, 0.3);">${idx + 1} / ${questions.length}</span>
+        </div>
     `;
 
-    // 🌟 ĐÃ SỬA: Thêm class .flip-card và .flip-card-inner cho khối 3D, thêm box-shadow nổi khối
+    // 🌟 KHU VỰC HIỂN THỊ HINT TRỰC TIẾP
+    let hintDisplayHtml = hasHint ? `
+        <div class="mt-3 w-100 flex-shrink-0 p-3 text-start" style="background: rgba(0,0,0,0.2); border-radius: 16px; border: 1px dashed rgba(255, 255, 255, 0.15);">
+            <div class="fw-bold mb-1 position-relative" style="color: #38bdf8; font-size: 0.85rem; text-transform: uppercase;">
+                💡 Giải thích
+            </div>
+            <div class="text-white-50" style="font-size: 0.95rem; line-height: 1.6; word-break: break-word;">
+                ${formattedHint}
+            </div>
+        </div>
+    ` : '';
+
     let cardHtml = `
     <div class="fc-slide-item pb-2 px-1 px-md-2" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; will-change: transform;">
+        <!-- Chạm vào bất cứ đâu trên thẻ sẽ lật -->
         <div class="flip-card flex-grow-1 w-100 h-100" onclick="this.classList.toggle('flipped')">
-            <div class="flip-card-front glass-panel d-flex flex-column p-2 p-md-3 h-100 shadow-lg" 
-                 style="position: relative; border: 1px solid rgba(255,255,255,0.2) !important; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important;">
-                <div class="badge text-white mb-2 px-3 py-1 shadow-sm flex-shrink-0 align-self-center" style="background: transparent; border: 1px solid rgba(255,255,255,0.3); border-radius: 12px; font-size: 0.95rem; z-index: 5;">
+            
+            <div class="flip-card-front d-flex flex-column p-3 h-100 shadow-lg" style="border: 1px solid rgba(255,255,255,0.15) !important;">
+                <div class="badge text-white mb-2 px-3 py-1 shadow-sm flex-shrink-0 align-self-center" style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 12px; font-size: 0.95rem; z-index: 5;">
                     Câu ${idx + 1}
                 </div>
                 
-                <!-- 🌟 ĐÃ SỬA: Thêm d-flex, flex-column và justify-content-center để ép câu hỏi nằm giữa -->
                 <div class="d-flex flex-column justify-content-center align-items-center flex-grow-1 w-100 overflow-auto custom-scrollbar" style="-webkit-overflow-scrolling: touch; min-height: 0; height: 0; padding-bottom: 35px;">
-                    <div class="fs-5 fw-bold text-center w-100 mb-3 px-1" style="color: ${bloomColor}; word-break: break-word; line-height: 1.4;">
-                        ${(q.q || "").replace(/\{\{(.*?)::(.*?)::(.*?)\}\}/g, `<span class="vocab-highlight" onclick="if(window.play_vocab_audio) window.play_vocab_audio('$1', '$2', '$3', event)">$1 <i class="bi bi-volume-up-fill small opacity-75"></i></span>`)}
+                    <div class="fs-4 fw-bold text-center w-100 mb-3 px-1" style="color: ${bloomColor}; word-break: break-word; line-height: 1.4;">
+                        ${(q.q || "Câu hỏi rỗng").replace(/\{\{(.*?)::(.*?)::(.*?)\}\}/g, `<span class="vocab-highlight" onclick="if(window.play_vocab_audio) window.play_vocab_audio('$1', '$2', '$3', event)">$1 <i class="bi bi-volume-up-fill small opacity-75"></i></span>`)}
                     </div>
-                    
-                    ${render_media_for_card(q)}
+                    ${(typeof render_media_for_card === 'function') ? render_media_for_card(q) : ''}
                 </div>
                 
-                <small class="text-white-50 w-100 text-center" style="opacity:0.8; font-size: 0.75rem; position: absolute; bottom: 10px; left: 0; pointer-events: none; font-weight: 600; z-index: 5;">
-                    <i class="bi bi-hand-index-thumb"></i> Chạm để lật • Vuốt trái/phải
+                <small class="text-white-50 w-100 text-center" style="opacity:0.8; font-size: 0.75rem; position: absolute; bottom: 15px; left: 0; pointer-events: none; font-weight: 600; z-index: 5;">
+                    <i class="bi bi-hand-index-thumb"></i> Chạm thẻ để lật • Vuốt để chuyển câu
                 </small>
             </div>
             
-            <div class="flip-card-back glass-panel d-flex flex-column align-items-center p-2 p-md-3 h-100 shadow-lg" style="border: 1px solid rgba(255,255,255,0.2) !important; border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.5) !important;">
-                <div class="badge mb-2 px-3 py-1 shadow-sm flex-shrink-0" style="background: transparent; border: 1px solid #4ade80; color: #4ade80 !important; border-radius: 12px; box-shadow: 0 0 10px rgba(74, 222, 128, 0.2);">
+            <div class="flip-card-back d-flex flex-column align-items-center p-3 h-100 shadow-lg" style="border: 1px solid rgba(255,255,255,0.15) !important;">
+                <div class="badge mb-2 px-3 py-1 shadow-sm flex-shrink-0" style="background: rgba(16, 185, 129, 0.15); border: 1px solid #4ade80; color: #4ade80 !important; border-radius: 12px;">
                     <i class="bi bi-check-circle-fill text-success me-1"></i> Đáp án
                 </div>
                 
                 <div class="d-flex flex-column justify-content-center align-items-center flex-grow-1 w-100 overflow-auto px-1 custom-scrollbar" style="-webkit-overflow-scrolling: touch; min-height: 0; height: 0;">
-                    <div class="mb-2 fs-4 fw-bold text-center w-100 text-white" style="word-break: break-word;">
-                        ${(q.a || "Chưa cập nhật").replace(/\{\{(.*?)::(.*?)::(.*?)\}\}/g, `<span class="vocab-highlight" onclick="if(window.play_vocab_audio) window.play_vocab_audio('$1', '$2', '$3', event)">$1 <i class="bi bi-volume-up-fill small opacity-75"></i></span>`)}
+                    <div class="mb-2 fs-3 fw-bold text-center w-100 text-white" style="word-break: break-word;">
+                        ${correctAns.replace(/\{\{(.*?)::(.*?)::(.*?)\}\}/g, `<span class="vocab-highlight" onclick="if(window.play_vocab_audio) window.play_vocab_audio('$1', '$2', '$3', event)">$1 <i class="bi bi-volume-up-fill small opacity-75"></i></span>`)}
                     </div>
-                </div>
-                
-                <div class="mt-2 w-100 flex-shrink-0" style="max-height: 60%; overflow-y: auto; -webkit-overflow-scrolling: touch;">
-                    <div class="p-2 p-md-3 text-start hint-fog-container ${!hasHint ? 'revealed' : ''}" 
-                         onclick="if(!this.classList.contains('revealed')) { event.stopPropagation(); this.classList.add('revealed'); }"
-                         style="background: transparent; border-radius: 16px; border: 1px dashed rgba(255, 255, 255, 0.2);">
-                        <div class="fw-bold mb-1 position-relative" style="color: #38bdf8; font-size: 0.85rem; text-transform: uppercase; z-index: 3;">
-                            💡 Giải thích
-                        </div>
-                        <div class="text-white-50 hint-fog-text" style="font-size: 0.95rem; line-height: 1.6; word-break: break-word;">
-                            ${formattedHint}
-                        </div>
-                    </div>
+                    ${hintDisplayHtml}
                 </div>
             </div>
+            
         </div>
     </div>`;
 
@@ -225,6 +215,7 @@ function render_flashcard_mode(idx) {
     triggerMathJax(newCard);
 }
 
+// Hàm khởi tạo chức năng vuốt (Swipe) mượt mà
 function initSwipeFlashcard() {
     let track = document.getElementById('flashcard_track');
     if (!track) return;
@@ -244,12 +235,13 @@ function initSwipeFlashcard() {
         let deltaX = touchStartX - touchEndX;
         let deltaY = touchStartY - touchEndY;
 
+        // Ưu tiên vuốt ngang thay vì cuộn dọc
         if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 50) {
-            if (deltaX > 0) {
+            if (deltaX > 0) { // Vuốt sang trái -> Câu tiếp
                 if (typeof window.current_fc_idx !== 'undefined' && window.current_fc_idx < window.questions.length - 1) {
                     render_flashcard_mode(window.current_fc_idx + 1);
                 }
-            } else {
+            } else { // Vuốt sang phải -> Câu trước
                 if (typeof window.current_fc_idx !== 'undefined' && window.current_fc_idx > 0) {
                     render_flashcard_mode(window.current_fc_idx - 1);
                 }
