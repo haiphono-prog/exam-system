@@ -2640,7 +2640,7 @@ window.render_admin_panel = function() {
     let lessonName = (questions.length > 0 && questions[0].lessonname) ? questions[0].lessonname : (window.lessonNames[window.current_subject]?.[window.selected_lessons_text] || "");
     let lessonNameDisplay = lessonName ? ` - ${lessonName}` : "";
 
-    // 1. VẼ KHÚC HEADER VÀ CÁC NÚT BẤM
+    // 1. CHỈ IN HEADER RA TRƯỚC ĐỂ MÀN HÌNH KHÔNG BỊ TRẮNG/ĐƠ
     let html = `
     <div class="p-1 m-1 animate__animated animate__fadeIn" style="max-width: 100%; overflow-x: hidden;">
         
@@ -2691,97 +2691,116 @@ window.render_admin_panel = function() {
             </div>
         </div>
         
-        <div id="admin_table_container" style="max-height: 72vh; overflow-y: auto; padding-right:4px; scroll-behavior: smooth;">`;
+        <div id="admin_table_container" style="max-height: 72vh; overflow-y: auto; padding-right:4px; scroll-behavior: smooth;"></div>
+    </div>`;
 
-    // 2. VẼ TỪNG CÂU HỎI (Tách riêng để tránh lỗi nháy kép)
-    let qsHtml = questions.map((q, idx) => {
-        let typeDisplay = (q.type === 'tf' || q.type === 'true_false' || q.type === 'đúng sai') ? 'Đúng/Sai' : ((q.type === 'fill' || q.type === 'điền khuyết') ? 'Điền khuyết' : ((q.type === 'hotspot') ? 'Hotspot' : ((q.type === 'clip') ? 'Clip' : 'Trắc nghiệm')));
-        let typeColor = (q.type === 'hotspot' || q.type === 'clip') ? 'color:#ef4444; border-color:rgba(239,68,68,0.5); background:rgba(239,68,68,0.2);' : 'color:#38bdf8; border-color:rgba(14,165,233,0.5); background:rgba(14,165,233,0.3);';
-        
-        let safeQText = q.q || "(Câu hỏi chưa có nội dung)";
-        let shortText = safeQText.length > 55 ? safeQText.substring(0, 55) + "..." : safeQText;
-        let isExpanded = (idx === window.last_edited_q_idx);
-        let displayStyle = isExpanded ? 'block' : 'none';
-        let chevronIcon = isExpanded ? 'bi-chevron-up text-info' : 'bi-chevron-down text-white-50';
+    quizArea.innerHTML = html;
+    
+    let container = document.getElementById('admin_table_container');
 
-        let optsHtml = '';
-        if (q.type === 'single' || q.type === 'mcq' || !q.type) {
-            let optA = q.opta || (q.opts && q.opts[0] ? q.opts[0] : '');
-            let optB = q.optb || (q.opts && q.opts[1] ? q.opts[1] : '');
-            let optC = q.optc || (q.opts && q.opts[2] ? q.opts[2] : '');
-            let optD = q.optd || (q.opts && q.opts[3] ? q.opts[3] : '');
-            optsHtml = `
-            <div class="mb-3 p-2 rounded border" style="background: rgba(0,0,0,0.25); border-color: #2a2a2a !important; font-size: 0.85rem; color: rgba(255,255,255,0.9);">
-                <div class="mb-1"><strong class="text-white">A.</strong> ${optA}</div>
-                <div class="mb-1"><strong class="text-white">B.</strong> ${optB}</div>
-                <div class="mb-1"><strong class="text-white">C.</strong> ${optC}</div>
-                <div class=""><strong class="text-white">D.</strong> ${optD}</div>
-            </div>`;
-        }
-
-        let mediaHtml = q.image ? `<div class="text-info mt-1 text-truncate" style="font-size:0.75rem;"><i class="bi bi-image"></i> Media ID: ${q.image}</div>` : '';
-        let hintHtml = q.hint ? `<div class="text-success mt-1 text-break" style="font-size:0.75rem;"><i class="bi bi-lightbulb"></i> Giải thích: ${q.hint}</div>` : '';
-
-        return `
-        <div class="q-admin-item-card" id="admin_row_${idx}">
-            <div class="q-card-header" onclick="toggle_q_card(${idx})">
-                <div class="d-flex align-items-center overflow-hidden w-100">
-                    <span class="badge bg-light text-dark me-2 border" style="font-size:0.7rem; min-width: 40px; padding: 4px 6px;">#${idx + 1}</span>
-                    <span class="badge me-2" style="${typeColor} font-size:0.65rem; min-width: 75px;">${typeDisplay}</span>
-                    <span class="text-white fw-bold text-truncate flex-grow-1 pe-2" style="font-size:0.85rem;">${shortText}</span>
-                </div>
-                <i id="q_icon_${idx}" class="bi ${chevronIcon} fs-5"></i>
-            </div>
-
-            <div id="q_body_${idx}" class="q-card-body" style="display: ${displayStyle};">
-                <div class="mb-3" style="font-size: 0.9rem; line-height: 1.5; color: #fff;">
-                    <div class="text-info fw-bold mb-1" style="font-size: 0.75rem; text-transform: uppercase;">Nội dung câu hỏi:</div>
-                    <div class="text-break">${safeQText}</div>
-                </div>
-                
-                ${optsHtml}
-                
-                <div class="p-2 rounded" style="background: rgba(0,0,0,0.15); border-left: 3px solid #0ea5e9; font-size: 0.85rem;">
-                    <div class="text-warning fw-bold text-break mb-1">🎯 Đáp án: <span class="text-white">${q.answer || q.a || ''}</span></div>
-                    ${mediaHtml}
-                    ${hintHtml}
-                </div>
-
-                <div class="d-flex justify-content-end gap-2 border-top pt-3 mt-3" style="border-color: #2a2a2a !important;">
-                    <button class="btn glass-action-btn delete" onclick="delete_question_direct(${idx})">
-                        <i class="bi bi-trash3 me-1"></i> Xóa
-                    </button>
-                    <button class="btn glass-action-btn edit" onclick="open_question_modal(${idx})">
-                        <i class="bi bi-pencil-square me-1"></i> Sửa câu này
-                    </button>
-                </div>
-            </div>
-        </div>`;
-    }).join('');
-
-    html += qsHtml;
-
-    // 3. VẼ KHÚC ĐUÔI
-    if (questions.length === 0) {
-        html += `
+    if (total === 0) {
+        container.innerHTML = `
         <div class="text-center p-5 mt-4 glass-panel" style="border-radius: 16px;">
             <i class="bi bi-inbox text-white-50" style="font-size: 3rem;"></i>
             <div class="text-white-50 mt-2 fw-bold">Chưa có câu hỏi nào.</div>
             <div class="text-white-50 small">Hãy bấm NHẬP ĐỂ THÊM CÂU HỎI!</div>
         </div>`;
+        return;
     }
 
-    html += `</div></div>`;
-    
-    quizArea.innerHTML = html;
-    
-    if (window.MathJax) { 
-        setTimeout(function() {
-            MathJax.typesetPromise([quizArea]).catch(function (err) {
+    // 2. CHUNKING ENGINE (CHIA NHỎ ĐỂ VẼ TRÊN MOBILE)
+    let chunkSize = 30; // Mỗi lần nạp 30 câu
+    let currentIndex = 0;
+
+    function renderNextChunk() {
+        let chunkHtml = '';
+        let max = Math.min(currentIndex + chunkSize, total);
+
+        for (let idx = currentIndex; idx < max; idx++) {
+            let q = questions[idx];
+            let typeDisplay = (q.type === 'tf' || q.type === 'true_false' || q.type === 'đúng sai') ? 'Đúng/Sai' : ((q.type === 'fill' || q.type === 'điền khuyết') ? 'Điền khuyết' : ((q.type === 'hotspot') ? 'Hotspot' : ((q.type === 'clip') ? 'Clip' : 'Trắc nghiệm')));
+            let typeColor = (q.type === 'hotspot' || q.type === 'clip') ? 'color:#ef4444; border-color:rgba(239,68,68,0.5); background:rgba(239,68,68,0.2);' : 'color:#38bdf8; border-color:rgba(14,165,233,0.5); background:rgba(14,165,233,0.3);';
+            
+            let safeQText = q.q || "(Câu hỏi chưa có nội dung)";
+            let shortText = safeQText.length > 55 ? safeQText.substring(0, 55) + "..." : safeQText;
+            let isExpanded = (idx === window.last_edited_q_idx);
+            let displayStyle = isExpanded ? 'block' : 'none';
+            let chevronIcon = isExpanded ? 'bi-chevron-up text-info' : 'bi-chevron-down text-white-50';
+
+            let optsHtml = '';
+            if (q.type === 'single' || q.type === 'mcq' || !q.type) {
+                let optA = q.opta || (q.opts && q.opts[0] ? q.opts[0] : '');
+                let optB = q.optb || (q.opts && q.opts[1] ? q.opts[1] : '');
+                let optC = q.optc || (q.opts && q.opts[2] ? q.opts[2] : '');
+                let optD = q.optd || (q.opts && q.opts[3] ? q.opts[3] : '');
+                optsHtml = `
+                <div class="mb-3 p-2 rounded border" style="background: rgba(0,0,0,0.25); border-color: #2a2a2a !important; font-size: 0.85rem; color: rgba(255,255,255,0.9);">
+                    <div class="mb-1"><strong class="text-white">A.</strong> ${optA}</div>
+                    <div class="mb-1"><strong class="text-white">B.</strong> ${optB}</div>
+                    <div class="mb-1"><strong class="text-white">C.</strong> ${optC}</div>
+                    <div class=""><strong class="text-white">D.</strong> ${optD}</div>
+                </div>`;
+            }
+
+            let mediaHtml = q.image ? `<div class="text-info mt-1 text-truncate" style="font-size:0.75rem;"><i class="bi bi-image"></i> Media ID: ${q.image}</div>` : '';
+            let hintHtml = q.hint ? `<div class="text-success mt-1 text-break" style="font-size:0.75rem;"><i class="bi bi-lightbulb"></i> Giải thích: ${q.hint}</div>` : '';
+
+            chunkHtml += `
+            <div class="q-admin-item-card" id="admin_row_${idx}">
+                <div class="q-card-header" onclick="toggle_q_card(${idx})">
+                    <div class="d-flex align-items-center overflow-hidden w-100">
+                        <span class="badge bg-light text-dark me-2 border" style="font-size:0.7rem; min-width: 40px; padding: 4px 6px;">#${idx + 1}</span>
+                        <span class="badge me-2" style="${typeColor} font-size:0.65rem; min-width: 75px;">${typeDisplay}</span>
+                        <span class="text-white fw-bold text-truncate flex-grow-1 pe-2" style="font-size:0.85rem;">${shortText}</span>
+                    </div>
+                    <i id="q_icon_${idx}" class="bi ${chevronIcon} fs-5"></i>
+                </div>
+
+                <div id="q_body_${idx}" class="q-card-body" style="display: ${displayStyle};">
+                    <div class="mb-3" style="font-size: 0.9rem; line-height: 1.5; color: #fff;">
+                        <div class="text-info fw-bold mb-1" style="font-size: 0.75rem; text-transform: uppercase;">Nội dung câu hỏi:</div>
+                        <div class="text-break">${safeQText}</div>
+                    </div>
+                    
+                    ${optsHtml}
+                    
+                    <div class="p-2 rounded" style="background: rgba(0,0,0,0.15); border-left: 3px solid #0ea5e9; font-size: 0.85rem;">
+                        <div class="text-warning fw-bold text-break mb-1">🎯 Đáp án: <span class="text-white">${q.answer || q.a || ''}</span></div>
+                        ${mediaHtml}
+                        ${hintHtml}
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 border-top pt-3 mt-3" style="border-color: #2a2a2a !important;">
+                        <button class="btn glass-action-btn delete" onclick="delete_question_direct(${idx})">
+                            <i class="bi bi-trash3 me-1"></i> Xóa
+                        </button>
+                        <button class="btn glass-action-btn edit" onclick="open_question_modal(${idx})">
+                            <i class="bi bi-pencil-square me-1"></i> Sửa câu này
+                        </button>
+                    </div>
+                </div>
+            </div>`;
+        }
+
+        // Chèn vào Container
+        container.insertAdjacentHTML('beforeend', chunkHtml);
+
+        // Kích hoạt MathJax (Nếu có)
+        if (window.MathJax) { 
+            MathJax.typesetPromise([container]).catch(function (err) {
                 console.log('MathJax error: ', err.message);
             });
-        }, 50); 
+        }
+
+        currentIndex += chunkSize;
+
+        // Nếu còn dữ liệu, nhường luồng xử lý 50ms cho Safari kịp thở rồi vẽ tiếp
+        if (currentIndex < total) {
+            setTimeout(renderNextChunk, 50);
+        }
     }
+
+    renderNextChunk();
 };
 
 window.refresh_subject_data = async function(subjectKey, iconEl) {
