@@ -764,51 +764,63 @@ window.process_preload_queue = async function() {
 };
 
 window.back_to_subject_select = function() {
-    // 1. Tắt giám sát & đồng hồ ngay lập tức
+    // 1. TẮT CHẾ ĐỘ GIÁM SÁT TRƯỚC TIÊN (để không bị báo lỗi vi phạm khi thoát toàn màn hình)
     if (window.proctoring_state) window.proctoring_state.is_active = false;
+
+    // 2. DIỆT GỌN ĐỒNG HỒ ĐẾM NGƯỢC CHẠY NGẦM
     if (window.timer_interval) clearInterval(window.timer_interval);
+
+    // 3. THOÁT CHẾ ĐỘ TOÀN MÀN HÌNH (FULLSCREEN)
+    if (document.fullscreenElement || document.webkitFullscreenElement) {
+        if (document.exitFullscreen) document.exitFullscreen().catch(e => {});
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    }
+
+    // 🌟 ĐÃ THÊM: Trả lại thanh Header nguyên bản trước khi thoát
+    let qHeader = document.querySelector('#step_3 .header-fixed-wrapper');
+    if (qHeader) qHeader.style.display = ''; 
+
+    // 🌟 KHÔI PHỤC LẠI CÁC TÍNH NĂNG BỊ KHÓA TRONG KHI THI
+    let skill5050 = document.querySelector('button[onclick="window.use_skill_5050()"]');
+    let skillTime = document.querySelector('button[onclick="window.use_skill_time()"]');
+    let invBadge = document.getElementById('mini_inventory_badge');
+    let modeToggle = document.getElementById('mode_text');
+
+    if(skill5050) skill5050.style.display = '';
+    if(skillTime) skillTime.style.display = '';
+    if(invBadge) invBadge.style.display = 'flex';
+    if(modeToggle && modeToggle.parentElement) modeToggle.parentElement.style.display = '';
+
+    // Gỡ bỏ CSS khóa gian lận (Nút cứu sai, bóng đèn)
+    let examStyle = document.getElementById('exam_mode_style');
+    if (examStyle) examStyle.remove();
+
+    // 🌟 DỌN DẸP NHỊP TIM GIÁM SÁT (HEARTBEAT) KHI THOÁT PHÒNG THI
     if (window.realtime_exam_monitor) clearInterval(window.realtime_exam_monitor);
 
-    // 2. ẨN NGAY LẬP TỨC KHU VỰC LÀM BÀI (Chỉ đổi display:none tốn 0.1ms, tuyệt đối chưa xóa innerHTML lúc này để tránh Safari bị đơ do Garbage Collection)
+    const mainContent = document.getElementById('main_content');
+    if (mainContent) mainContent.style.display = 'block';
+    
     ['result_area', 'step_3', 'quiz_area', 'submit_btn'].forEach(id => { 
         const el = document.getElementById(id); if (el) el.style.display = 'none'; 
     });
-
-    // 3. HIỆN LẠI SẢNH CHÍNH NGAY LẬP TỨC
-    const mainContent = document.getElementById('main_content');
-    if (mainContent) mainContent.style.display = 'block';
+    
     const step1 = document.getElementById('step_1'); 
     if (step1) step1.style.display = 'block';
-
+    
     window.is_exam_started = false; 
     window.start_time = null; 
 
-    // 4. ĐẨY CÁC TÁC VỤ DỌN DẸP NẶNG RA SAU 60ms (Khi mắt người dùng đã thấy về lại sảnh mượt mà rồi mới dọn ngầm)
-    setTimeout(() => {
-        let quizArea = document.getElementById('quiz_area');
-        if (quizArea) quizArea.innerHTML = ''; // Dọn rác DOM ngầm
-
-        if (document.fullscreenElement || document.webkitFullscreenElement) {
-            if (document.exitFullscreen) document.exitFullscreen().catch(e => {});
-            else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-        }
-
-        let qHeader = document.querySelector('#step_3 .header-fixed-wrapper');
-        if (qHeader) qHeader.style.display = ''; 
-
-        let skill5050 = document.querySelector('button[onclick="window.use_skill_5050()"]');
-        let skillTime = document.querySelector('button[onclick="window.use_skill_time()"]');
-        let invBadge = document.getElementById('mini_inventory_badge');
-        let modeToggle = document.getElementById('mode_text');
-
-        if(skill5050) skill5050.style.display = '';
-        if(skillTime) skillTime.style.display = '';
-        if(invBadge) invBadge.style.display = 'flex';
-        if(modeToggle && modeToggle.parentElement) modeToggle.parentElement.style.display = '';
-
-        let examStyle = document.getElementById('exam_mode_style');
-        if (examStyle) examStyle.remove();
-    }, 60);
+    if (window.current_subject) {
+        setTimeout(() => {
+            const targetCard = document.getElementById(`subject_card_block_${window.current_subject}`);
+            if (targetCard) targetCard.scrollIntoView({ behavior: 'instant', block: 'start' });
+        }, 50);
+    } else {
+        let savedScroll = localStorage.getItem('menu_scroll_pos');
+        if (savedScroll) setTimeout(() => { window.scrollTo({ top: parseInt(savedScroll), behavior: 'instant' }); }, 50);
+        else window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
 };
 
 window.execute_back = function() { window.back_to_subject_select(); }
@@ -816,16 +828,15 @@ window.execute_back = function() { window.back_to_subject_select(); }
 window.go_back = function() {
     let isStarted = window.is_exam_started || (typeof is_exam_started !== 'undefined' && is_exam_started);
     if (isStarted) { 
-        window.show_alert("Xác nhận thoát", "Bạn có chắc chắn muốn thoát?", (ans) => { 
+        window.show_alert("Xác nhận thoát", "Bạn có chắc chắn muốn thoát?", async (ans) => { 
             if(ans) { 
-                // 🌟 Nhường 15ms cho hộp thoại Xác nhận đóng lại mượt mà trước khi chuyển cảnh
-                setTimeout(() => {
-                    // Chỉ lưu nháp nếu đang THI THẬT (is_study_mode === false), còn ôn tập thì thoát thẳng cho lẹ!
-                    if (window.is_study_mode === false && typeof window.auto_save_exam_draft === 'function') {
-                        try { window.auto_save_exam_draft(); } catch(e) {}
+                try {
+                    // Bọc túi khí an toàn: Nếu hàm lưu nháp cũ bị lỗi google, bỏ qua luôn để không bị kẹt nút thoát
+                    if (typeof window.auto_save_exam_draft === 'function') {
+                        await window.auto_save_exam_draft(); 
                     }
-                    window.execute_back(); 
-                }, 15);
+                } catch(err) { console.log("Bỏ qua lỗi lưu nháp cũ."); }
+                window.execute_back(); 
             } 
         }); 
     } 
@@ -1054,70 +1065,60 @@ window.render_student_subject_list = function(safe_role) {
     });
     
     html += `</div>`;
+    container.innerHTML = html;
+    window.render_stats_card_above_timeline();
+    window.fetch_and_render_active_exams();
     
-    // 🌟 TÁCH LUỒNG RENDER: Nhường 1 nhịp (10ms) để nút bấm phản hồi tức thì trên Safari
+    // 🌟 TỰ ĐỘNG ĐẾM & PHÂN LOẠI SỐ LƯỢNG CÂU HỎI TRỰC TIẾP TỪ SUPABASE
     setTimeout(() => {
-        container.innerHTML = html;
-        window.render_stats_card_above_timeline();
-        if (typeof window.fetch_and_render_active_exams === 'function') window.fetch_and_render_active_exams();
-        
-        // 🌟 ĐẾM SỐ CÂU HỎI SIÊU TỐC (Gộp toàn bộ môn thành 1 lần gọi RPC duy nhất + Có bộ nhớ đệm Cache)
-        window.load_all_subjects_stats_fast();
-    }, 10);
-};
-
-// Hàm dùng chung để đếm câu hỏi cực nhẹ cho cả Quản lý trắc nghiệm và Danh mục môn
-window.load_all_subjects_stats_fast = async function(forceRefresh = false) {
-    const applyStatsToDOM = (statsMap) => {
-        Object.keys(subjectConfig).forEach(key => {
+        Object.keys(subjectConfig).forEach(async (key) => {
             let badge = document.getElementById('stats_badge_' + key) || document.getElementById('admin_stats_badge_' + key);
             let details = document.getElementById('stats_details_' + key) || document.getElementById('admin_stats_details_' + key);
             if (!badge) return;
 
-            let st = statsMap[key] || { single: 0, tf: 0, fill: 0, media: 0, phanxa: 0, total: 0 };
-            let h = '';
-            if(st.single > 0) h += `<span class="badge bg-info text-dark shadow-sm me-1 mb-1" style="font-size:0.65rem;">MCQ: ${st.single}</span>`;
-            if(st.tf > 0) h += `<span class="badge bg-success shadow-sm me-1 mb-1" style="font-size:0.65rem;">Đ/S: ${st.tf}</span>`;
-            if(st.fill > 0) h += `<span class="badge bg-warning text-dark shadow-sm me-1 mb-1" style="font-size:0.65rem;">Đ/K: ${st.fill}</span>`;
-            if(st.media > 0) h += `<span class="badge shadow-sm me-1 mb-1" style="background:#c084fc; color:#fff; font-size:0.65rem;">Media: ${st.media}</span>`;
-            if(st.phanxa > 0) h += `<span class="badge bg-danger shadow-sm me-1 mb-1" style="font-size:0.65rem;">Phản Xạ: ${st.phanxa}</span>`;
+            const renderDetails = (dataArr) => {
+                let single = 0, tf = 0, fill = 0, media = 0, phanxa = 0;
+                dataArr.forEach(q => {
+                    let t = String(q.type || 'single').toLowerCase().trim();
+                    if (t === 'phanxa') phanxa++;
+                    else if (t === 'quiz' || t === 'mcq' || t === '') single++;
+                    else if (t === 'tf' || t === 'true_false' || t === 'đúng sai') tf++;
+                    else if (t === 'fill' || t === 'short' || t === 'điền khuyết') fill++;
+                    else if (['hotspot', 'clip', 'clip_listen', 'arrange', 'sắp xếp'].includes(t)) media++;
+                    else single++;
+                });
+                
+                let h = '';
+                if(single > 0) h += `<span class="badge bg-info text-dark shadow-sm me-1 mb-1" style="font-size:0.65rem;">MCQ: ${single}</span>`;
+                if(tf > 0) h += `<span class="badge bg-success shadow-sm me-1 mb-1" style="font-size:0.65rem;">Đ/S: ${tf}</span>`;
+                if(fill > 0) h += `<span class="badge bg-warning text-dark shadow-sm me-1 mb-1" style="font-size:0.65rem;">Đ/K: ${fill}</span>`;
+                if(media > 0) h += `<span class="badge shadow-sm me-1 mb-1" style="background:#c084fc; color:#fff; font-size:0.65rem;">Media: ${media}</span>`;
+                if(phanxa > 0) h += `<span class="badge bg-danger shadow-sm me-1 mb-1" style="font-size:0.65rem;">Phản Xạ: ${phanxa}</span>`;
+                
+                if(details) details.innerHTML = h;
+                return dataArr.length;
+            };
             
-            if(details) details.innerHTML = h;
-            badge.innerHTML = `<i class="bi bi-database text-warning"></i> ${st.total} câu`;
+            if (window.full_data && window.full_data[key]) {
+                let total = renderDetails(window.full_data[key]);
+                badge.innerHTML = `<i class="bi bi-database text-warning"></i> ${total} câu`;
+            } else {
+                try {
+                    const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+                    let targetTable = key.includes('phanxa') ? 'phanxa_questions' : 'questions';
+                    const { data, error } = await clientDb.from(targetTable).select('type').eq('subject_key', key);
+                    if (!error && data) {
+                        let total = renderDetails(data);
+                        badge.innerHTML = `<i class="bi bi-database text-warning"></i> ${total} câu`;
+                    } else {
+                        badge.innerHTML = `<i class="bi bi-database text-warning"></i> 0 câu`;
+                    }
+                } catch(e) {
+                    badge.innerHTML = `<i class="bi bi-database text-warning"></i> Lỗi`;
+                }
+            }
         });
-    };
-
-    // Nếu đã đếm 1 lần trong phiên đăng nhập rồi thì lấy từ RAM ra ngay lập tức (0ms)
-    if (window._cachedSubjectStats && !forceRefresh) {
-        applyStatsToDOM(window._cachedSubjectStats);
-        return;
-    }
-
-    try {
-        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
-        const { data, error } = await clientDb.rpc('get_all_subjects_stats');
-        if (!error && data) {
-            let statsMap = {};
-            data.forEach(r => {
-                let k = r.subject_key;
-                if (!statsMap[k]) statsMap[k] = { single: 0, tf: 0, fill: 0, media: 0, phanxa: 0, total: 0 };
-                let c = parseInt(r.q_count) || 0;
-                let t = String(r.type || 'single').toLowerCase().trim();
-                if (t === 'link') return; // Không đếm link tài liệu vào câu hỏi
-                if (t === 'phanxa') statsMap[k].phanxa += c;
-                else if (t === 'quiz' || t === 'mcq' || t === '' || t === 'single') statsMap[k].single += c;
-                else if (t === 'tf' || t === 'true_false' || t === 'đúng sai') statsMap[k].tf += c;
-                else if (t === 'fill' || t === 'short' || t === 'điền khuyết') statsMap[k].fill += c;
-                else if (['hotspot', 'clip', 'clip_listen', 'arrange', 'sắp xếp'].includes(t)) statsMap[k].media += c;
-                else statsMap[k].single += c;
-                statsMap[k].total += c;
-            });
-            window._cachedSubjectStats = statsMap;
-            applyStatsToDOM(statsMap);
-        }
-    } catch (e) {
-        console.warn("Chưa có RPC get_all_subjects_stats hoặc lỗi mạng:", e);
-    }
+    }, 300);
 };
 
 // =========================================================================
@@ -2024,21 +2025,13 @@ window.show_mode_modal = function(callback, lessonName = "") {
     
     document.body.appendChild(overlay);
     
-    const selectAndRun = (mode) => {
-        window.active_mode = mode;
-        document.documentElement.style.overflow = '';
-        document.body.style.overflow = '';
-        overlay.remove(); // 🌟 Xóa bảng chọn ngay lập tức để nhường 100% GPU cho màn hình bài học
-        setTimeout(() => callback(mode), 10);
-    };
-
     document.getElementById('btn_close_mode').onclick = closeModal;
-    document.getElementById('btn_mode_quiz').onclick = () => selectAndRun('quiz');
-    document.getElementById('btn_mode_fc').onclick = () => selectAndRun('flashcard');
-    document.getElementById('btn_mode_game').onclick = () => selectAndRun('game');
-    document.getElementById('btn_mode_story').onclick = () => selectAndRun('story');
-    document.getElementById('btn_mode_phanxa').onclick = () => selectAndRun('phanxa');
-    document.getElementById('btn_mode_survival').onclick = () => selectAndRun('survival');
+    document.getElementById('btn_mode_quiz').onclick = () => { window.active_mode = 'quiz'; closeModal(); callback('quiz'); };
+    document.getElementById('btn_mode_fc').onclick = () => { window.active_mode = 'flashcard'; closeModal(); callback('flashcard'); };
+    document.getElementById('btn_mode_game').onclick = () => { window.active_mode = 'game'; closeModal(); callback('game'); };
+    document.getElementById('btn_mode_story').onclick = () => { window.active_mode = 'story'; closeModal(); callback('story'); };
+    document.getElementById('btn_mode_phanxa').onclick = () => { window.active_mode = 'phanxa'; closeModal(); callback('phanxa'); };
+    document.getElementById('btn_mode_survival').onclick = () => { window.active_mode = 'survival'; closeModal(); callback('survival'); };
 };
 
 // =========================================================================
@@ -3049,12 +3042,55 @@ window.render_subject_management = function() {
     });
     
     html += `</div>`;
+    container.innerHTML = html;
+    
+    // ĐẾM SỐ CÂU HỎI TỪ SUPABASE
     setTimeout(() => {
-        container.innerHTML = html;
-        if (typeof window.load_all_subjects_stats_fast === 'function') {
-            window.load_all_subjects_stats_fast();
-        }
-    }, 10);
+        Object.keys(subjectConfig).forEach(async (key) => {
+            let badge = document.getElementById('admin_stats_badge_' + key);
+            let details = document.getElementById('admin_stats_details_' + key);
+            if (!badge) return;
+
+            const renderDetails = (dataArr) => {
+                let single = 0, tf = 0, fill = 0, media = 0;
+                dataArr.forEach(q => {
+                    let t = String(q.type || 'single').toLowerCase().trim();
+                    if (t === 'quiz' || t === 'mcq' || t === '') single++;
+                    else if (t === 'tf' || t === 'true_false' || t === 'đúng sai') tf++;
+                    else if (t === 'fill' || t === 'short' || t === 'điền khuyết') fill++;
+                    else if (['hotspot', 'clip', 'clip_listen', 'arrange', 'sắp xếp'].includes(t)) media++;
+                    else single++;
+                });
+                
+                let h = '';
+                if(single > 0) h += `<span class="badge bg-info text-dark shadow-sm" style="font-size:0.65rem;">MCQ: ${single}</span>`;
+                if(tf > 0) h += `<span class="badge bg-success shadow-sm" style="font-size:0.65rem;">Đ/S: ${tf}</span>`;
+                if(fill > 0) h += `<span class="badge bg-warning text-dark shadow-sm" style="font-size:0.65rem;">Đ/K: ${fill}</span>`;
+                if(media > 0) h += `<span class="badge shadow-sm" style="background:#c084fc; color:#fff; font-size:0.65rem;">Media: ${media}</span>`;
+                
+                if(details) details.innerHTML = h;
+                return dataArr.length;
+            };
+            
+            if (window.full_data && window.full_data[key]) {
+                let total = renderDetails(window.full_data[key]);
+                badge.innerHTML = `<i class="bi bi-database text-warning"></i> ${total} câu`;
+            } else {
+                try {
+                    const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+                    const { data, error } = await clientDb.from('questions').select('type').eq('subject_key', key);
+                    if (!error && data) {
+                        let total = renderDetails(data);
+                        badge.innerHTML = `<i class="bi bi-database text-warning"></i> ${total} câu`;
+                    } else {
+                        badge.innerHTML = `<i class="bi bi-database text-warning"></i> 0 câu`;
+                    }
+                } catch(e) {
+                    badge.innerHTML = `<i class="bi bi-database text-warning"></i> Lỗi`;
+                }
+            }
+        });
+    }, 300);
 };
 
 // =========================================================================
