@@ -1529,26 +1529,27 @@ window.quick_start_lesson = function(subjectKey, lessonId) {
     window.is_eligible_for_reward = true;
     let attemptCount = 0;
     
+    // 🌟 ĐÃ TỐI ƯU: Đưa thuật toán xử lý chuỗi nặng ra ngoài vòng lặp
     if (window.studentProgressLogs) {
         const cleanString = (str) => String(str||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/đ/g, "d").replace(/[^a-z0-9]/g, "");
         let safeSubjKey = cleanString(subjectKey);
         let subjDisplayName = cleanString(subjectConfig[subjectKey]?.name || subjectKey);
+        let safeLessonId = cleanString(lessonId); // Chỉ tính toán 1 lần duy nhất
         
         for (let k in window.studentProgressLogs) {
             if (cleanString(k) === safeSubjKey || cleanString(k) === subjDisplayName) {
                 let sLog = window.studentProgressLogs[k];
                 for (let lKey in sLog.lessonScores) {
-                    if (cleanString(lKey) === cleanString(lessonId) || cleanString(lKey).startsWith(cleanString(lessonId))) {
+                    let cleanLKey = cleanString(lKey);
+                    if (cleanLKey === safeLessonId || cleanLKey.startsWith(safeLessonId)) {
                         let maxScore = sLog.lessonScores[lKey] || 0;
                         attemptCount = sLog.lessonAttempts ? (sLog.lessonAttempts[lKey] || 0) : 0;
                         
-                        // 🌟 ĐÃ FIX: Lưu số lượt thi vào bộ nhớ để tý gửi kèm lúc nộp bài
                         window.current_attempt_count = attemptCount + 1;
 
                         if (maxScore >= 8) {
                             window.is_eligible_for_reward = false;
-                            window.show_toast("⚠️ Báo cáo: Bạn đã từng đạt điểm cao ở bài này. Lượt làm lại sẽ không được nhận Quà tặng ưu đãi.", true);
-                            // Đã xóa lệnh gửi email rời làm rác hộp thư
+                            window.show_toast("⚠️ Bạn đã đạt điểm cao bài này. Lượt làm lại không tính thưởng.", true);
                         }
                         break;
                     }
@@ -4702,9 +4703,12 @@ window.exportExamPackage = function(numVariants = 2) { alert("Đang chuẩn bị
 // =========================================================================
 document.addEventListener("DOMContentLoaded", function() {
 
-    // ─── 1. SỬA LỖI GIAO DIỆN MOBILE (CHỐNG STICKY HOVER & FIX 3D FLASHCARD) ───
+    // ─── 1. SỬA LỖI GIAO DIỆN MOBILE (CHỐNG STICKY HOVER & TẮT TRỄ 300MS IOS) ───
     const styleMobileFix = document.createElement('style');
     styleMobileFix.innerHTML = `
+        /* 🌟 ĐẶC TRỊ IOS: Tắt độ trễ 300ms chờ click đúp khi bấm nút trên iPhone/iPad */
+        a, button, .btn, input, select, textarea, [onclick] { touch-action: manipulation; }
+        
         /* Khóa cuộn cấp độ cao (dùng cho Modal) */
         body.no-scroll { overflow: hidden !important; touch-action: none !important; }
 
@@ -4788,30 +4792,8 @@ document.addEventListener("DOMContentLoaded", function() {
     document.addEventListener('copy', function(e) { if (!is_exempt_from_anti_cheat()) { e.preventDefault(); if (e.clipboardData) e.clipboardData.setData('text/plain', 'Dữ liệu mã hóa!'); } });
 
 
-    // ─── 3. AUTO-LOCK SCROLL KHI MỞ MODAL/POPUP ───
-    const modalObserver = new MutationObserver(function() {
-        // Dò tìm sự xuất hiện của các modal hoặc lớp phủ
-        const hasOpenModal = document.querySelector(
-            '.custom-modal[style*="display: flex"], ' + 
-            '.media-modal-overlay, ' + 
-            '#subject_modal, ' + 
-            '#user_modal, ' + 
-            '#user_detail_modal, ' + 
-            '#smart_vocab_modal[style*="opacity: 1"], ' + 
-            '#result_area[style*="display: block"]'
-        );
-        
-        // 🌟 BẢN VÁ: Gắn thêm class no-scroll để khóa cuộn triệt để trên Mobile
-        if (hasOpenModal) {
-            document.body.style.overflow = 'hidden';
-            document.body.classList.add('no-scroll');
-        } else {
-            document.body.style.overflow = '';
-            document.body.classList.remove('no-scroll');
-        }
-    });
-    
-    modalObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
+    // ─── 3. ĐÃ XÓA MUTATION OBSERVER (THỦ PHẠM GÂY LAG TRÊN IOS) ───
+    // Việc khóa cuộn (lock scroll) đã được xử lý trực tiếp, không cần phải quét DOM nữa.
 });
 // 🌟 HÀM TẠO THẺ THỐNG KÊ NẰM TRÊN NHẬT KÝ ÔN TẬP (CHỈ DÀNH CHO USER THƯỜNG CÓ QUYỀN)
 window.render_stats_card_above_timeline = function() {
