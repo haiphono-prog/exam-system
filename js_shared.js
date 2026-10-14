@@ -463,27 +463,6 @@ window.fetch_all_questions = async function(key) {
     return { data: [], error: null };
 };
 
-// 🌟 KIẾN TRÚC MỚI: Tải câu hỏi CỦA ĐÚNG 1 BÀI HỌC (Chống tràn RAM trên Safari iOS)
-window.fetch_lesson_questions = async function(subjectKey, lessonId) {
-    if (!subjectKey || lessonId === undefined) return { data: [], error: null };
-    let isPhanXaKey = subjectKey.includes('phanxa');
-    let targetTable = isPhanXaKey ? 'phanxa_questions' : 'questions';
-
-    try {
-        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
-        const { data, error } = await clientDb
-            .from(targetTable)
-            .select('*')
-            .eq('subject_key', subjectKey)
-            .eq('lesson', String(lessonId).trim());
-
-        return { data: data || [], error };
-    } catch (err) {
-        console.error("Lỗi tải bài học:", err);
-        return { data: [], error: err };
-    }
-};
-
 // Hàm trả về danh sách các subject_key Phản xạn hợp lệ của User
 window.getUserPhanXaKeys = function() {
     let user = localStorage.getItem('username') || localStorage.getItem('user_id') || localStorage.getItem('user') || window.current_student_id;
@@ -1302,54 +1281,34 @@ window.open_lesson_map = async function(subjectKey, displayName) {
     if (!mapArea) return;
     mapArea.style.display = 'block';
     
-    // Nếu đã có sẵn dữ liệu đầy đủ hoặc dữ liệu tóm tắt trong RAM thì vẽ ra ngay lập tức (0ms)
     if (window.full_data && window.full_data[subjectKey] && window.full_data[subjectKey].length > 0) {
         window.draw_lesson_buttons(subjectKey, displayName, window.full_data[subjectKey]);
         return;
     }
 
-    // 🌟 UX SUPER APP: Hiệu ứng Skeleton Shimmer (Khung xương lấp lánh thay cho vòng xoay)
-    if (!document.getElementById('skeleton_shimmer_css')) {
-        document.head.insertAdjacentHTML('beforeend', `<style id="skeleton_shimmer_css">
-            .skeleton-box { background: linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.08) 50%, rgba(255,255,255,0.03) 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: 8px; }
-            @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
-        </style>`);
-    }
-    mapArea.innerHTML = `
-        <div class="d-flex flex-column gap-2 p-2 ms-3">
-            <div class="skeleton-box" style="height: 38px; width: 85%;"></div>
-            <div class="skeleton-box" style="height: 38px; width: 70%;"></div>
-            <div class="skeleton-box" style="height: 38px; width: 90%;"></div>
-        </div>`;
+    mapArea.innerHTML = `<div class="text-center p-3"><div class="spinner-border spinner-border-sm text-info mb-2"></div><div id="loader_map_${subjectKey}" class="small text-muted fw-bold" style="font-size:0.75rem;">Đang tải dữ liệu từ Supabase...</div></div>`;
     
     try {
-        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
-        
-        // 🌟 ƯU TIÊN GỌI HÀM RPC SIÊU NHẸ (Chỉ tốn 0.05 giây, không tải nội dung câu hỏi)
-        if (!subjectKey.includes('phanxa')) {
-            const { data: sumData, error: rpcErr } = await clientDb.rpc('get_lesson_summary', { p_subject_key: subjectKey });
-            
-            if (!rpcErr && sumData && sumData.length > 0 && !sumData.some(r => r.type === 'link')) {
-                // Tạo mảng đại diện siêu nhẹ để hàm draw_lesson_buttons đếm như bình thường
-                let lightList = [];
-                sumData.forEach(row => {
-                    let count = parseInt(row.q_count) || 0;
-                    for (let i = 0; i < count; i++) {
-                        lightList.push({ lesson: row.lesson, lessonname: row.lessonname, type: row.type, _is_light: true });
-                    }
-                });
-                window.draw_lesson_buttons(subjectKey, displayName, lightList);
-                return;
-            }
-        }
-
-        // Dự phòng (Fallback): Nếu là môn Link tài liệu hoặc chưa chạy SQL RPC thì tải kiểu cũ
         const { data, error } = await window.fetch_all_questions(subjectKey);
         if (error) throw error;
         
         if (data && data.length > 0) {
             if (!window.full_data) window.full_data = {};
-            let mappedData = window.map_supabase_questions(data);
+            
+            // Xử lý dữ liệu từ Supabase để khớp cấu trúc cũ
+            let mappedData = data.map(q => ({
+                id: q.old_uuid || q.id,
+                lesson: q.lesson !== undefined && q.lesson !== null ? String(q.lesson).trim() : "1",
+                type: q.type || 'single',
+                level: q.level || 1,
+                q: q.q || q.question_text || "",
+                opta: q.opt_a || "", optb: q.opt_b || "", optc: q.opt_c || "", optd: q.opt_d || "",
+                opts: [q.opt_a || "", q.opt_b || "", q.opt_c || "", q.opt_d || ""],
+                answer: q.answer || "", a: q.answer || "",
+                hint: q.hint || "", lessonname: q.lessonname || "",
+                image: q.multimedia || "", nav: q.navigation || ""
+            }));
+
             window.full_data[subjectKey] = mappedData;
             window.draw_lesson_buttons(subjectKey, displayName, mappedData);
         } else {
@@ -1555,33 +1514,13 @@ window.update_progress_bar = function() {
 // =========================================================================
 // 🚀 NÚT BẮT ĐẦU (ĐÃ TÍCH HỢP TẠO ĐÁP ÁN ẢO & ẨN ĐỒNG HỒ)
 // =========================================================================
-window.quick_start_lesson = async function(subjectKey, lessonId) {
-    // 1. Phản hồi xúc giác nhẹ (Haptic Feedback)
-    if (navigator.vibrate) try { navigator.vibrate(10); } catch(e){}
-
-    window.is_study_mode = true;
+window.quick_start_lesson = function(subjectKey, lessonId) {
+  window.is_study_mode = true;
     window.is_exam_started = false;
     if (window.proctoring_state) window.proctoring_state.is_active = false;
     localStorage.setItem('menu_scroll_pos', window.scrollY || document.documentElement.scrollTop);
-    
-    // 🌟 2. TẢI CÂU HỎI CỦA RIÊNG BÀI HỌC ĐƯỢC CHỌN (ON-DEMAND)
-    let currentData = window.full_data[subjectKey] || [];
-    let hasLessonInRam = currentData.some(q => !q._is_light && String(q.lesson).trim().toLowerCase() === String(lessonId).trim().toLowerCase());
-    
-    if (!hasLessonInRam) {
-        window.show_toast("⚡ Đang nạp câu hỏi Bài " + lessonId + "...");
-        const { data, error } = await window.fetch_lesson_questions(subjectKey, lessonId);
-        if (!error && data && data.length > 0) {
-            let mappedLesson = window.map_supabase_questions(data);
-            window.full_data[subjectKey] = [
-                ...currentData.filter(q => String(q.lesson).trim().toLowerCase() !== String(lessonId).trim().toLowerCase()), 
-                ...mappedLesson
-            ];
-            currentData = window.full_data[subjectKey];
-        } else {
-            return window.show_alert("Cảnh báo", "Bài học chưa có câu hỏi hoặc dữ liệu chưa sẵn sàng!");
-        }
-    }
+    let currentData = window.full_data[subjectKey] || null;
+    if (!currentData) return window.show_alert("Cảnh báo", "Dữ liệu chưa sẵn sàng! Vui lòng tải lại trang.");
     
     window.current_subject = subjectKey; 
     window.selected_lessons_text = lessonId; 
@@ -8367,7 +8306,7 @@ window.show_edit_lesson_list = function(subKey) {
     quizArea.innerHTML = html;
 };
 
-window.open_admin_lesson_panel = async function(subKey, lessonId) {
+window.open_admin_lesson_panel = function(subKey, lessonId) {
     window.current_subject = subKey;
     window.selected_lessons_text = lessonId;
 
@@ -8385,27 +8324,11 @@ window.open_admin_lesson_panel = async function(subKey, lessonId) {
         quizArea.style.overscrollBehavior = 'auto';
     }
 
-    if (!window.full_data) window.full_data = {};
-    let currentData = window.full_data[subKey] || [];
-
-    // 🌟 KIỂM TRA & TẢI CÂU HỎI CỦA RIÊNG BÀI HỌC ĐANG SỬA (ON-DEMAND)
-    let hasLessonInRam = currentData.some(q => !q._is_light && String(q.lesson).trim().toLowerCase() === String(lessonId).trim().toLowerCase());
-    if (!hasLessonInRam && typeof window.fetch_lesson_questions === 'function') {
-        if (quizArea) quizArea.innerHTML = `<div class="text-center p-5 text-info fw-bold"><span class="spinner-border spinner-border-sm me-2"></span>Đang tải dữ liệu Bài ${lessonId}...</div>`;
-        const { data, error } = await window.fetch_lesson_questions(subKey, lessonId);
-        if (!error && data && data.length > 0) {
-            let mappedLesson = window.map_supabase_questions(data);
-            window.full_data[subKey] = [
-                ...currentData.filter(q => String(q.lesson).trim().toLowerCase() !== String(lessonId).trim().toLowerCase()), 
-                ...mappedLesson
-            ];
-            currentData = window.full_data[subKey];
-        }
-    }
+    let currentData = (window.full_data && window.full_data[subKey]) ? window.full_data[subKey] : [];
     
-    // Lọc lấy các câu hỏi thuộc bài đang chọn (loại bỏ dữ liệu khung xương _is_light nếu bài rỗng)
+    // Lọc lấy các câu hỏi thuộc bài đang chọn
     window.questions = currentData.filter(q => {
-        if (!q || q._is_light || q.lesson == null) return false;
+        if (!q || q.lesson == null) return false;
         return String(q.lesson).trim().toLowerCase() === String(lessonId).trim().toLowerCase();
     });
 
