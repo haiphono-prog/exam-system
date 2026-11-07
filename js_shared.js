@@ -6018,10 +6018,39 @@ window.start_online_exam = async function(ex) {
                 localStorage.removeItem('exam_draft_' + window.current_student_id + '_' + ex.examCode);
                 if (typeof window.clear_exam_draft === 'function') window.clear_exam_draft();
                 
-                if (typeof window.force_kick_student === 'function') {
-                    window.force_kick_student("✅ BÀI THI ĐÃ NỘP", "Bạn đã nộp bài thành công trước đó. Hệ thống không cho phép thi lại lần thứ hai.", true);
+                // =====================================================================
+                // 🛑 BẢO VỆ GÁC CỬA: KIỂM TRA ĐIỂM SỐ XEM CÓ BỊ ĐÁNH VẮNG KHÔNG (-1)
+                // =====================================================================
+                
+                // Lấy điểm thật sự vừa kéo từ db xuống
+                let myScore = 0;
+                
+                // Nếu checkData.score không có giá trị, gọi lệnh phụ lấy điểm về
+                if (checkData.score === undefined || checkData.score === null) {
+                     const { data: scoreData } = await clientDb.from('exam_results')
+                        .select('score')
+                        .eq('exam_code', ex.examCode)
+                        .eq('student_id', String(window.current_student_id).toLowerCase()) // Đảm bảo mã in thường
+                        .single();
+                     if (scoreData) myScore = Number(scoreData.score);
                 } else {
-                    alert("✅ BÀI THI ĐÃ NỘP: Bạn không thể thi lại lần 2!");
+                     myScore = Number(checkData.score);
+                }
+
+                if (myScore === -1) {
+                    // BỊ ĐÁNH VẮNG KHỐNG LÀM ĐIỂM = -1
+                    if (typeof window.force_kick_student === 'function') {
+                        window.force_kick_student("🚫 CẤM TRUY CẬP", "Tài khoản của bạn đã bị Giám thị khóa (Vắng mặt). Bạn không thể tự ý vào thi!", true);
+                    } else {
+                        alert("🚫 CẤM TRUY CẬP: Bạn đã bị đánh vắng mặt!");
+                    }
+                } else {
+                    // NỘP BÀI THẬT SỰ
+                    if (typeof window.force_kick_student === 'function') {
+                        window.force_kick_student("✅ BÀI THI ĐÃ NỘP", "Bạn đã nộp bài thành công trước đó. Hệ thống không cho phép thi lại lần thứ hai.", true);
+                    } else {
+                        alert("✅ BÀI THI ĐÃ NỘP: Bạn không thể thi lại lần 2!");
+                    }
                 }
                 return; // 🛑 Khóa cửa tuyệt đối
             }
@@ -6155,19 +6184,54 @@ window.start_online_exam = async function(ex) {
         }, { onConflict: 'exam_code,student_id' }).then(() => console.log('Đã báo danh thi!'));
     } catch(e) {}
 
-    // KHỞI ĐỘNG NHỊP TIM CHỐNG SẬP NGUỒN
+    // =========================================================================
+    // 💓 NHỊP TIM BẢO MẬT & TỰ ĐỘNG THU BÀI (Chạy mỗi 20 giây)
+    // =========================================================================
     if (window.realtime_exam_monitor) clearInterval(window.realtime_exam_monitor);
+    
     window.realtime_exam_monitor = setInterval(() => {
+        // KIỂM TRA 1: HẾT GIỜ ĐẾM NGƯỢC CÁ NHÂN (Ví dụ 10 phút)
+        if (typeof window.time_left !== 'undefined' && window.time_left <= 0) {
+            clearInterval(window.realtime_exam_monitor);
+            window.show_toast("⏳ ĐÃ HẾT GIỜ LÀM BÀI! Hệ thống đang tự động thu bài...", true);
+            if (typeof window.force_submit_exam === 'function') window.force_submit_exam();
+            return;
+        }
+
+        // KIỂM TRA 2: DEADLINE CỨNG TOÀN PHÒNG (Dựa theo giờ khóa của đề thi)
+        if (ex.endDate || ex.endTime) { 
+            let nowTime = new Date().getTime();
+            let hardDeadline = new Date(ex.endDate || ex.endTime).getTime();
+            
+            if (nowTime >= hardDeadline) {
+                clearInterval(window.realtime_exam_monitor);
+                window.show_toast("⏰ ĐÃ ĐẾN GIỜ ĐÓNG PHÒNG THI! Hệ thống tự động thu bài toàn bộ...", true);
+                if (typeof window.force_submit_exam === 'function') window.force_submit_exam();
+                return;
+            }
+        }
+
+        // KIỂM TRA 3: QUÉT LỆNH TỪ GIÁM THỊ (Công tắc ĐÓNG/MỞ và Án phạt)
         if (window.is_exam_started && window.proctoring_state && window.proctoring_state.is_active) {
             window.check_realtime_exam_status(ex.examCode, window.current_student_id).then(status => {
-                if (status === "KICK") {
+                if (status === "CLOSED_BY_ADMIN") {
                     clearInterval(window.realtime_exam_monitor);
-                    window.show_toast("⚠️ Đã hết Thời gian mở đề hoặc đề bị Khóa! Hệ thống tự động thu bài...", true);
-                    window.force_submit_exam();
+                    window.show_toast("🔒 GIÁM THỊ ĐÃ KHÓA PHÒNG THI! Bài làm sẽ tự động được thu...", true);
+                    if (typeof window.force_submit_exam === 'function') window.force_submit_exam();
+                } 
+                else if (status === "KICK_ABSENT") {
+                    clearInterval(window.realtime_exam_monitor);
+                    window.show_toast("🚫 BẠN ĐÃ BỊ ĐÌNH CHỈ THI! Hệ thống tự động thu bài...", true);
+                    if (typeof window.force_submit_exam === 'function') window.force_submit_exam();
+                }
+                else if (status === "KICK_LOCKED") {
+                    clearInterval(window.realtime_exam_monitor);
+                    window.show_toast("🔒 TÀI KHOẢN BỊ KHÓA DO VI PHẠM! Hệ thống tự động thu bài...", true);
+                    if (typeof window.force_submit_exam === 'function') window.force_submit_exam();
                 }
             });
         }
-    }, 60000); 
+    }, 20000); 
 
     let isResumed = false;
     if (typeof window.restore_exam_draft === 'function') {
@@ -6429,9 +6493,9 @@ window.show_online_exam_modal = async function(defaultTime) {
                         <div class="col-3 d-flex flex-column align-items-center">
                             <label class="dark-label text-center">Trạng thái</label>
                             <div class="d-flex align-items-center gap-2 mt-1">
-                                <input type="hidden" id="create_ex_status" value="MỞ">
+                                <input type="hidden" id="create_ex_status" value="ĐÓNG">
                                 <label class="ios-switch">
-                                    <input type="checkbox" checked onchange="document.getElementById('create_ex_status').value = this.checked ? 'MỞ' : 'ĐÓNG'">
+                                    <input type="checkbox" onchange="document.getElementById('create_ex_status').value = this.checked ? 'MỞ' : 'ĐÓNG'">
                                     <span class="ios-slider"></span>
                                 </label>
                             </div>
@@ -6729,7 +6793,7 @@ window.fetch_troubleshoot_data = async function(examCode, isSilent = false) {
 };
 
 // =========================================================================
-// 🎨 ADMIN: VẼ GIAO DIỆN DANH SÁCH (TÍCH HỢP THANH TIẾN TRÌNH & TÁCH TAB RÕ RÀNG)
+// 🎨 ADMIN: VẼ GIAO DIỆN DANH SÁCH (TÍCH HỢP QUY TRÌNH ĐIỂM DANH TRƯỚC THI)
 // =========================================================================
 window.render_troubleshoot_list = function(searchQuery) {
     let listContainer = document.getElementById('troubleshoot_student_list');
@@ -6738,28 +6802,34 @@ window.render_troubleshoot_list = function(searchQuery) {
     let q = searchQuery.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     let filterType = window.current_troubleshoot_filter || 'all';
 
-    // 🌟 1. MỞ RỘNG BỘ ĐẾM (Tách rõ "absent" và "offline")
-    let counts = { all: window.current_troubleshoot_users.length, online: 0, away: 0, offline: 0, absent: 0, submitted: 0, punished: 0 };
+    // 🌟 1. MỞ RỘNG BỘ ĐẾM (Tách rõ "not_started" và "absent")
+    let counts = { all: window.current_troubleshoot_users.length, not_started: 0, online: 0, away: 0, offline: 0, absent: 0, submitted: 0, punished: 0 };
 
     window.current_troubleshoot_users.forEach(u => {
         let isPunished = window.current_troubleshoot_punished.find(p => p.id === u.id);
-        let isSub = window.current_troubleshoot_submitted[u.id] !== undefined;
+        
+        let score = window.current_troubleshoot_submitted[u.id];
+        let isSub = score !== undefined;
+        let isMarkedAbsent = isSub && Number(score) === -1; // -1 là cờ đánh vắng (Ghost Submit)
+        let isActuallySub = isSub && Number(score) !== -1;  // Nộp bài thật sự
+        
         let isStarted = window.current_troubleshoot_started.includes(u.id);
         let sync = window.current_troubleshoot_sync[u.id] || { client_status: 'OFFLINE' };
 
         if (isPunished) counts.punished++;
-        else if (isSub) counts.submitted++;
+        else if (isMarkedAbsent) counts.absent++; // Bị thầy đánh vắng
+        else if (isActuallySub) counts.submitted++;
         else if (isStarted) {
             if (sync.client_status === 'ONLINE') counts.online++;
             else if (sync.client_status === 'AWAY') counts.away++;
-            else counts.offline++; // Đã thi nhưng rớt mạng/mất kết nối
+            else counts.offline++;
         } else {
-            counts.absent++; // Chưa từng vào thi -> Xếp vào Vắng
+            counts.not_started++; // Chưa kết nối, ngồi chờ điểm danh
         }
     });
 
-    // 🌟 2. CẬP NHẬT TÊN VÀ SỐ LƯỢNG TRÊN CÁC NÚT TAB (Bao gồm tab mới 'absent')
-    ['all', 'online', 'away', 'offline', 'absent', 'submitted', 'punished'].forEach(f => {
+    // 🌟 2. CẬP NHẬT TÊN VÀ SỐ LƯỢNG TRÊN CÁC NÚT TAB (Cập nhật mảng tab mới)
+    ['all', 'not_started', 'online', 'away', 'offline', 'absent', 'submitted', 'punished'].forEach(f => {
         let btn = document.getElementById('ts_filter_' + f);
         if (btn) {
             let label = btn.innerText.split('(')[0].trim();
@@ -6772,23 +6842,27 @@ window.render_troubleshoot_list = function(searchQuery) {
     window.current_troubleshoot_users.forEach(u => {
         let matchStr = (u.rawId + " " + u.name + " " + u.cls).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         let isPunished = window.current_troubleshoot_punished.find(p => p.id === u.id);
+        
         let score = window.current_troubleshoot_submitted[u.id];
-        let isSub = (score !== undefined);
+        let isSub = score !== undefined;
+        let isMarkedAbsent = isSub && Number(score) === -1;
+        let isActuallySub = isSub && Number(score) !== -1;
+
         let isStarted = window.current_troubleshoot_started.includes(u.id);
         let sync = window.current_troubleshoot_sync[u.id] || { client_status: 'OFFLINE', offenses: 0, away: 0, progress: 0 };
 
         let passFilter = true;
         if (filterType === 'punished' && !isPunished) passFilter = false;
-        if (filterType === 'submitted' && !isSub) passFilter = false;
+        if (filterType === 'submitted' && !isActuallySub) passFilter = false;
+        if (filterType === 'absent' && !isMarkedAbsent) passFilter = false; // Chỉ lấy những em bị đánh vắng
+        if (filterType === 'not_started' && (isPunished || isSub || isStarted)) passFilter = false; // Thuần túy Chưa thi
+        
         if (filterType === 'online' && (isPunished || isSub || !isStarted || sync.client_status !== 'ONLINE')) passFilter = false;
         if (filterType === 'away' && (isPunished || isSub || !isStarted || sync.client_status !== 'AWAY')) passFilter = false;
-        // Đã thi nhưng mất kết nối
         if (filterType === 'offline' && (isPunished || isSub || !isStarted || sync.client_status !== 'OFFLINE')) passFilter = false;
-        // Chưa từng thi
-        if (filterType === 'absent' && (isPunished || isSub || isStarted)) passFilter = false;
 
         if (passFilter && (q === "" || matchStr.includes(q))) {
-            filteredUsers.push({ ...u, isPunished, isSub, score, isStarted, sync });
+            filteredUsers.push({ ...u, isPunished, isSub, score, isStarted, sync, isMarkedAbsent, isActuallySub });
         }
     });
 
@@ -6796,7 +6870,7 @@ window.render_troubleshoot_list = function(searchQuery) {
     let html = '';
     let displayIndex = 1;
 
-    // 🌟 4. VẼ GIAO DIỆN (Tách biệt Hiển thị trạng thái rõ ràng hơn)
+    // 🌟 4. VẼ GIAO DIỆN (Thêm nút Đánh Vắng và Hủy Vắng)
     filteredUsers.forEach(u => {
         let statusBadge = '';
         let warningBadge = '';
@@ -6806,7 +6880,7 @@ window.render_troubleshoot_list = function(searchQuery) {
         let safeName = u.name.replace(/'/g, "\\'");
         let safeExamCode = window.current_troubleshoot_exam || '';
 
-        let hasStrangeBehavior = (u.sync.offenses > 0 || u.sync.client_status === 'AWAY') && !u.isSub && !u.isPunished;
+        let hasStrangeBehavior = (u.sync.offenses > 0 || u.sync.client_status === 'AWAY') && !u.isActuallySub && !u.isPunished && !u.isMarkedAbsent;
 
         if (hasStrangeBehavior) {
             warningBadge = `<span class="text-danger ms-2 animate__animated animate__flash animate__infinite animate__slower" style="font-size: 0.7rem; font-weight: bold;"><i class="bi bi-exclamation-triangle-fill"></i> Rời tab x${u.sync.offenses} (${u.sync.away}s)</span>`;
@@ -6814,10 +6888,10 @@ window.render_troubleshoot_list = function(searchQuery) {
             customStyle = `background: rgba(239, 68, 68, 0.08) !important; box-shadow: 0 0 12px rgba(239, 68, 68, 0.25); border: 1px solid #ef4444 !important; transition: 0.2s;`;
         }
 
-        let progressPct = u.isSub ? 100 : (u.sync.progress || 0);
+        let progressPct = u.isActuallySub ? 100 : (u.sync.progress || 0);
         let progressHtml = '';
         
-        if (u.isStarted && !u.isPunished) {
+        if (u.isStarted && !u.isPunished && !u.isMarkedAbsent) {
             let pColor = progressPct === 100 ? '#10b981' : (progressPct > 50 ? '#38bdf8' : '#f59e0b');
             progressHtml = `
             <div class="mt-2 d-flex align-items-center gap-2 w-100">
@@ -6828,14 +6902,25 @@ window.render_troubleshoot_list = function(searchQuery) {
             </div>`;
         }
 
+        let actionHtml = '';
+
+        // 🌟 LÔ-GIC GIAO DIỆN CHÍNH
         if (u.isPunished) {
             let label = u.isPunished.type === 'ban' ? 'Đình chỉ' : 'Khóa máy';
             statusBadge = `<span class="badge bg-danger ms-1" style="font-size: 0.65rem;">${label}</span>`;
             borderClass = 'border-danger';
-        } else if (u.isSub) {
-            // UI Nộp bài mới (Đã tinh chỉnh tương phản cao)
+        } else if (u.isMarkedAbsent) { // <--- THÊM MỚI: UI KHI BỊ ĐÁNH VẮNG
+            statusBadge = `<span class="badge bg-danger text-white ms-1 shadow-sm px-2" style="font-size: 0.75rem; border: 1px solid #b91c1c;">🚫 Bị Đánh Vắng</span>`;
+            borderClass = 'border-danger';
+            actionHtml = `<button class="btn btn-sm btn-outline-warning py-0 px-2 fw-bold border-warning" style="font-size: 0.7rem; height: 22px;" onclick="event.preventDefault(); window.delete_student_score('${safeExamCode}', '${u.id}', '${safeName}')" title="Hủy vắng (Cho phép vào thi)"><i class="bi bi-unlock-fill"></i> Hủy Vắng</button>`;
+        } else if (u.isActuallySub) { // <--- CẬP NHẬT: Chỉ hiện Đã Nộp khi điểm khác -1
             statusBadge = `<span class="badge bg-success text-white ms-1 shadow-sm px-2" style="font-size: 0.75rem; border: 1px solid #15803d;">✅ Đã nộp: <b class="text-warning" style="font-size: 0.85rem;">${u.score}</b> đ</span>`;
             borderClass = 'border-success';
+            actionHtml = `
+                <div class="d-flex gap-1">
+                    <button class="btn btn-sm btn-info py-0 px-2" style="font-size: 0.7rem; height: 22px;" onclick="event.preventDefault(); window.edit_student_score('${u.id}', '${u.rawId}', '${safeName}', ${u.score}, 0)"><i class="bi bi-pencil"></i></button>
+                    <button class="btn btn-sm btn-danger py-0 px-2" style="font-size: 0.7rem; height: 22px;" onclick="event.preventDefault(); window.delete_student_score('${safeExamCode}', '${u.id}', '${safeName}')" title="Xóa điểm"><i class="bi bi-trash"></i></button>
+                </div>`;
         } else if (u.isStarted) {
             if (u.sync.client_status === 'ONLINE') {
                 statusBadge = `<span class="badge bg-success ms-1" style="font-size: 0.65rem;">Đang thi</span>`;
@@ -6845,19 +6930,10 @@ window.render_troubleshoot_list = function(searchQuery) {
             } else {
                 statusBadge = `<span class="badge bg-secondary ms-1 border border-secondary" style="font-size: 0.65rem; opacity: 0.8;">Đứt mạng/Thoát</span>`;
             }
-        } else {
-            statusBadge = `<span class="badge bg-dark border border-secondary text-white-50 ms-1" style="font-size: 0.65rem;">Vắng (Chưa vào thi)</span>`;
-        }
-
-        let actionHtml = '';
-        if (u.isSub) {
-            actionHtml = `
-                <div class="d-flex gap-1">
-                    <button class="btn btn-sm btn-info py-0 px-2" style="font-size: 0.7rem; height: 22px;" onclick="event.preventDefault(); window.edit_student_score('${u.id}', '${u.rawId}', '${safeName}', ${u.score}, 0)"><i class="bi bi-pencil"></i></button>
-                    <button class="btn btn-sm btn-danger py-0 px-2" style="font-size: 0.7rem; height: 22px;" onclick="event.preventDefault(); window.delete_student_score('${safeExamCode}', '${u.id}', '${safeName}')" title="Xóa điểm"><i class="bi bi-trash"></i></button>
-                </div>`;
-        } else if (u.isStarted) {
             actionHtml = `<button class="btn btn-sm btn-outline-secondary py-0 px-2 text-white-50 border-secondary" style="font-size: 0.7rem; height: 22px;" onclick="event.preventDefault(); window.delete_student_score('${safeExamCode}', '${u.id}', '${safeName}')" title="Reset Trạng thái">Reset</button>`;
+        } else { // <--- THÊM MỚI: UI KHI CHƯA VÀO THI
+            statusBadge = `<span class="badge bg-dark border border-secondary text-white-50 ms-1" style="font-size: 0.65rem;">Chưa vào thi</span>`;
+            actionHtml = `<button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size: 0.7rem; height: 22px; background: rgba(239, 68, 68, 0.1);" onclick="event.preventDefault(); window.mark_student_absent('${safeExamCode}', '${u.id}', '${safeName}')" title="Khóa tài khoản không cho thi"><i class="bi bi-person-x-fill"></i> Đánh Vắng</button>`;
         }
 
         let displayStt = (filterType === 'all') ? u.stt : displayIndex++;
@@ -6957,14 +7033,14 @@ window.open_student_control_modal = function(examCode) {
             <!-- Thanh danh mục -->
             <div class="d-flex gap-1 pb-1 hide-scroll" style="overflow-x: auto; white-space: nowrap;">
                 <button id="ts_filter_all" class="btn text-white-50 flex-shrink-0 py-1 px-2 tab-filter-btn active" onclick="window.set_troubleshoot_filter('all')">Tất cả</button>
+                <button id="ts_filter_not_started" class="btn text-white-50 flex-shrink-0 py-1 px-2 tab-filter-btn" onclick="window.set_troubleshoot_filter('not_started')">⚪ Chưa thi</button>
                 <button id="ts_filter_online" class="btn text-white-50 flex-shrink-0 py-1 px-2 tab-filter-btn" onclick="window.set_troubleshoot_filter('online')">🟢 Đang thi</button>
                 <button id="ts_filter_away" class="btn text-white-50 flex-shrink-0 py-1 px-2 tab-filter-btn" onclick="window.set_troubleshoot_filter('away')">🟡 Rời Tab</button>
-                <button id="ts_filter_offline" class="btn text-white-50 flex-shrink-0 py-1 px-2 tab-filter-btn" onclick="window.set_troubleshoot_filter('offline')">⚪ Đã thoát</button>
-                <button id="ts_filter_absent" class="btn text-white-50 flex-shrink-0 py-1 px-2 tab-filter-btn" onclick="window.set_troubleshoot_filter('absent')">⚫ Vắng</button>
+                <button id="ts_filter_offline" class="btn text-white-50 flex-shrink-0 py-1 px-2 tab-filter-btn" onclick="window.set_troubleshoot_filter('offline')">⚫ Đứt mạng</button>
                 <button id="ts_filter_submitted" class="btn text-white-50 flex-shrink-0 py-1 px-2 tab-filter-btn" onclick="window.set_troubleshoot_filter('submitted')">🔵 Đã nộp</button>
+                <button id="ts_filter_absent" class="btn text-white-50 flex-shrink-0 py-1 px-2 tab-filter-btn" onclick="window.set_troubleshoot_filter('absent')">🚫 Vắng</button>
                 <button id="ts_filter_punished" class="btn text-white-50 flex-shrink-0 py-1 px-2 tab-filter-btn" onclick="window.set_troubleshoot_filter('punished')">🔴 Vi phạm</button>
                 
-                <!-- NÚT XUẤT ĐIỂM BÀI THI NÀY -->
                 <button class="btn btn-success fw-bold flex-shrink-0 py-1 px-3 ms-2 shadow-sm" onclick="window.export_single_exam_scores()" style="border-radius: 8px;">
                     <i class="bi bi-file-earmark-excel-fill me-1"></i> Xuất Điểm
                 </button>
@@ -7912,29 +7988,36 @@ window.render_exam_management = async function() {
                             </div>
                         </div>
 
-                        <!-- 🌟 THANH CÔNG CỤ (ACTION BAR): KHÔNG NỀN, TRÀN 100% -->
-                        <div class="p-0 border-top d-flex w-100 bg-transparent mt-auto" style="border-color: rgba(255,255,255,0.05) !important;">
-                            <!-- Nút Giám Sát -->
-                            <button class="btn py-2 fw-bold flex-grow-1 d-flex flex-column align-items-center justify-content-center text-info bg-transparent border-0 border-end border-secondary" style="border-radius: 0; border-color: rgba(255,255,255,0.05) !important;" onclick="window.open_student_control_modal('${ex.exam_code}')">
-                                <i class="bi bi-person-video3 fs-4 mb-1"></i> <span style="font-size: 0.65rem;">GIÁM SÁT</span>
+                        <!-- 🌟 THANH CÔNG CỤ: HIỆN ĐỦ 5 NÚT NGANG (ÉP KHÍT CHỐNG TRÀN) -->
+                        <div class="p-0 border-top d-flex flex-nowrap w-100 bg-transparent mt-auto" style="border-color: rgba(255,255,255,0.05) !important;">
+                            
+                            <!-- 1. NÚT ĐIỂM DANH -->
+                            <button class="btn py-2 px-0 fw-bold flex-grow-1 d-flex flex-column align-items-center justify-content-center text-primary bg-transparent border-0 border-end border-secondary" style="border-radius: 0; border-color: rgba(255,255,255,0.05) !important;" onclick="window.open_roll_call_modal('${ex.exam_code}')" title="Điểm danh">
+                                <i class="bi bi-clipboard-check fs-5 mb-1"></i> <span style="font-size: 0.55rem; white-space: nowrap;">ĐIỂM DANH</span>
                             </button>
                             
-                            <!-- 🌟 NÚT COPY (NHÂN BẢN) MỚI THÊM -->
-                            <button class="btn py-2 fw-bold flex-grow-1 d-flex flex-column align-items-center justify-content-center text-success bg-transparent border-0 border-end border-secondary" style="border-radius: 0; border-color: rgba(255,255,255,0.05) !important;" onclick="window.duplicate_exam('${ex.exam_code}')">
-                                <i class="bi bi-files fs-4 mb-1"></i> <span style="font-size: 0.65rem;">COPY</span>
+                            <!-- 2. Nút Giám Sát -->
+                            <button class="btn py-2 px-0 fw-bold flex-grow-1 d-flex flex-column align-items-center justify-content-center text-info bg-transparent border-0 border-end border-secondary" style="border-radius: 0; border-color: rgba(255,255,255,0.05) !important;" onclick="window.open_student_control_modal('${ex.exam_code}')" title="Giám sát phòng thi">
+                                <i class="bi bi-person-video3 fs-5 mb-1"></i> <span style="font-size: 0.55rem; white-space: nowrap;">GIÁM SÁT</span>
+                            </button>
+                            
+                            <!-- 3. Nút Copy -->
+                            <button class="btn py-2 px-0 fw-bold flex-grow-1 d-flex flex-column align-items-center justify-content-center text-success bg-transparent border-0 border-end border-secondary" style="border-radius: 0; border-color: rgba(255,255,255,0.05) !important;" onclick="window.duplicate_exam('${ex.exam_code}')" title="Nhân bản đề">
+                                <i class="bi bi-files fs-5 mb-1"></i> <span style="font-size: 0.55rem; white-space: nowrap;">COPY</span>
                             </button>
 
-                            <!-- Nút Sửa -->
-                            <button class="btn py-2 fw-bold flex-grow-1 d-flex flex-column align-items-center justify-content-center text-warning bg-transparent border-0 border-end border-secondary" style="border-radius: 0; border-color: rgba(255,255,255,0.05) !important;" onclick="window.open_edit_exam_modal('${safeExStr}')">
-                                <i class="bi bi-pencil-square fs-4 mb-1"></i> <span style="font-size: 0.65rem;">SỬA ĐỀ</span>
+                            <!-- 4. Nút Sửa Đề -->
+                            <button class="btn py-2 px-0 fw-bold flex-grow-1 d-flex flex-column align-items-center justify-content-center text-warning bg-transparent border-0 border-end border-secondary" style="border-radius: 0; border-color: rgba(255,255,255,0.05) !important;" onclick="window.open_edit_exam_modal('${safeExStr}')" title="Sửa đề thi">
+                                <i class="bi bi-pencil-square fs-5 mb-1"></i> <span style="font-size: 0.55rem; white-space: nowrap;">SỬA ĐỀ</span>
                             </button>
                             
-                            <!-- Nút Xóa -->
-                            <button class="btn py-2 fw-bold flex-grow-1 d-flex flex-column align-items-center justify-content-center text-danger bg-transparent border-0" style="border-radius: 0;" onclick="window.delete_online_exam('${ex.exam_code}', '${ex.exam_name}')">
-                                <i class="bi bi-trash3 fs-4 mb-1"></i> <span style="font-size: 0.65rem;">XÓA ĐỀ</span>
+                            <!-- 5. Nút Xóa -->
+                            <button class="btn py-2 px-0 fw-bold flex-grow-1 d-flex flex-column align-items-center justify-content-center text-danger bg-transparent border-0" style="border-radius: 0;" onclick="window.delete_online_exam('${ex.exam_code}', '${ex.exam_name}')" title="Xóa đề thi">
+                                <i class="bi bi-trash3 fs-5 mb-1"></i> <span style="font-size: 0.55rem; white-space: nowrap;">XÓA ĐỀ</span>
                             </button>
-                        </div>
-                    </div>
+                            
+                        </div> <!-- Đóng thanh công cụ -->
+                    </div> <!-- Đóng khung Card bên ngoài (CHỐNG LỖI NUỐT THẺ) -->
                 </div>`;
             });
         }
@@ -9265,3 +9348,219 @@ window.duplicate_exam = async function(oldExamCode) {
         }
     };
 };
+
+// =========================================================================
+// 🚫 ADMIN: ĐÁNH VẮNG SINH VIÊN (ĐỒNG BỘ KÉP: SCORE -1 & ABSENT_LIST)
+// =========================================================================
+window.mark_student_absent = function(examCode, studentId, studentName) {
+    let sId = String(studentId).toLowerCase();
+
+    let msgHtml = `
+        <div class="text-center">
+            <div class="p-3 my-3 rounded" style="background: rgba(239, 68, 68, 0.08); border: 1px dashed #ef4444;">
+                <div class="text-danger fw-bold fs-4 mb-1">${studentId.toUpperCase()}</div>
+                <div class="text-white fw-bold fs-5">${studentName}</div>
+            </div>
+            <p class="text-white-50 small mb-0">Hệ thống sẽ khóa tài khoản này và ghi vào danh sách vắng. Thầy có chắc chắn muốn <b>Đánh Vắng</b>?</p>
+        </div>
+    `;
+
+    const executeAbsent = async () => {
+        try {
+            const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+            
+            // BƯỚC 1: Xóa nháp cũ & Chèn cờ -1 chặn cửa (Bảo mật vật lý)
+            await clientDb.from('exam_results').delete().eq('exam_code', examCode).eq('student_id', sId);
+            const { error: err1 } = await clientDb.from('exam_results').insert([
+                { exam_code: examCode, student_id: sId, score: -1, is_submitted: true }
+            ]);
+            if (err1) throw err1;
+            
+            // BƯỚC 2: Cập nhật absent_list (Đồng bộ Báo cáo)
+            const { data: exData } = await clientDb.from('online_exams').select('absent_list').eq('exam_code', examCode).single();
+            if (exData) {
+                let currentList = exData.absent_list ? exData.absent_list.split(',').map(s => s.trim()).filter(Boolean) : [];
+                if (!currentList.includes(sId)) {
+                    currentList.push(sId);
+                    await clientDb.from('online_exams').update({ absent_list: currentList.join(',') }).eq('exam_code', examCode);
+                }
+            }
+            
+            if (typeof window.show_toast === 'function') window.show_toast(`✅ Đã khóa thành công: ${studentId.toUpperCase()}`);
+            if (typeof window.fetch_troubleshoot_data === 'function') window.fetch_troubleshoot_data(examCode, true);
+            
+        } catch (err) {
+            console.error("Lỗi đánh vắng:", err);
+            alert("Lỗi khi đánh vắng: " + err.message);
+        }
+    };
+
+    if (typeof window.show_alert === 'function') {
+        window.show_alert("⚠️ XÁC NHẬN ĐÁNH VẮNG", msgHtml, function(isConfirm) {
+            if (isConfirm) executeAbsent();
+        });
+    } else {
+        if (confirm(`ĐÁNH VẮNG: ${studentId.toUpperCase()} - ${studentName} ?`)) executeAbsent();
+    }
+};
+
+// =========================================================================
+// 📋 ADMIN: MODULE ĐIỂM DANH CHUYÊN NGHIỆP TRƯỚC GIỜ THI
+// =========================================================================
+window.open_roll_call_modal = async function(examCode) {
+    if (typeof window.show_toast === 'function') window.show_toast("<span class='spinner-border spinner-border-sm me-2'></span> Đang nạp danh sách lớp...");
+    
+    try {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        
+        // 1. Kéo thông tin đề thi để biết lớp nào được thi (đọc cột allowed_users)
+        const { data: exData, error: errEx } = await clientDb.from('online_exams').select('allowed_users, exam_name').eq('exam_code', examCode).single();
+        if (errEx) throw errEx;
+
+        let allowedStr = exData.allowed_users || '';
+        let classes = allowedStr.split(',').map(c => c.trim().toUpperCase()).filter(Boolean);
+
+        if (classes.length === 0) {
+            return alert("⚠️ Đề thi này chưa được phân công cho lớp nào!\nThầy vui lòng bấm 'SỬA ĐỀ', mục 'Giao cho lớp' để gán lớp trước khi điểm danh.");
+        }
+
+        // 2. Kéo danh sách toàn bộ sinh viên thuộc các lớp đó
+        const { data: students, error: errSt } = await clientDb.from('users').select('student_id, full_name, class_code').in('class_code', classes).neq('role', 'admin');
+        if (errSt) throw errSt;
+
+        // 3. Kéo danh sách những em ĐÃ BỊ ĐÁNH VẮNG TRƯỚC ĐÓ (điểm = -1)
+        const { data: results, error: errRes } = await clientDb.from('exam_results').select('student_id, score').eq('exam_code', examCode).eq('score', -1);
+        if (errRes) throw errRes;
+
+        let absentIds = results.map(r => String(r.student_id).toLowerCase());
+        
+        // 4. DỰNG GIAO DIỆN BẢNG ĐIỂM DANH
+        let modalId = 'roll_call_modal_' + examCode;
+        let existingModal = document.getElementById(modalId);
+        if (existingModal) existingModal.remove();
+
+        let listHtml = '';
+        // Sắp xếp danh sách theo Tên (A-Z) để dễ dò
+        students.sort((a, b) => {
+            let nameA = (a.full_name || "").trim().split(' ').pop().toLowerCase();
+            let nameB = (b.full_name || "").trim().split(' ').pop().toLowerCase();
+            return nameA.localeCompare(nameB);
+        }).forEach(st => {
+            let sId = String(st.student_id).toLowerCase();
+            let isAbsent = absentIds.includes(sId);
+            
+            // Giao diện Nút Bấm thay đổi theo trạng thái
+            let btnHtml = isAbsent 
+                ? `<button class="btn btn-sm btn-danger fw-bold shadow-sm" style="width: 105px;" onclick="window.toggle_roll_call_absent(this, '${examCode}', '${sId}')"><i class="bi bi-person-x-fill"></i> ĐÃ VẮNG</button>`
+                : `<button class="btn btn-sm btn-outline-danger fw-bold" style="width: 105px;" onclick="window.toggle_roll_call_absent(this, '${examCode}', '${sId}')">Đánh Vắng</button>`;
+                
+            let rowOpacity = isAbsent ? '0.4' : '1';
+            
+            listHtml += `
+            <div class="d-flex justify-content-between align-items-center p-2 mb-2 rounded rollcall-row" style="background: rgba(255,255,255,0.05); opacity: ${rowOpacity}; border: 1px solid rgba(255,255,255,0.1); transition: 0.2s;">
+                <div style="line-height: 1.2;">
+                    <div class="fw-bold text-white" style="font-size: 0.95rem;">${st.full_name}</div>
+                    <div style="font-size: 0.75rem;"><span class="text-info fw-bold">${st.student_id.toUpperCase()}</span> <span class="text-white-50 mx-1">|</span> <span class="text-warning">${st.class_code}</span></div>
+                </div>
+                <div>${btnHtml}</div>
+            </div>`;
+        });
+
+        if (students.length === 0) {
+            listHtml = `<div class="text-center p-4 text-white-50"><i class="bi bi-inbox fs-1"></i><br>Không có sinh viên nào trong danh sách lớp: ${classes.join(', ')}</div>`;
+        }
+
+        // 🌟 GIAO DIỆN ĐIỂM DANH FULL-SCREEN (ĐỒNG BỘ VỚI PHÒNG GIÁM SÁT)
+        let modalHtml = `
+        <div id="${modalId}" class="animate__animated animate__fadeInRight" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #0f172a; z-index: 9999; display: flex; flex-direction: column;">
+            
+            <!-- HEADER TOÀN MÀN HÌNH -->
+            <div class="p-3 border-bottom border-secondary d-flex justify-content-between align-items-center" style="background: #1e293b; box-shadow: 0 4px 12px rgba(0,0,0,0.5); z-index: 10;">
+                <div class="d-flex align-items-center gap-3">
+                    <!-- Nút Quay Lại -->
+                    <button type="button" class="btn btn-outline-secondary text-white border-0 p-1" onclick="document.getElementById('${modalId}').remove()">
+                        <i class="bi bi-chevron-left fs-3"></i>
+                    </button>
+                    <div>
+                        <h5 class="fw-bold text-primary mb-0"><i class="bi bi-clipboard-check me-2"></i>SỔ ĐIỂM DANH</h5>
+                        <div class="text-white-50 small mt-1">Đề thi: <span class="text-warning fw-bold">${exData.exam_name}</span></div>
+                    </div>
+                </div>
+                <!-- Nút Hoàn Tất -->
+                <button class="btn btn-success fw-bold px-4 shadow-sm" style="border-radius: 8px;" onclick="document.getElementById('${modalId}').remove()">
+                    <i class="bi bi-check-lg me-1"></i> XONG
+                </button>
+            </div>
+            
+            <!-- DANH SÁCH LỚP (CUỘN) -->
+            <div class="p-3 flex-grow-1" style="overflow-y: auto; background: #0f172a;">
+                <div class="container-fluid mx-auto p-0" style="max-width: 800px;"> 
+                    <!-- max-width: 800px giúp danh sách căn giữa trên màn hình máy tính cho đỡ bị bè ngang quá mức, trên điện thoại vẫn full 100% -->
+                    ${listHtml}
+                </div>
+            </div>
+
+        </div>`;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+    } catch (err) {
+        console.error(err);
+        alert("Lỗi tải danh sách điểm danh: " + err.message);
+    }
+};
+
+// =========================================================================
+// 🔄 XỬ LÝ 1 CHẠM: ĐÁNH VẮNG / HỦY VẮNG NGAY TRONG BẢNG (ĐỒNG BỘ KÉP)
+// =========================================================================
+window.toggle_roll_call_absent = async function(btn, examCode, sId) {
+    let isCurrentlyAbsent = btn.classList.contains('btn-danger');
+    let originalHtml = btn.innerHTML;
+    let row = btn.closest('.rollcall-row');
+    
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+
+    try {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        
+        // 1. Luôn xóa rác cũ ở bảng điểm (né lỗi 400)
+        await clientDb.from('exam_results').delete().eq('exam_code', examCode).eq('student_id', sId);
+        
+        // 2. Kéo danh sách vắng hiện tại về để xử lý
+        const { data: exData } = await clientDb.from('online_exams').select('absent_list').eq('exam_code', examCode).single();
+        let currentList = (exData && exData.absent_list) ? exData.absent_list.split(',').map(s => s.trim()).filter(Boolean) : [];
+
+        if (!isCurrentlyAbsent) {
+            // LỆNH ĐÁNH VẮNG
+            const { error } = await clientDb.from('exam_results').insert([{ exam_code: examCode, student_id: sId, score: -1, is_submitted: true }]);
+            if (error) throw error;
+            
+            // Thêm vào absent_list
+            if (!currentList.includes(sId)) {
+                currentList.push(sId);
+                await clientDb.from('online_exams').update({ absent_list: currentList.join(',') }).eq('exam_code', examCode);
+            }
+            
+            btn.className = 'btn btn-sm btn-danger fw-bold shadow-sm';
+            btn.innerHTML = '<i class="bi bi-person-x-fill"></i> ĐÃ VẮNG';
+            row.style.opacity = '0.4';
+        } else {
+            // LỆNH HỦY VẮNG
+            // Bỏ khỏi absent_list
+            currentList = currentList.filter(id => id !== sId);
+            await clientDb.from('online_exams').update({ absent_list: currentList.join(',') }).eq('exam_code', examCode);
+            
+            btn.className = 'btn btn-sm btn-outline-danger fw-bold';
+            btn.innerHTML = 'Đánh Vắng';
+            row.style.opacity = '1';
+        }
+    } catch (err) {
+        console.error(err);
+        alert("Lỗi kết nối: " + err.message);
+        btn.innerHTML = originalHtml;
+    } finally {
+        btn.disabled = false;
+    }
+};
+
