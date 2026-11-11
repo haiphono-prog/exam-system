@@ -6205,19 +6205,22 @@ window.start_online_exam = async function(ex) {
     if (!qs || qs.length === 0) return window.show_toast("❌ Đề thi này chưa có câu hỏi nào!", true);
 
     // 🌟 CHỐT CHẶN 1: XIN QUYỀN CẢM BIẾN iOS NGAY LÚC BẤM "THI NGAY"
-    // Nếu sinh viên bấm "Cancel" -> Hiện bảng báo lỗi và ÉP ĐĂNG XUẤT KHI BẤM "ĐÃ HIỂU"
     let isMobileDevice = /iPhone|iPad|iPod|Android|Mobi/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     if (isMobileDevice && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        let t0 = Date.now();
         try {
             const permState = await DeviceOrientationEvent.requestPermission();
+            let elapsedMs = Date.now() - t0;
             window._iosSensorPermState = permState;
+
             if (permState !== 'granted') {
-                window.show_cancel_sensor_signout_modal();
-                return; // ⛔ DỪNG NGAY LẬP TỨC, KHÔNG TẢI ĐỀ THI!
+                // Nếu phản hồi < 150ms: Bảng Allow KHÔNG HỀ HIỆN RA do Safari vẫn nhớ lệnh Cancel của Tab cũ
+                let isCachedDeny = (elapsedMs < 150);
+                window.show_cancel_sensor_signout_modal(isCachedDeny);
+                return; // ⛔ DỪNG NGAY LẬP TỨC, KHÔNG MỞ ĐỀ THI!
             }
         } catch (e) {
-            // Trường hợp Safari khóa hàm do đã từng bấm Cancel trước đó -> Cũng ép đăng xuất luôn!
-            window.show_cancel_sensor_signout_modal();
+            window.show_cancel_sensor_signout_modal(true);
             return;
         }
     }
@@ -10264,39 +10267,83 @@ window.addEventListener('beforeunload', function(e) {
     }
 });
 
+
 // =========================================================================
-// 🚪 HÀM HIỂN THỊ BẢNG CẢNH BÁO & TỰ ĐỘNG SIGN OUT KHI BẤM "CANCEL" CẢM BIẾN
+// 🚪 HÀM XỬ LÝ KHI TỪ CHỐI CẢM BIẾN (CHỐNG VÒNG LẶP KHÓA QUYỀN CỦA SAFARI iOS)
 // =========================================================================
-window.show_cancel_sensor_signout_modal = function() {
+window.show_cancel_sensor_signout_modal = function(isCachedDeny = false) {
     let modalId = "sensor_cancel_signout_modal";
     let oldModal = document.getElementById(modalId);
     if (oldModal) oldModal.remove();
+
+    let isInApp = /Zalo|FBAN|FBAV|Messenger|Instagram/i.test(navigator.userAgent);
+
+    // Nội dung hướng dẫn tùy theo việc vừa bấm Cancel hay bị iOS lưu nhớ từ lần trước
+    let guideHtml = '';
+    if (!isCachedDeny) {
+        guideHtml = `
+            <p class="text-white-50 small mb-3" style="line-height:1.6;">
+                Bạn vừa bấm <b class="text-danger">Cancel (Từ chối)</b> quyền truy cập cảm biến góc nghiêng nên hệ thống không mở đề thi.<br><br>
+                Hệ thống sẽ <b>Đăng xuất và mở Tab mới</b> để làm mới quyền bảo mật. Khi vào lại, vui lòng chọn <b class="text-warning">"Allow" (Cho phép)</b>!
+            </p>
+            <button type="button" class="btn btn-danger w-100 fw-bold py-3 text-white shadow" style="border-radius:12px; font-size:0.95rem;" onclick="window.force_signout_after_sensor_cancel()">
+                <i class="bi bi-box-arrow-right me-1"></i> ĐÃ HIỂU & ĐĂNG XUẤT NGAY
+            </button>
+        `;
+    } else {
+        // Trường hợp đăng nhập lại nhưng vẫn trên Tab cũ nên iOS tự chặn ngầm không hiện câu hỏi Allow
+        let stepFix = isInApp
+            ? `1. Bấm dấu <b>"X" (Đóng)</b> ở góc trên cùng để thoát hẳn cửa sổ Zalo hiện tại.<br>2. Bấm lại vào đường link đề thi từ tin nhắn Zalo để mở phiên mới.<br>3. Khi bảng hỏi hiện ra, hãy chọn <b class="text-warning">"Allow" (Cho phép)</b>.`
+            : `1. Trên Safari, bấm vào biểu tượng <b>"aA"</b> (hoặc biểu tượng cài đặt cạnh thanh địa chỉ web) $\\rightarrow$ Chọn <b>Cài đặt cho trang web (Website Settings)</b> và bật quyền <b>Chuyển động & Hướng</b>.<br>2. Hoặc <b>Đóng hẳn Tab web này đi</b>, mở một <b>Tab mới (+)</b> và dán lại link thi để iPhone hỏi lại chữ <b class="text-warning">"Allow"</b>!`;
+
+        guideHtml = `
+            <div class="alert alert-warning text-start small py-2 px-3 mb-3" style="font-size:0.8rem; line-height:1.5; background:rgba(245, 158, 11, 0.15); color:#fde68a; border:1px solid #f59e0b; border-radius:12px;">
+                <div class="fw-bold text-warning mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i> Trình duyệt trên iPhone đã khóa hộp thoại "Allow" ở Tab này do lần trước bạn bấm Cancel!</div>
+                ${stepFix}
+            </div>
+            <button type="button" class="btn btn-info w-100 fw-bold py-3 text-dark shadow mb-2" style="border-radius:12px; font-size:0.9rem;" onclick="window.open_fresh_tab_for_ios_sensor()">
+                <i class="bi bi-plus-square-fill me-1"></i> MỞ SANG TAB MỚI ĐỂ HIỆN LẠI "ALLOW"
+            </button>
+            <button type="button" class="btn btn-outline-light w-100 py-2 small" style="border-radius:12px; font-size:0.8rem;" onclick="document.getElementById('sensor_cancel_signout_modal').remove()">
+                Đóng thông báo này (Giữ nguyên đăng nhập)
+            </button>
+        `;
+    }
 
     let modal = document.createElement('div');
     modal.id = modalId;
     modal.style.cssText = "position:fixed; inset:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.98); color:#fff; z-index:9999999; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px; user-select:none;";
     modal.innerHTML = `
-        <div class="animate__animated animate__zoomIn" style="background:#1e293b; border:2px solid #ef4444; border-radius:20px; padding:28px 20px; max-width:390px; width:100%; box-shadow:0 20px 50px rgba(239, 68, 68, 0.4);">
-            <i class="bi bi-shield-x text-danger" style="font-size:4rem;"></i>
-            <h5 class="fw-bold text-white mt-2 mb-2 text-uppercase">TỪ CHỐI CẢM BIẾN PHÒNG THI!</h5>
-            <p class="text-white-50 small mb-4" style="line-height:1.6;">
-                Bạn vừa bấm <b class="text-danger">Cancel (Từ chối)</b> quyền truy cập cảm biến góc nghiêng nên hệ thống không cho phép vào phòng thi.<br><br>
-                Hệ thống sẽ <b>tự động Đăng xuất</b> để làm mới phiên bảo mật. Khi đăng nhập lại, vui lòng chọn <b class="text-warning">"Allow" (Cho phép)</b>!
-            </p>
-            <button type="button" class="btn btn-danger w-100 fw-bold py-3 text-white shadow" style="border-radius:12px; font-size:0.95rem;" onclick="window.force_signout_after_sensor_cancel()">
-                <i class="bi bi-box-arrow-right me-1"></i> ĐÃ HIỂU & ĐĂNG XUẤT NGAY
-            </button>
+        <div class="animate__animated animate__zoomIn" style="background:#1e293b; border:2px solid #ef4444; border-radius:20px; padding:26px 20px; max-width:410px; width:100%; box-shadow:0 20px 50px rgba(239, 68, 68, 0.4);">
+            <i class="bi bi-shield-x text-danger" style="font-size:3.6rem;"></i>
+            <h5 class="fw-bold text-white mt-2 mb-2 text-uppercase">CHƯA BẬT CẢM BIẾN PHÒNG THI!</h5>
+            ${guideHtml}
         </div>
     `;
     document.body.appendChild(modal);
 };
 
-// Hàm thực thi Đăng xuất (Sign Out) + Tải lại trang sạch sẽ
+// Hàm thử nhảy sang Tab mới tinh (_blank) để Safari xóa bộ nhớ đệm "Cancel" của Tab cũ
+window.open_fresh_tab_for_ios_sensor = function() {
+    let cleanUrl = window.location.origin + window.location.pathname + '?reset_sensor=' + Date.now();
+    let newWin = window.open(cleanUrl, '_blank');
+    if (!newWin) {
+        // Nếu trình duyệt chặn mở tab tự động -> Copy sẵn link cho sinh viên mở tab mới
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(window.location.href).catch(() => {});
+        }
+        alert("Vui lòng bấm nút đóng Tab hiện tại, mở một Tab mới (+) trên trình duyệt và truy cập lại trang thi để iPhone hiện lại câu hỏi Allow!");
+    } else {
+        let modal = document.getElementById("sensor_cancel_signout_modal");
+        if (modal) modal.remove();
+    }
+};
+
+// Hàm thực thi Đăng xuất (Sign Out) + Mở sang Tab mới khi vừa bấm Cancel lần đầu
 window.force_signout_after_sensor_cancel = function() {
     window.remove_hardware_sensor_lock();
     window._iosSensorPermState = null;
 
-    // 1. Xóa các biến phiên đăng nhập hiện tại của sinh viên (Giữ nguyên các cờ chống nộp lại bài)
     window.current_student_id = null;
     window.current_student_name = null;
     window.current_student_class = null;
@@ -10307,15 +10354,26 @@ window.force_signout_after_sensor_cancel = function() {
     localStorage.removeItem('student_login_info');
     sessionStorage.clear();
 
-    // 2. Nếu hệ thống có hàm logout sẵn thì gọi kèm, sau đó ép reload lại trang để Safari reset hộp thoại Allow
     try {
         if (typeof window.logout_student === 'function') window.logout_student();
         else if (typeof window.handle_logout === 'function') window.handle_logout();
         else if (typeof window.sign_out === 'function') window.sign_out();
     } catch (e) {}
 
-    // 3. Tải lại trang mới hoàn toàn để iOS cho phép hiện lại bảng "Allow" ở lần đăng nhập kế tiếp
-    window.location.reload();
+    // Thử mở sang Tab mới hoàn toàn (Vì chỉ khi sang Tab mới thì Safari iOS mới chịu hỏi lại hộp thoại Allow!)
+    let freshUrl = window.location.origin + window.location.pathname + '?fresh_login=' + Date.now();
+    let newTab = window.open(freshUrl, '_blank');
+    if (newTab) {
+        // Làm trắng tab cũ đã bị nhiễm trạng thái Cancel để sinh viên dùng tab mới vừa bật lên
+        document.body.innerHTML = `
+            <div style="background:#0f172a; color:#fff; height:100vh; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px; font-family:sans-serif;">
+                <h4 style="color:#38bdf8;">Đã chuyển sang Tab mới!</h4>
+                <p style="color:#94a3b8; font-size:0.9rem;">Vui lòng đóng Tab cũ này lại và đăng nhập ở Tab vừa mới mở để chọn <b>Allow</b>.</p>
+            </div>
+        `;
+    } else {
+        window.location.href = freshUrl;
+    }
 };
 
 // =========================================================================
