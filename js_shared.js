@@ -743,6 +743,10 @@ window.process_preload_queue = async function() {
 };
 
 window.back_to_subject_select = function() {
+    // 0. GỠ KHÓA CẢM BIẾN GÓC NGHIÊNG & WATERMARK KHI THOÁT RA MENU
+    if (typeof window.remove_hardware_sensor_lock === 'function') window.remove_hardware_sensor_lock();
+    if (typeof window.remove_exam_watermark === 'function') window.remove_exam_watermark();
+
     // 1. TẮT CHẾ ĐỘ GIÁM SÁT TRƯỚC TIÊN (để không bị báo lỗi vi phạm khi thoát toàn màn hình)
     if (window.proctoring_state) window.proctoring_state.is_active = false;
 
@@ -1974,9 +1978,18 @@ window.show_mode_modal = function(callback, lessonName = "") {
 };
 
 // =========================================================================
-// 🔄 HÀM CHUYỂN ĐỔI CHẾ ĐỘ THÔNG MINH (BẢN VÁ LỖI XUNG ĐỘT DOM)
+// 🔄 HÀM CHUYỂN ĐỔI CHẾ ĐỘ THÔNG MINH (ĐÃ KHÓA BẢO MẬT CHỐNG HACK)
 // =========================================================================
 window.toggle_view_mode = function() {
+    // 🛑 CHỐT CHẶN TỬ HUYỆT: Tuyệt đối không cho phép đổi chế độ khi đang thi thật!
+    if (window.is_study_mode === false) {
+        if (typeof window.play_sound === 'function') window.play_sound('error');
+        if (typeof window.show_toast === 'function') {
+            window.show_toast("⚠️ BÁO ĐỘNG: Hành vi đổi chế độ trong lúc thi đã bị chặn!", true);
+        }
+        return; // Thoát hàm ngay lập tức, không cho code chạy tiếp
+    }
+
     let isStoryLesson = false;
     let lessonName = "";
     
@@ -1992,11 +2005,7 @@ window.toggle_view_mode = function() {
     // Mảng xoay vòng chế độ
     let modes = isStoryLesson ? ['story', 'quiz', 'flashcard', 'game', 'survival', 'phanxa'] : ['quiz', 'flashcard', 'game', 'survival', 'phanxa'];
     
-    // 🌟 CHÌA KHÓA GIẢI QUYẾT LỖI KẸT NÚT BẤM: 
-    // Dùng biến bộ nhớ hệ thống (active_mode) thay vì quét giao diện DOM
     let currentMode = window.active_mode || 'quiz'; 
-    
-    // Phòng hờ nếu rớt vào khoảng không xác định
     if (!modes.includes(currentMode)) {
         currentMode = modes[0];
     }
@@ -2007,7 +2016,7 @@ window.toggle_view_mode = function() {
     
     // Chuyển đổi an toàn
     if (window.current_subject && window.selected_lessons_text) {
-         window.active_mode = targetMode; // 🌟 Đóng dấu trạng thái mới ngay lập tức
+         window.active_mode = targetMode; 
          
          let originalModal = window.show_mode_modal;
          window.show_mode_modal = function(callback) { callback(targetMode); };
@@ -2015,18 +2024,6 @@ window.toggle_view_mode = function() {
          window.show_mode_modal = originalModal; 
     } else {
          window.show_alert("Lỗi", "Không thể chuyển đổi, vui lòng quay lại menu chính!");
-    }
-};
-
-window.toggle_q_card = function(idx) {
-    let body = document.getElementById('q_body_' + idx);
-    let icon = document.getElementById('q_icon_' + idx);
-    if (body.style.display === 'none') {
-        body.style.display = 'block';
-        icon.className = 'bi bi-chevron-up text-info fs-5';
-    } else {
-        body.style.display = 'none';
-        icon.className = 'bi bi-chevron-down text-white-50 fs-5';
     }
 };
 
@@ -3890,12 +3887,12 @@ window.remove_class = function(classCode) {
 };
 
 // =========================================================================
-// 🚀 TỔNG HỢP VÀ XUẤT ĐIỂM EXCEL (TỐI ƯU HÓA UX CHO MOBILE & ZALO)
+// 🚀 XUẤT BẢNG ĐIỂM ĐÀO TẠO: TỰ ĐỘNG XẾP KT1 -> KT5 THEO THỨ TỰ THỜI GIAN
+// Cũ nhất = KT1, tiếp theo = KT2... & Ghi chú chi tiết (Ngày giờ thi, Số phút)
 // =========================================================================
 window.export_class_scores_excel = async function(classCode) {
-    window.show_toast("<span class='spinner-border spinner-border-sm me-2'></span> Đang tổng hợp điểm...", false);
+    window.show_toast("<span class='spinner-border spinner-border-sm me-2'></span> Đang tổng hợp điểm theo thứ tự thời gian thi...", false);
     
-    // 💡 Tự động nhận diện thiết bị Mobile và Trình duyệt Zalo/Messenger
     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     const isInAppBrowser = /FBAN|FBAV|Zalo|Messenger|Instagram/i.test(navigator.userAgent);
 
@@ -3903,122 +3900,243 @@ window.export_class_scores_excel = async function(classCode) {
         window.show_toast("⚠️ CẢNH BÁO: Zalo/Messenger có thể chặn tải file. Hãy bấm nút (⋮) góc phải và chọn 'Mở bằng Trình duyệt' (Chrome/Safari) để xuất điểm!", true);
     }
 
+    // Hàm phụ định dạng ngày giờ đẹp: DD/MM/YYYY HH:mm
+    const formatExamDate = (rawDate) => {
+        if (!rawDate) return "Không rõ ngày";
+        let d = new Date(rawDate);
+        if (isNaN(d.getTime())) return String(rawDate);
+        let dd = String(d.getDate()).padStart(2, '0');
+        let mm = String(d.getMonth() + 1).padStart(2, '0');
+        let yyyy = d.getFullYear();
+        let hh = String(d.getHours()).padStart(2, '0');
+        let min = String(d.getMinutes()).padStart(2, '0');
+        return `${dd}/${mm}/${yyyy} ${hh}:${min}`;
+    };
+
     try {
         const clientDb = typeof db !== 'undefined' ? db : window._supabase;
 
-        // 1. Lấy Sinh viên
+        // 1. Lấy danh sách Sinh viên của lớp
         const { data: students, error: errUsers } = await clientDb.from('users').select('*').eq('class_code', classCode);
         if (errUsers) throw errUsers;
         if (!students || students.length === 0) return window.show_toast("⚠️ Lớp này chưa có sinh viên!", true);
 
-        // 2. Lấy Điểm thi (Xóa khoảng trắng ở ID để màng lọc chính xác 100%)
-        const studentIds = students.map(s => String(s.student_id).trim());
-        const { data: examResults, error: errResults } = await clientDb.from('exam_results').select('exam_code, student_id, score').in('student_id', studentIds);
+        const studentIdsRaw = students.map(s => String(s.student_id).trim());
+        const studentIdsLower = studentIdsRaw.map(id => id.toLowerCase());
+        const studentIdsUpper = studentIdsRaw.map(id => id.toUpperCase());
+        const allPossibleIds = [...new Set([...studentIdsRaw, ...studentIdsLower, ...studentIdsUpper])];
+
+        // 2. Lấy toàn bộ kết quả thi của sinh viên trong lớp
+        const { data: examResults, error: errResults } = await clientDb
+            .from('exam_results')
+            .select('exam_code, student_id, score, is_submitted, client_status, submitted_at')
+            .in('student_id', allPossibleIds);
         if (errResults) throw errResults;
 
-        // Báo nhẹ nếu lớp chưa ai có điểm
-        if (!examResults || examResults.length === 0) {
-            window.show_toast("⚠️ Lớp chưa có điểm thi, hệ thống sẽ xuất form rỗng.", true);
-        }
+        // 3. Tìm thời điểm nộp bài sớm nhất của từng mã đề (dùng làm mốc thời gian dự phòng nếu đề bị xóa hoặc không có auto_open)
+        let earliestSubmitMap = {};
+        (examResults || []).forEach(r => {
+            if (r.exam_code && r.submitted_at) {
+                let t = new Date(r.submitted_at).getTime();
+                if (!isNaN(t)) {
+                    if (!earliestSubmitMap[r.exam_code] || t < earliestSubmitMap[r.exam_code]) {
+                        earliestSubmitMap[r.exam_code] = t;
+                    }
+                }
+            }
+        });
 
-        // 3. Phân tích Tên đề thi
-        const examCodes = [...new Set((examResults || []).map(r => r.exam_code))];
-        let examTypeMap = {}; 
-        
+        // 4. Lấy thông tin các Đề thi từ bảng online_exams
+        const examCodes = [...new Set((examResults || []).map(r => r.exam_code).filter(Boolean))];
+        let orderedExams = [];
+
         if (examCodes.length > 0) {
-            const { data: exams, error: errExams } = await clientDb.from('online_exams').select('exam_code, exam_name').in('exam_code', examCodes);
+            const { data: exams, error: errExams } = await clientDb
+                .from('online_exams')
+                .select('*')
+                .in('exam_code', examCodes);
             
             if (!errExams && exams) {
-                exams.forEach(ex => {
-                    let nameStr = (ex.exam_name || "").toUpperCase();
-                    let loai = 'K1'; 
-                    
-                    if (nameStr.includes('THI') || nameStr.includes('CUỐI KỲ') || nameStr.includes('CUOI KY')) loai = 'THI';
-                    else if (nameStr.includes('K5') || nameStr.includes('KT5') || nameStr.includes('THỰC HÀNH') || nameStr.includes('THUC HANH')) loai = 'K5';
-                    else if (nameStr.includes('K4') || nameStr.includes('KT4')) loai = 'K4';
-                    else if (nameStr.includes('K3') || nameStr.includes('KT3')) loai = 'K3';
-                    else if (nameStr.includes('K2') || nameStr.includes('KT2')) loai = 'K2';
-                    else if (nameStr.includes('K1') || nameStr.includes('KT1')) loai = 'K1';
-                    else if (nameStr.includes('CC') || nameStr.includes('CHUYÊN CẦN') || nameStr.includes('CHUYEN CAN')) loai = 'C';
-                    
-                    examTypeMap[ex.exam_code] = loai;
-                });
+                orderedExams = exams;
             }
         }
 
-        // Tách Tên, Sắp xếp ABC
+        // Bổ sung những mã đề có điểm trong exam_results nhưng đã bị xóa khỏi bảng online_exams
+        examCodes.forEach(code => {
+            if (!orderedExams.find(e => e.exam_code === code)) {
+                orderedExams.push({
+                    exam_code: code,
+                    exam_name: code,
+                    created_at: earliestSubmitMap[code] ? new Date(earliestSubmitMap[code]).toISOString() : null
+                });
+            }
+        });
+
+        // 🌟 SẮP XẾP CÁC KỲ THI THEO THỨ TỰ THỜI GIAN: CŨ NHẤT Đứng Đầu (KT1) -> MỚI NHẤT Đứng Sau
+        const getExamTimestamp = (ex) => {
+            let rawTime = ex.auto_open || ex.autoOpen || ex.created_at || ex.createdAt || earliestSubmitMap[ex.exam_code] || 0;
+            let ms = new Date(rawTime).getTime();
+            return isNaN(ms) ? 0 : ms;
+        };
+        orderedExams.sort((a, b) => getExamTimestamp(a) - getExamTimestamp(b));
+
+        // 5. Gán thứ tự cột điểm: Cũ nhất là KT1 -> KT2 -> KT3 -> KT4 -> KT5 -> QTHT
+        let examInfoMap = {};
+        const chronoSlots = ['K1', 'K2', 'K3', 'K4', 'K5', 'THI'];
+        let slotLabels = { 'C': 'CC', 'K1': 'KT1', 'K2': 'KT2', 'K3': 'KT3', 'K4': 'KT4', 'K5': 'KT5', 'THI': 'QTHT' };
+        let ktIndex = 0;
+
+        orderedExams.forEach((ex, idx) => {
+            let nameStr = String(ex.exam_name || ex.examName || ex.exam_code || "").trim();
+            let upperName = nameStr.toUpperCase();
+
+            // Lấy thời gian thi và số phút làm bài
+            let rawExamDate = ex.auto_open || ex.autoOpen || ex.created_at || ex.createdAt || (earliestSubmitMap[ex.exam_code] ? new Date(earliestSubmitMap[ex.exam_code]).toISOString() : null);
+            let dateFormatted = formatExamDate(rawExamDate);
+            let durationMins = ex.time_limit || ex.timeLimit || ex.duration || null;
+            let durationText = durationMins ? `${durationMins} phút` : "Không giới hạn";
+
+            // Nếu tên đề ghi rõ Chuyên cần (CC) thì vào cột CC, còn lại xếp lần lượt KT1 -> KT2 -> KT3... theo thời gian
+            let assignedSlot = 'K1';
+            let displayLabel = `KT${idx + 1}`;
+
+            if (upperName.includes('CHUYÊN CẦN') || upperName.includes('CHUYEN CAN') || /^CC\b/.test(upperName)) {
+                assignedSlot = 'C';
+                displayLabel = 'CC';
+            } else {
+                assignedSlot = chronoSlots[ktIndex] || 'THI'; // Nếu quá 6 lần thi thì dồn vào cột cuối
+                displayLabel = slotLabels[assignedSlot] || `KT${ktIndex + 1}`;
+                ktIndex++;
+            }
+
+            examInfoMap[ex.exam_code] = {
+                code: ex.exam_code,
+                name: nameStr,
+                assignedSlot: assignedSlot,
+                displayLabel: displayLabel, // VD: "KT1", "KT2"...
+                dateStr: dateFormatted,
+                durationStr: durationText,
+                // Chuỗi mô tả chuẩn cho cột Ghi chú: "KT1: 15/10/2026 08:00 (45 phút - Tên đề)"
+                metaNote: `${displayLabel}: ${dateFormatted}, ${durationText} (${nameStr})`
+            };
+        });
+
+        // Sắp xếp danh sách sinh viên A-Z theo Tên
         students.sort((a, b) => {
             let nameA = (a.full_name || "").trim().split(' ').pop().toLowerCase();
             let nameB = (b.full_name || "").trim().split(' ').pop().toLowerCase();
-            if (nameA < nameB) return -1;
-            if (nameA > nameB) return 1;
-            return 0; 
+            return nameA.localeCompare(nameB, 'vi');
         });
 
-        // 4. Ghép điểm
-        let exportData = students.map((u, index) => {
+        // 6. Tạo dữ liệu cho SHEET 1 (Biểu mẫu Đào tạo) & SHEET 2 (Chi tiết toàn bộ các lần thi)
+        let sheet1Data = [];
+        let sheet2Data = [];
+
+        students.forEach((u, index) => {
             let parts = (u.full_name || "").trim().split(' ');
             let ten = parts.length > 0 ? parts.pop() : "";
             let ho = parts.join(' ');
+            let stdIdClean = String(u.student_id).trim();
 
-            // Lọc và ép kiểu điểm
-            let myScores = (examResults || []).filter(r => String(r.student_id).trim() === String(u.student_id).trim());
-            let scoreCols = { 'C': '', 'K1': '', 'K2': '', 'K3': '', 'K4': '', 'K5': '', 'THI': '' };
+            let myScores = (examResults || []).filter(r => String(r.student_id).trim().toLowerCase() === stdIdClean.toLowerCase());
             
-            myScores.forEach(r => {
-                let loai = examTypeMap[r.exam_code] || 'K1'; 
-                if (scoreCols[loai] !== undefined) {
-                    let numScore = parseFloat(r.score) || 0;
-                    if (scoreCols[loai] === '' || numScore > parseFloat(scoreCols[loai])) {
-                        scoreCols[loai] = numScore;
+            let scoreCols = { 'C': '', 'K1': '', 'K2': '', 'K3': '', 'K4': '', 'K5': '', 'THI': '' };
+            let noteDetails = [];
+            let validScoresList = [];
+
+            let rowSheet2 = {
+                "STT": index + 1,
+                "Mã sinh viên": stdIdClean,
+                "Họ và Tên": u.full_name || "",
+                "Lớp": classCode
+            };
+
+            orderedExams.forEach((ex) => {
+                let info = examInfoMap[ex.exam_code];
+                let colTitle = `${info.displayLabel} - ${info.name} (${info.dateStr}, ${info.durationStr})`;
+                let rec = myScores.find(r => r.exam_code === ex.exam_code);
+
+                if (rec && (rec.is_submitted || rec.score !== null)) {
+                    let numScore = parseFloat(rec.score);
+                    // Lấy giờ nộp bài thực tế của sinh viên (nếu muốn hiển thị giờ thi chính xác của từng em)
+                    let studentExamTime = rec.submitted_at ? formatExamDate(rec.submitted_at) : info.dateStr;
+
+                    if (!isNaN(numScore) && numScore >= 0) {
+                        validScoresList.push(numScore);
+                        scoreCols[info.assignedSlot] = numScore;
+
+                        let isForced = (rec.client_status && String(rec.client_status).includes('Đã thu bài'));
+                        let statusExtra = isForced ? ', Thu bài' : '';
+
+                        // Ghi chú theo đúng cấu trúc thầy yêu cầu: (KT1: thời gian thi, số phút...)
+                        noteDetails.push(`${info.displayLabel}: ${studentExamTime}, ${info.durationStr}${statusExtra}`);
+                        rowSheet2[colTitle] = numScore;
+                    } else if (numScore === -1) {
+                        noteDetails.push(`${info.displayLabel}: Vắng thi (${info.dateStr})`);
+                        rowSheet2[colTitle] = "Vắng (-1)";
                     }
+                } else {
+                    rowSheet2[colTitle] = "";
                 }
             });
 
-            // TRẢ VỀ ĐÚNG TÊN CỘT THEO ẢNH FORM MẪU
-            return {
+            // Nếu sinh viên chưa thi bài nào nhưng lớp đã có đề thi -> Ghi thông tin đề chung vào Ghi chú hoặc để trống
+            let finalNoteStr = noteDetails.length > 0 ? `(${noteDetails.join(" | ")})` : "";
+
+            rowSheet2["Số lần đã thi"] = validScoresList.length;
+            rowSheet2["Điểm TB các lần"] = validScoresList.length > 0 
+                ? parseFloat((validScoresList.reduce((a, b) => a + b, 0) / validScoresList.length).toFixed(2)) 
+                : "";
+            rowSheet2["Ghi chú thời gian thi"] = finalNoteStr;
+
+            sheet2Data.push(rowSheet2);
+
+            // Đẩy vào Sheet 1 (Chuẩn 17 cột Đào tạo)
+            sheet1Data.push({
                 "STT": index + 1,
-                "Mã sinh viên": String(u.student_id).trim(),
+                "Mã sinh viên": stdIdClean,
                 "Họ": ho,
                 "Tên": ten,
                 "Ngày sinh": u.ngay_sinh || "",
                 "Khóa học": u.khoa_hoc || "",
                 "Ngành học": u.nganh_hoc || "",
                 "Thời điểm đăng ký": u.thoi_diem_dang_ky || "",
-                "Lần học": 1,
-                "Điểm CC": scoreCols['C'],       // Sửa thành Điểm CC
-                "Điểm KT1": scoreCols['K1'],     // Sửa thành Điểm KT1
-                "Điểm KT2": scoreCols['K2'],     // Sửa thành Điểm KT2
-                "Điểm KT3": scoreCols['K3'],     // Sửa thành Điểm KT3
-                "Điểm KT4": scoreCols['K4'],     // Sửa thành Điểm KT4
-                "Điểm KT5": scoreCols['K5'],     // Sửa thành Điểm KT5
-                "Điểm QTHT": scoreCols['THI'],   // Sửa thành Điểm QTHT
-                "Ghi chú": ""
-            };
+                "Lần học": validScoresList.length > 0 ? validScoresList.length : 1,
+                "Điểm CC": scoreCols['C'],
+                "Điểm KT1": scoreCols['K1'],
+                "Điểm KT2": scoreCols['K2'],
+                "Điểm KT3": scoreCols['K3'],
+                "Điểm KT4": scoreCols['K4'],
+                "Điểm KT5": scoreCols['K5'],
+                "Điểm QTHT": scoreCols['THI'],
+                "Ghi chú": finalNoteStr
+            });
         });
 
-        // BỘ LỌC KÝ TỰ CẤM (Lớp tên 1/2)
         let safeClassCode = classCode.replace(/[\/\\?%*:|"<>]/g, '-');
-        let safeSheetName = ("Diem_" + safeClassCode).substring(0, 31);
-
-        // Xuất file
-        const ws = XLSX.utils.json_to_sheet(exportData);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, safeSheetName);
-        
-        ws['!cols'] = [
-            { wch: 5 }, { wch: 15 }, { wch: 25 }, { wch: 10 }, 
-            { wch: 12 }, { wch: 15 }, { wch: 20 }, { wch: 20 }, { wch: 8 }
+
+        // Trang 1: Biểu mẫu chuẩn Đào tạo
+        const ws1 = XLSX.utils.json_to_sheet(sheet1Data);
+        ws1['!cols'] = [
+            { wch: 5 }, { wch: 15 }, { wch: 22 }, { wch: 10 }, 
+            { wch: 12 }, { wch: 12 }, { wch: 18 }, { wch: 18 }, { wch: 8 },
+            { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 9 }, { wch: 10 },
+            { wch: 55 } // Cột Ghi chú rộng rãi để hiển thị rõ (KT1: ngày giờ, số phút...)
         ];
+        XLSX.utils.book_append_sheet(wb, ws1, ("Diem_" + safeClassCode).substring(0, 31));
 
-        // Lệnh ghi file của SheetJS
-        XLSX.writeFile(wb, `Bang_Diem_${safeClassCode}.xlsx`);
+        // Trang 2: Bảng tổng hợp toàn bộ các lần thi (kèm tên đề và thời lượng trên tiêu đề cột)
+        const ws2 = XLSX.utils.json_to_sheet(sheet2Data);
+        ws2['!cols'] = [{ wch: 5 }, { wch: 15 }, { wch: 25 }, { wch: 12 }];
+        XLSX.utils.book_append_sheet(wb, ws2, "ToanBo_CacLanThi");
 
-        // 🌟 Nâng cấp UX: Báo cáo kết quả tải tùy theo loại thiết bị
+        XLSX.writeFile(wb, `Bang_Diem_Tong_Hop_${safeClassCode}.xlsx`);
+
         if (isMobile && !isInAppBrowser) {
-            window.show_toast(`✅ Tải thành công! Vui lòng kiểm tra thư mục <b>"Tải xuống" (Downloads)</b> hoặc ứng dụng <b>"Tệp" (Files)</b> trên điện thoại của bạn.`, false);
+            window.show_toast(`✅ Đã xuất ${orderedExams.length} lần thi (KT1 -> KT${orderedExams.length})!`, false);
         } else if (!isInAppBrowser) {
-            window.show_toast("✅ Xuất bảng điểm Excel thành công!");
+            window.show_toast(`✅ Xuất thành công ${orderedExams.length} lần thi theo đúng thứ tự thời gian (KT1 -> KT${orderedExams.length})!`);
         }
 
     } catch (err) {
@@ -4433,22 +4551,28 @@ window.handle_perm_change = function(el) {
     }
 };
 // =========================================================================
-// ⏱️ HÀM CƯỠNG CHẾ THU BÀI (BẢN VÁ LỖI CHỐNG KẸT NÚT VÀ SPAM)
+// ⏱️ HÀM CƯỠNG CHẾ THU BÀI (HIỂN THỊ RÕ LÝ DO CHO SINH VIÊN)
 // =========================================================================
-window.force_submit_exam = function() {
-    // 🌟 KHÓA SPAM: Nếu đang trong quá trình nộp bài rồi thì không gọi lại nữa
+window.force_submit_exam = function(reasonMsg) {
     if (window.is_force_submitting) return;
     window.is_force_submitting = true;
 
+    // 🌟 GỠ KHÓA CẢM BIẾN & WATERMARK NGAY KHI THU BÀI
+    if (typeof window.remove_hardware_sensor_lock === 'function') window.remove_hardware_sensor_lock();
+    if (typeof window.remove_exam_watermark === 'function') window.remove_exam_watermark();
+
     if (window.timer_interval) clearInterval(window.timer_interval);
-    if (window.realtime_exam_monitor) clearInterval(window.realtime_exam_monitor); // Tắt luôn radar
+    if (window.realtime_exam_monitor) clearInterval(window.realtime_exam_monitor);
     
     let confirmModal = document.getElementById('custom_confirm');
     if (confirmModal) confirmModal.style.display = 'none';
 
     if (typeof window.clear_exam_draft === 'function') window.clear_exam_draft();
 
-    window.show_toast("⏳ Hết giờ! Hệ thống đang tự động thu bài...", true);
+    // Lưu lý do thu bài để có thể hiển thị trên bảng kết quả
+    let finalMsg = reasonMsg || "⏳ ĐÃ HẾT GIỜ LÀM BÀI! Hệ thống đang tự động thu bài...";
+    window.last_submit_reason = finalMsg;
+    window.show_toast(finalMsg, true);
     
     if (document.fullscreenElement || document.webkitFullscreenElement) {
         if (document.exitFullscreen) document.exitFullscreen().catch(e => {});
@@ -4458,53 +4582,83 @@ window.force_submit_exam = function() {
     setTimeout(() => {
         if (typeof calculate_and_show_result === 'function') calculate_and_show_result();
         
-        // Mở khóa sau 10 giây đề phòng lỗi kẹt mạng
-        setTimeout(() => { window.is_force_submitting = false; }, 10000);
-    }, 1000);
+        // Chèn thêm dòng thông báo lý do thu bài vào bảng thông báo nộp bài thành công
+        setTimeout(() => {
+            let resOverlay = document.getElementById('glass_result_overlay');
+            if (resOverlay && window.last_submit_reason) {
+                let pEl = resOverlay.querySelector('p');
+                if (pEl) {
+                    pEl.innerHTML = `<span class="badge bg-danger text-wrap mb-2 p-2" style="font-size: 0.85rem;">${window.last_submit_reason}</span><br>` + pEl.innerHTML;
+                }
+            }
+            window.is_force_submitting = false; 
+            window.last_submit_reason = null;
+        }, 300);
+    }, 800);
 };
 
 // =========================================================================
-// ⏱️ HÀM ĐẾM NGƯỢC (BẢN VÁ LỖI CHỐNG HACK NGỦ ĐÔNG MÁY)
+// ⏱️ HÀM ĐẾM NGƯỢC (ĐỒNG BỘ GIỜ ĐÓNG PHÒNG + CẢNH BÁO 5 PHÚT)
 // =========================================================================
 window.start_countdown = function() {
     if (window.timer_interval) clearInterval(window.timer_interval);
+    window.warned_5_mins = false; // Cờ kiểm soát thông báo 5 phút
 
-    let giay_cho_moi_cau = 60; 
-    let tong_thoi_gian = 0;
-    
-    if (typeof window.current_story_data !== 'undefined' && window.current_story_data && window.current_story_data.length > 0) {
-        tong_thoi_gian = window.current_story_data.length * giay_cho_moi_cau;
-    } else if (typeof questions !== 'undefined' && questions && questions.length > 0) {
-        questions.forEach(q => {
-            if (q && q.type && (q.type.trim() === 'clip_listen' || q.type.includes('clip'))) {
-                tong_thoi_gian += 600; 
-            } else {
-                tong_thoi_gian += giay_cho_moi_cau; 
-            }
-        });
+    if (window.is_study_mode !== false && !window.is_resumed_exam) {
+        let giay_cho_moi_cau = 60; 
+        let tong_thoi_gian = 0;
+        
+        if (typeof window.current_story_data !== 'undefined' && window.current_story_data && window.current_story_data.length > 0) {
+            tong_thoi_gian = window.current_story_data.length * giay_cho_moi_cau;
+        } else if (typeof questions !== 'undefined' && questions && questions.length > 0) {
+            questions.forEach(q => {
+                if (q && q.type && (q.type.trim() === 'clip_listen' || q.type.includes('clip'))) {
+                    tong_thoi_gian += 600; 
+                } else {
+                    tong_thoi_gian += giay_cho_moi_cau; 
+                }
+            });
+        }
+        window.time_left = (tong_thoi_gian > 0) ? tong_thoi_gian : 2700;
     }
 
-    if (!window.is_resumed_exam) {
-        window.time_left = (tong_thoi_gian > 0) ? tong_thoi_gian : 2700;
+    // 🌟 NẾU PHÒNG THI CÓ CÀI GIỜ ĐÓNG CỬA (auto_close) SỚM HƠN THỜI GIAN LÀM BÀI -> ÉP THEO GIỜ ĐÓNG CỬA
+    let personalDeadline = Date.now() + (window.time_left * 1000);
+    if (window.is_study_mode === false && window.current_exam_hard_deadline) {
+        window.exam_deadline_time = Math.min(personalDeadline, window.current_exam_hard_deadline);
+        window.time_left = Math.ceil((window.exam_deadline_time - Date.now()) / 1000);
+    } else {
+        window.exam_deadline_time = personalDeadline;
     }
 
     if (window.time_left <= 0) {
         let prog_el = document.getElementById('prog_text');
         if (prog_el) { prog_el.innerText = "00:00"; prog_el.style.color = "#ef4444"; }
-        window.force_submit_exam();
+        window.force_submit_exam("⏰ Đã hết thời gian quy định của phòng thi! Hệ thống tự động thu bài.");
         return;
     }
 
-    // 🌟 CHỐT DEADLINE THỰC TẾ DỰA VÀO ĐỒNG HỒ QUỐC TẾ (Bỏ qua việc máy ngủ đông)
-    window.exam_deadline_time = Date.now() + (window.time_left * 1000);
-
     window.timer_interval = setInterval(() => {
-        // 🌟 TÍNH SỐ GIÂY BẰNG CÁCH TRỪ THỜI GIAN THỰC
         let now = Date.now();
+        
+        // Liên tục đối chiếu với giờ đóng cửa phòng thi (phòng trường hợp Admin đổi giờ đóng cửa lúc đang thi)
+        if (window.is_study_mode === false && window.current_exam_hard_deadline) {
+            if (window.current_exam_hard_deadline < window.exam_deadline_time) {
+                window.exam_deadline_time = window.current_exam_hard_deadline;
+            }
+        }
+
         window.time_left = Math.ceil((window.exam_deadline_time - now) / 1000);
 
-        if (window.time_left % 5 === 0) {
+        if (window.time_left % 5 === 0 && window.time_left > 0) {
             if (typeof window.auto_save_exam_draft === 'function') window.auto_save_exam_draft();
+        }
+
+        // 🔔 CẢNH BÁO KHI CÒN ĐÚNG 5 PHÚT (300 GIÂY)
+        if (window.time_left <= 300 && window.time_left > 295 && !window.warned_5_mins) {
+            window.warned_5_mins = true;
+            if (typeof window.play_sound === 'function') window.play_sound('error');
+            window.show_toast("⚠️ CHÚ Ý: Chỉ còn 5 PHÚT làm bài! Các em kiểm tra lại các câu đã chọn nhé!", true);
         }
 
         let safe_time = Math.max(0, window.time_left);
@@ -4514,15 +4668,20 @@ window.start_countdown = function() {
         const prog_el = document.getElementById('prog_text');
         if(prog_el) {
             prog_el.innerText = timeStr;
-            if (safe_time <= 30) prog_el.style.color = (s % 2 === 0) ? "#ef4444" : "#b91c1c";
+            if (safe_time <= 300) prog_el.style.color = (s % 2 === 0) ? "#ef4444" : "#f59e0b"; // Nhấp nháy cam-đỏ khi dưới 5 phút
             else prog_el.style.color = "#ff4d4d"; 
         }
 
+        // Bóp cò thu bài ngay lập tức khi về 0
         if (window.time_left <= 0) { 
-            window.force_submit_exam();
+            let isRoomClose = (window.is_study_mode === false && window.current_exam_hard_deadline && now >= window.current_exam_hard_deadline);
+            let msg = isRoomClose 
+                ? "⏰ ĐÃ ĐẾN GIỜ ĐÓNG PHÒNG THI! Hệ thống tự động thu bài..." 
+                : "⏳ ĐÃ HẾT GIỜ LÀM BÀI! Hệ thống tự động thu bài...";
+            window.force_submit_exam(msg);
         }
     }, 1000);
-}
+};
 
 // =========================================================================
 // 🕒 HÀM RENDER TIMELINE (HỢP NHẤT: LỌC 10 NGÀY + BẮT IP/QUỐC GIA)
@@ -6036,25 +6195,40 @@ window.start_online_exam = async function(ex) {
     if (!qs || qs.length === 0) return window.show_toast("❌ Đề thi này chưa có câu hỏi nào!", true);
 
     // =========================================================================
-    // 🛡️ TRẠM KIỂM SOÁT VÉ: CHẶN CỬA NẾU BỊ KHÓA / ĐÌNH CHỈ / ĐÃ NỘP
+    // 🛡️ TRẠM KIỂM SOÁT VÉ: ĐỒNG BỘ QUYỀN RESET CỦA ADMIN TỪ SUPABASE
     // =========================================================================
+    window._temp_cloud_draft = null;
+    let subKeyLocal = 'submitted_' + ex.examCode + '_' + window.current_student_id;
+    let vaultKeyLocal = 'offline_vault_' + ex.examCode + '_' + window.current_student_id;
+
     try {
         const clientDb = typeof db !== 'undefined' ? db : window._supabase;
         const { data: checkData, error: checkErr } = await clientDb.from('exam_results')
-            .select('is_locked, is_absent, is_submitted')
+            .select('*')
             .eq('exam_code', ex.examCode)
-            .eq('student_id', window.current_student_id)
-            .single();
+            .ilike('student_id', String(window.current_student_id || '').trim())
+            .maybeSingle();
 
-        // 🌟 KIỂM TRA CHẶN NHANH CỤC BỘ TRƯỚC TIÊN
-        if (localStorage.getItem('submitted_' + ex.examCode + '_' + window.current_student_id) === 'true') {
-            localStorage.removeItem('exam_draft_' + ex.examCode);
-            window.show_alert("ĐÃ NỘP BÀI", "Bạn đã hoàn thành và nộp bài thi này rồi. Không thể vào thi lại!", false);
-            return;
+        if (checkErr) throw checkErr; // Nếu đứt mạng -> Nhảy xuống catch để dùng khóa LocalStorage
+
+        // 🌟 TRƯỜNG HỢP ADMIN ĐÃ XÓA ĐIỂM (RESET) HOẶC MỞ LẠI CHO THI LẠI:
+        // Trên Supabase không còn dòng kết quả (checkData === null) hoặc is_submitted === false
+        // VÀ máy sinh viên không có bài đang chờ nộp bù (offline_vault)
+        if ((!checkData || checkData.is_submitted !== true) && !localStorage.getItem(vaultKeyLocal)) {
+            if (localStorage.getItem(subKeyLocal) === 'true') {
+                // Admin đã xóa bài trên Server -> Xóa luôn khóa cục bộ & nháp cũ để thi lại đề mới!
+                localStorage.removeItem(subKeyLocal);
+                localStorage.removeItem('exam_draft_' + ex.examCode);
+                localStorage.removeItem('exam_draft_' + window.current_student_id + '_' + ex.examCode);
+            }
+        }
+
+        if (checkData && checkData.draft_data && checkData.is_submitted !== true) {
+            window._temp_cloud_draft = checkData.draft_data;
         }
 
         if (checkData) {
-            // 🌟 CHỐT CHẶN: ĐÃ NỘP BÀI THI -> XÓA SẠCH DRAFT VÀ KHÓA CỬA
+            // 🌟 CHỐT CHẶN: TRÊN SERVER VẪN ĐANG GHI NHẬN ĐÃ NỘP BÀI -> KHÓA CỬA
             if (checkData.is_submitted === true) {
                 localStorage.removeItem('exam_draft_' + ex.examCode);
                 localStorage.removeItem('exam_draft_' + window.current_student_id + '_' + ex.examCode);
@@ -6119,7 +6293,11 @@ window.start_online_exam = async function(ex) {
             }
         }
     } catch (e) {
-        // Sinh viên mới tinh, chưa báo danh lần nào -> Bỏ qua cho đi tiếp
+        // Nếu mất mạng không hỏi được Supabase, mới dùng chốt chặn LocalStorage để chống thi lại
+        if (localStorage.getItem(subKeyLocal) === 'true') {
+            window.show_alert("ĐÃ NỘP BÀI", "Bạn đã hoàn thành và nộp bài thi này rồi. Không thể vào thi lại!", false);
+            return;
+        }
     }
     // =========================================================================
 
@@ -6172,27 +6350,65 @@ window.start_online_exam = async function(ex) {
     let qHeader = document.querySelector('.sticky-quiz-header') || document.querySelector('#step_3 .header-fixed-wrapper');
     if(qHeader) qHeader.style.display = '';
 
-    // KHÓA KỸ NĂNG VÀ CHẾ ĐỘ RẢNH TAY
-    let skill5050 = document.querySelector('button[onclick="window.use_skill_5050()"]');
-    let skillTime = document.querySelector('button[onclick="window.use_skill_time()"]');
+    // =========================================================
+    // 🛡️ KHÓA KỸ NĂNG VÀ CHẾ ĐỘ RẢNH TAY (BỌC THÉP !IMPORTANT)
+    // =========================================================
+    let skill5050 = document.querySelector('button[onclick*="use_skill_5050"]');
+    let skillTime = document.querySelector('button[onclick*="use_skill_time"]');
     let invBadge = document.getElementById('mini_inventory_badge');
     let modeToggle = document.getElementById('mode_text');
 
-    if(skill5050) skill5050.style.display = 'none';
-    if(skillTime) skillTime.style.display = 'none';
-    if(invBadge) invBadge.style.display = 'none';
-    if(modeToggle && modeToggle.parentElement) modeToggle.parentElement.style.display = 'none';
+    // Dùng setProperty('display', 'none', 'important') để chống mọi CSS khác làm hiện lại
+    if(skill5050) skill5050.style.setProperty('display', 'none', 'important');
+    if(skillTime) skillTime.style.setProperty('display', 'none', 'important');
+    if(invBadge) invBadge.style.setProperty('display', 'none', 'important');
+    
+    // Khóa cẩn thận cả nút cha chứa chữ "Làm Quiz / Lật thẻ"
+    let modeBtn = modeToggle ? modeToggle.closest('button') : null;
+    if(modeBtn) modeBtn.style.setProperty('display', 'none', 'important');
 
     let examStyle = document.getElementById('exam_mode_style');
     if(!examStyle) {
         examStyle = document.createElement('style');
         examStyle.id = 'exam_mode_style';
         document.head.appendChild(examStyle);
+// --- Nhịp tim phòng thi (Đã đồng bộ mã lệnh chi tiết & cập nhật giờ đóng phòng) ---
+window.check_realtime_exam_status = async function(examCode, studentId) {
+    if (!examCode) return "OK";
+    try {
+        const { data: ex, error } = await db.from(window.SUPA_TABLES.online_exams)
+            .select('status, auto_close').eq('exam_code', examCode).maybeSingle();
+        if (error) throw error;
+        if (!ex) return "OK"; // lỗi mạng thì KHÔNG đuổi học sinh
+        
+        // 🌟 Đồng bộ lại giờ đóng phòng mới nhất (nếu Giám thị vừa gia hạn hoặc rút ngắn giờ)
+        if (ex.auto_close) {
+            window.current_exam_hard_deadline = new Date(ex.auto_close).getTime();
+        }
+
+        let st = String(ex.status || '').toUpperCase();
+        if (st.indexOf('MỞ') === -1) return "CLOSED_BY_ADMIN";
+        if (ex.auto_close && new Date(ex.auto_close) <= new Date()) return "ROOM_TIME_UP";
+        
+        if (studentId) {
+            const { data: rs } = await db.from(window.SUPA_TABLES.exam_results)
+                .select('is_absent, is_locked').eq('exam_code', examCode).ilike('student_id', studentId).maybeSingle();
+            if (rs && rs.is_absent) return "KICK_ABSENT";
+            if (rs && rs.is_locked) return "KICK_LOCKED";
+        }
+        return "OK";
+    } catch (err) {
+        console.warn('[SUPABASE] Nhịp tim phòng thi lỗi: ' + err.message);
+        return "OK"; // mất mạng tạm thời thì để học sinh làm tiếp, không thu bài oan
     }
+};
+    }
+    // Tiêm thẳng CSS ép chết các nút cứu sai, bóng đèn giải thích và nút đổi chế độ
     examStyle.innerHTML = `
         div[id^="revive_btn_"], div[id^="revive_audio_btn_"] { display: none !important; }
         span[id^="bulb_icon_"] { display: none !important; }
         .text-warning[onclick*="hint_box"] { display: none !important; }
+        #mode_text, button[onclick*="toggle_view_mode"] { display: none !important; pointer-events: none !important; }
     `;
 
     let quizArea = document.getElementById('quiz_area');
@@ -6227,61 +6443,109 @@ window.start_online_exam = async function(ex) {
     } catch(e) {}
 
     // =========================================================================
-    // 💓 NHỊP TIM BẢO MẬT & TỰ ĐỘNG THU BÀI (Chạy mỗi 20 giây)
+    // 💓 NHỊP TIM BẢO MẬT & TỰ ĐỘNG THU BÀI (Quét nhạy mỗi 7 giây)
     // =========================================================================
+    // Ghi nhận giờ đóng phòng ngay khi bắt đầu thi (hỗ trợ mọi tên biến auto_close / endDate / endTime)
+    let rawCloseTime = ex.auto_close || ex.autoClose || ex.endDate || ex.endTime || null;
+    window.current_exam_hard_deadline = rawCloseTime ? new Date(rawCloseTime).getTime() : null;
+
     if (window.realtime_exam_monitor) clearInterval(window.realtime_exam_monitor);
     
     window.realtime_exam_monitor = setInterval(() => {
-        // KIỂM TRA 1: HẾT GIỜ ĐẾM NGƯỢC CÁ NHÂN (Ví dụ 10 phút)
+        // KIỂM TRA 1: ĐỒNG HỒ ĐẾM NGƯỢC VỀ 0
         if (typeof window.time_left !== 'undefined' && window.time_left <= 0) {
             clearInterval(window.realtime_exam_monitor);
-            window.show_toast("⏳ ĐÃ HẾT GIỜ LÀM BÀI! Hệ thống đang tự động thu bài...", true);
-            if (typeof window.force_submit_exam === 'function') window.force_submit_exam();
+            if (typeof window.force_submit_exam === 'function') {
+                window.force_submit_exam("⏳ ĐÃ HẾT GIỜ LÀM BÀI! Hệ thống tự động thu bài.");
+            }
             return;
         }
 
-        // KIỂM TRA 2: DEADLINE CỨNG TOÀN PHÒNG (Dựa theo giờ khóa của đề thi)
-        if (ex.endDate || ex.endTime) { 
-            let nowTime = new Date().getTime();
-            let hardDeadline = new Date(ex.endDate || ex.endTime).getTime();
-            
-            if (nowTime >= hardDeadline) {
-                clearInterval(window.realtime_exam_monitor);
-                window.show_toast("⏰ ĐÃ ĐẾN GIỜ ĐÓNG PHÒNG THI! Hệ thống tự động thu bài toàn bộ...", true);
-                if (typeof window.force_submit_exam === 'function') window.force_submit_exam();
-                return;
+        // KIỂM TRA 2: ĐẾN GIỜ ĐÓNG CỬA PHÒNG THI (auto_close)
+        if (window.current_exam_hard_deadline && Date.now() >= window.current_exam_hard_deadline) {
+            clearInterval(window.realtime_exam_monitor);
+            if (typeof window.force_submit_exam === 'function') {
+                window.force_submit_exam("⏰ ĐÃ ĐẾN GIỜ ĐÓNG PHÒNG THI! Hệ thống tự động thu bài.");
             }
+            return;
         }
 
-        // KIỂM TRA 3: QUÉT LỆNH TỪ GIÁM THỊ (Công tắc ĐÓNG/MỞ và Án phạt)
+        // KIỂM TRA 3: QUÉT LỆNH TỪ GIÁM THỊ TRÊN SUPABASE
         if (window.is_exam_started && window.proctoring_state && window.proctoring_state.is_active) {
             window.check_realtime_exam_status(ex.examCode, window.current_student_id).then(status => {
-                if (status === "CLOSED_BY_ADMIN") {
+                if (status === "CLOSED_BY_ADMIN" || status === "KICK") {
                     clearInterval(window.realtime_exam_monitor);
-                    window.show_toast("🔒 GIÁM THỊ ĐÃ KHÓA PHÒNG THI! Bài làm sẽ tự động được thu...", true);
-                    if (typeof window.force_submit_exam === 'function') window.force_submit_exam();
+                    if (typeof window.force_submit_exam === 'function') {
+                        window.force_submit_exam("🔒 GIÁM THỊ ĐÃ KHÓA PHÒNG THI! Bài làm được tự động thu.");
+                    }
                 } 
+                else if (status === "ROOM_TIME_UP") {
+                    clearInterval(window.realtime_exam_monitor);
+                    if (typeof window.force_submit_exam === 'function') {
+                        window.force_submit_exam("⏰ ĐÃ HẾT GIỜ MỞ PHÒNG THI! Bài làm được tự động thu.");
+                    }
+                }
                 else if (status === "KICK_ABSENT") {
                     clearInterval(window.realtime_exam_monitor);
-                    window.show_toast("🚫 BẠN ĐÃ BỊ ĐÌNH CHỈ THI! Hệ thống tự động thu bài...", true);
-                    if (typeof window.force_submit_exam === 'function') window.force_submit_exam();
+                    if (typeof window.force_submit_exam === 'function') {
+                        window.force_submit_exam("🚫 BẠN ĐÃ BỊ ĐÌNH CHỈ THI! Hệ thống tự động thu bài.");
+                    }
                 }
                 else if (status === "KICK_LOCKED") {
                     clearInterval(window.realtime_exam_monitor);
-                    window.show_toast("🔒 TÀI KHOẢN BỊ KHÓA DO VI PHẠM! Hệ thống tự động thu bài...", true);
-                    if (typeof window.force_submit_exam === 'function') window.force_submit_exam();
+                    if (typeof window.force_submit_exam === 'function') {
+                        window.force_submit_exam("🔒 TÀI KHOẢN BỊ TẠM KHÓA! Hệ thống tự động thu bài.");
+                    }
                 }
             });
         }
-    }, 20000); 
+    }, 7000); // Quét 7 giây/lần để phản hồi gần như tức thì khi Giám thị gạt nút Đóng phòng 
+
+    // 🌟 Cảnh báo sớm nếu sinh viên đang mở trong trình duyệt phụ của Zalo / Messenger
+    if (/Zalo|FBAN|FBAV|Messenger/i.test(navigator.userAgent)) {
+        window.show_toast("💡 Hệ thống đã bật Lưu nháp Đám mây bảo vệ bài thi của bạn trên Zalo!", false);
+    }
 
     let isResumed = false;
     if (typeof window.restore_exam_draft === 'function') {
-        isResumed = window.restore_exam_draft(ex.examCode);
+        isResumed = window.restore_exam_draft(ex.examCode, window._temp_cloud_draft);
     }
 
     if (!isResumed) {
-        window.time_left = ex.timeLimit * 60;
+        let fullDurationMs = ex.timeLimit * 60 * 1000;
+        let firstStartKey = `first_start_${ex.examCode}_${window.current_student_id}`;
+        let savedFirstStart = localStorage.getItem(firstStartKey);
+
+        // 1. Ưu tiên tính từ Giờ mở phòng chung của lớp (auto_open) nếu có cài đặt
+        let rawOpenTime = ex.auto_open || ex.autoOpen || ex.startDate || ex.startTime || null;
+        let classOpenMs = rawOpenTime ? new Date(rawOpenTime).getTime() : null;
+
+        let baseStartTime = Date.now();
+        if (classOpenMs && classOpenMs <= Date.now() && (Date.now() - classOpenMs) < fullDurationMs) {
+            // Nếu lớp đã bắt đầu thi -> Tính giờ gốc theo giờ mở đề của cả lớp
+            baseStartTime = classOpenMs;
+        } else if (savedFirstStart && (Date.now() - parseInt(savedFirstStart)) < fullDurationMs) {
+            // Nếu không cài giờ mở phòng nhưng SV đã từng vào thi trước đó -> Tính từ lúc SV bấm vào lần đầu
+            baseStartTime = parseInt(savedFirstStart);
+        } else {
+            // Lần đầu tiên vào thi
+            localStorage.setItem(firstStartKey, String(baseStartTime));
+        }
+
+        // Chốt hạn nộp bài cá nhân dựa trên mốc bắt đầu gốc
+        let personalDeadline = baseStartTime + fullDurationMs;
+
+        // Khống chế thêm một tầng bằng Giờ đóng phòng (auto_close) nếu có
+        if (window.current_exam_hard_deadline) {
+            window.exam_deadline_time = Math.min(personalDeadline, window.current_exam_hard_deadline);
+        } else {
+            window.exam_deadline_time = personalDeadline;
+        }
+
+        window.time_left = Math.max(0, Math.ceil((window.exam_deadline_time - Date.now()) / 1000));
+
+        // Lưu ngay đề vừa trộn lên Cloud
+        setTimeout(() => { if (typeof window.auto_save_exam_draft === 'function') window.auto_save_exam_draft(true); }, 500);
     }
 
     if(typeof window.render_quiz === 'function') window.render_quiz();
@@ -6294,7 +6558,6 @@ window.start_online_exam = async function(ex) {
     
     if(typeof window.start_countdown === 'function') {
         window.start_countdown();
-        if (!isResumed) window.time_left = ex.timeLimit * 60; 
     }
 
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -6306,10 +6569,13 @@ window.start_online_exam = async function(ex) {
     }
 
     // =====================================================================
-    // 🛡️ LỚP KHIÊN BẢO MẬT: BẬT WATERMARK CHỐNG CHỤP LÉN NGAY KHI VÀO THI
+    // 🛡️ LỚP KHIÊN BẢO MẬT: BẬT WATERMARK & KHÓA CẢM BIẾN DI ĐỘNG
     // =====================================================================
     if (typeof window.init_exam_watermark === 'function') {
         window.init_exam_watermark();
+    }
+    if (typeof window.init_hardware_sensor_lock === 'function') {
+        window.init_hardware_sensor_lock();
     }
 };
 
@@ -6962,9 +7228,17 @@ window.render_troubleshoot_list = function(searchQuery) {
             statusBadge = `<span class="badge bg-danger text-white ms-1 shadow-sm px-2" style="font-size: 0.75rem; border: 1px solid #b91c1c;">🚫 Bị Đánh Vắng</span>`;
             borderClass = 'border-danger';
             actionHtml = `<button class="btn btn-sm btn-outline-warning py-0 px-2 fw-bold border-warning" style="font-size: 0.7rem; height: 22px;" onclick="event.preventDefault(); window.delete_student_score('${safeExamCode}', '${u.id}', '${safeName}')" title="Hủy vắng (Cho phép vào thi)"><i class="bi bi-unlock-fill"></i> Hủy Vắng</button>`;
-        } else if (u.isActuallySub) { // <--- CẬP NHẬT: Chỉ hiện Đã Nộp khi điểm khác -1
-            statusBadge = `<span class="badge bg-success text-white ms-1 shadow-sm px-2" style="font-size: 0.75rem; border: 1px solid #15803d;">✅ Đã nộp: <b class="text-warning" style="font-size: 0.85rem;">${u.score}</b> đ</span>`;
-            borderClass = 'border-success';
+        } else if (u.isActuallySub) { // <--- CẬP NHẬT: Phân biệt Tự nộp và Bị hệ thống thu bài
+            let rawStatus = String((u.sync && u.sync.client_status) || u.client_status || '');
+            let isForcedSub = rawStatus.includes('Đã thu bài') || rawStatus.includes('THU BÀI');
+
+            if (isForcedSub) {
+                statusBadge = `<span class="badge bg-warning text-dark ms-1 shadow-sm px-2" style="font-size: 0.75rem; border: 1px solid #d97706;">⏰ Đã thu bài: <b class="text-danger" style="font-size: 0.85rem;">${u.score}</b> đ</span>`;
+                borderClass = 'border-warning';
+            } else {
+                statusBadge = `<span class="badge bg-success text-white ms-1 shadow-sm px-2" style="font-size: 0.75rem; border: 1px solid #15803d;">✅ Đã nộp: <b class="text-warning" style="font-size: 0.85rem;">${u.score}</b> đ</span>`;
+                borderClass = 'border-success';
+            }
             actionHtml = `
                 <div class="d-flex gap-1">
                     <button class="btn btn-sm btn-info py-0 px-2" style="font-size: 0.7rem; height: 22px;" onclick="event.preventDefault(); window.edit_student_score('${u.id}', '${u.rawId}', '${safeName}', ${u.score}, 0)"><i class="bi bi-pencil"></i></button>
@@ -9730,3 +10004,329 @@ window.sync_offline_vault = async function() {
 
 // Quét kho 1 lần mỗi khi học sinh F5 hoặc vừa vào web
 setTimeout(() => { window.sync_offline_vault(); }, 3000);
+
+// =========================================================================
+// ☁️ HỆ THỐNG LƯU & KHÔI PHỤC BÀI THI ĐA TẦNG (LOCALSTORAGE + SUPABASE CLOUD)
+// Đặc trị lỗi mất bài khi thoát WebView Zalo / Messenger hoặc đổi thiết bị
+// =========================================================================
+
+// 1. Lưu nháp (Tự động ghi vào cả Máy cục bộ + Đám mây Supabase)
+window.auto_save_exam_draft = async function(forceCloud = false) {
+    if (window.is_study_mode !== false || !window.is_exam_started) return;
+    if (!window.proctoring_state || !window.proctoring_state.exam_code) return;
+
+    let examCode = window.proctoring_state.exam_code;
+    let studentId = window.current_student_id || 'guest';
+    let draftKey = `exam_draft_${studentId}_${examCode}`;
+
+    // Đóng gói toàn bộ trạng thái bài thi (Giữ nguyên thứ tự câu hỏi & đáp án đã đảo)
+    let draftPayload = {
+        examCode: examCode,
+        studentId: studentId,
+        deadline: window.exam_deadline_time || (Date.now() + (window.time_left || 600) * 1000),
+        timeLeft: window.time_left || 0,
+        offenseCount: window.offense_count || 0,
+        awayTimeTotal: window.away_time_total || 0,
+        updatedAt: Date.now(),
+        questions: (window.questions || []).map(q => ({
+            id: q.id,
+            q: q.q,
+            type: q.type,
+            opts: q.opts,
+            a: q.a,
+            answer: q.answer,
+            image: q.image,
+            multimedia: q.multimedia,
+            hint: q.hint,
+            level: q.level,
+            done: q.done || false,
+            ans_user: q.ans_user
+        }))
+    };
+
+    // Tầng 1: Lưu tức thì vào LocalStorage (Tốc độ 0ms)
+    try {
+        localStorage.setItem(draftKey, JSON.stringify(draftPayload));
+        localStorage.setItem('exam_draft_' + examCode, JSON.stringify(draftPayload));
+    } catch (e) {}
+
+    // Tầng 2: Bơm lên Supabase Cloud (Chống spam: Tối đa 4 giây/lần hoặc khi ép lưu lúc chọn đáp án/thoát app)
+    let now = Date.now();
+    if (!forceCloud && window._lastCloudDraftSave && (now - window._lastCloudDraftSave < 4000)) {
+        return;
+    }
+    window._lastCloudDraftSave = now;
+
+    try {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        if (!clientDb) return;
+
+        await clientDb.from('exam_results')
+            .update({ draft_data: draftPayload })
+            .eq('exam_code', examCode)
+            .ilike('student_id', studentId);
+    } catch (err) {
+        // Nếu bảng chưa có cột draft_data thì âm thầm bỏ qua, không báo lỗi làm phiền sinh viên
+        console.warn("[Cloud Draft] Bỏ qua đồng bộ đám mây:", err.message);
+    }
+};
+
+// 2. Khôi phục nháp (Ưu tiên bản nào mới hơn giữa LocalStorage và Supabase Cloud)
+window.restore_exam_draft = function(examCode, cloudDraftData = null) {
+    let studentId = window.current_student_id || 'guest';
+    let draftKey = `exam_draft_${studentId}_${examCode}`;
+    let localRaw = localStorage.getItem(draftKey) || localStorage.getItem('exam_draft_' + examCode);
+    
+    let localDraft = null;
+    if (localRaw) {
+        try { localDraft = JSON.parse(localRaw); } catch (e) {}
+    }
+
+    let cloudDraft = null;
+    if (cloudDraftData) {
+        try {
+            cloudDraft = (typeof cloudDraftData === 'string') ? JSON.parse(cloudDraftData) : cloudDraftData;
+        } catch (e) {}
+    }
+
+    // So sánh lấy bản nháp có nhiều câu đã làm hơn hoặc mới hơn
+    let chosenDraft = null;
+    if (localDraft && cloudDraft) {
+        let localDone = (localDraft.questions || []).filter(q => q.done).length;
+        let cloudDone = (cloudDraft.questions || []).filter(q => q.done).length;
+        if (cloudDone > localDone) chosenDraft = cloudDraft;
+        else if (localDone > cloudDone) chosenDraft = localDraft;
+        else chosenDraft = ((cloudDraft.updatedAt || 0) >= (localDraft.updatedAt || 0)) ? cloudDraft : localDraft;
+    } else {
+        chosenDraft = cloudDraft || localDraft;
+    }
+
+    if (!chosenDraft || !Array.isArray(chosenDraft.questions) || chosenDraft.questions.length === 0) {
+        window.is_resumed_exam = false;
+        return false;
+    }
+
+    // Phục hồi danh sách câu hỏi (đúng thứ tự đã trộn lúc đầu) và đáp án của sinh viên
+    window.questions = chosenDraft.questions;
+    window.offense_count = chosenDraft.offenseCount || 0;
+    window.away_time_total = chosenDraft.awayTimeTotal || 0;
+
+    // Phục hồi thời gian thực tế còn lại
+    if (chosenDraft.deadline) {
+        window.exam_deadline_time = chosenDraft.deadline;
+        window.time_left = Math.max(0, Math.ceil((chosenDraft.deadline - Date.now()) / 1000));
+    } else if (chosenDraft.timeLeft) {
+        window.time_left = chosenDraft.timeLeft;
+    }
+
+    window.is_resumed_exam = true;
+    return true;
+};
+
+// 3. Tô sáng lại các đáp án đã chọn trên giao diện sau khi khôi phục
+window.re_apply_visual_answers = function() {
+    if (!window.questions || window.questions.length === 0) return;
+
+    const make_clean = (str) => String(str || "")
+        .replace(/^[A-D][\.\)]\s*/i, '')
+        .replace(/\{\{(.*?)::.*?::.*?\}\}/g, '$1')
+        .replace(/<[^>]*>/g, '')
+        .toLowerCase().normalize('NFC').replace(/\\/g, '').replace(/\s+/g, '').replace(/["“”]/g, '');
+
+    window.questions.forEach((q, i) => {
+        if (!q.done || q.ans_user === undefined || q.ans_user === "") return;
+
+        let card = document.querySelector(`.question-card-tracker[data-q-idx="${i}"]`);
+        if (!card) return;
+
+        let cType = q.type ? String(q.type).toLowerCase().trim() : 'single';
+
+        // Phục hồi câu Trắc nghiệm ABCD & Đúng/Sai
+        if (cType === 'single' || cType === 'mcq' || cType === 'true_false' || cType === 'tf' || cType === 'đúng sai' || cType === '') {
+            let btns = card.querySelectorAll('.option-btn, .super-opt-btn');
+            let userClean = make_clean(q.ans_user);
+            let isLetterAns = /^[a-d]$/i.test(String(q.ans_user).trim());
+
+            btns.forEach((b, optIdx) => {
+                let b_val = "";
+                let onclick_attr = b.getAttribute('onclick') || "";
+                let match = onclick_attr.match(/set_ans\([^,]+,\s*(?:decodeURIComponent\()?['"]([^'"]+)['"]/);
+                if (match) {
+                    try { b_val = decodeURIComponent(match[1]); } catch (e) { b_val = match[1]; }
+                } else {
+                    b_val = b.innerText;
+                }
+
+                let letter = ['a', 'b', 'c', 'd'][optIdx];
+                if ((isLetterAns && String(q.ans_user).trim().toLowerCase() === letter) || make_clean(b_val) === userClean) {
+                    b.classList.add('selected');
+                }
+            });
+        }
+        // Phục hồi câu Điền khuyết
+        else if (cType === 'fill' || cType === 'short' || cType === 'điền khuyết') {
+            let inputs = card.querySelectorAll('input[type="text"]');
+            if (Array.isArray(q.ans_user)) {
+                inputs.forEach((inp, fIdx) => {
+                    if (q.ans_user[fIdx] !== undefined) {
+                        inp.value = q.ans_user[fIdx];
+                        inp.style.width = Math.max(70, (inp.value.length + 1) * 12) + 'px';
+                    }
+                });
+            }
+        }
+        // Phục hồi câu Sắp xếp (Arrange)
+        else if (cType === 'arrange' || cType === 'sắp xếp') {
+            if (Array.isArray(q.ans_user)) {
+                let savedArr = [...q.ans_user];
+                q.done = false;
+                q.ans_user = [];
+                let poolBtns = card.querySelectorAll(`#arrange_pool_${i} button`);
+                savedArr.forEach(letter => {
+                    let btnIdx = letter.toUpperCase().charCodeAt(0) - 65;
+                    if (poolBtns[btnIdx] && typeof window.select_arrange === 'function') {
+                        window.select_arrange(poolBtns[btnIdx], i, letter);
+                    }
+                });
+            }
+        }
+    });
+
+    if (typeof window.update_progress_bar === 'function') window.update_progress_bar();
+    if (typeof check_complete === 'function') check_complete();
+};
+
+// 4. Xóa nháp sau khi đã nộp bài thành công
+window.clear_exam_draft = async function() {
+    let examCode = window.proctoring_state ? window.proctoring_state.exam_code : null;
+    let studentId = window.current_student_id || 'guest';
+    window.is_resumed_exam = false;
+
+    if (examCode) {
+        localStorage.removeItem(`exam_draft_${studentId}_${examCode}`);
+        localStorage.removeItem('exam_draft_' + examCode);
+        try {
+            const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+            if (clientDb) {
+                await clientDb.from('exam_results')
+                    .update({ draft_data: null })
+                    .eq('exam_code', examCode)
+                    .ilike('student_id', studentId);
+            }
+        } catch (e) {}
+    }
+};
+
+// 5. Bắt sự kiện sinh viên vuốt đóng Zalo / Tắt tab / Khóa màn hình -> Bắn cấp tốc bản nháp lên Cloud
+window.addEventListener('pagehide', function() {
+    if (window.is_study_mode === false && window.is_exam_started) {
+        window.auto_save_exam_draft(true);
+    }
+});
+
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'hidden' && window.is_study_mode === false && window.is_exam_started) {
+        window.auto_save_exam_draft(true);
+    }
+});
+
+window.addEventListener('beforeunload', function(e) {
+    if (window.is_study_mode === false && window.is_exam_started && !window.is_force_submitting) {
+        window.auto_save_exam_draft(true);
+        e.preventDefault();
+        e.returnValue = 'Bài thi của bạn đang diễn ra. Hệ thống đã lưu nháp tự động!';
+    }
+});
+
+// =========================================================================
+// 📱 CẢM BIẾN VẬT LÝ: ÉP ĐẶT ĐIỆN THOẠI NẰM YÊN TRÊN BÀN KHI THI
+// =========================================================================
+window.init_hardware_sensor_lock = async function() {
+    // Chỉ kích hoạt trên thiết bị di động / máy tính bảng VÀ khi đang THI THẬT
+    let isMobile = /iPhone|iPad|iPod|Android|Mobi/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (!isMobile || window.is_study_mode !== false) return;
+
+    window.remove_hardware_sensor_lock(); // Dọn sạch phiên cảm biến cũ nếu có
+
+    // 1. Xin quyền cảm biến trên iOS 13+ (Bắt buộc gọi ngay lúc bấm nút vào thi)
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+            const permissionState = await DeviceOrientationEvent.requestPermission();
+            if (permissionState !== 'granted') {
+                window.show_toast("⚠️ Vui lòng cấp quyền Cảm biến chuyển động để vào phòng thi!", true);
+            }
+        } catch (err) {
+            console.warn("Thiết bị không yêu cầu xin quyền cảm biến:", err);
+        }
+    }
+
+    // 2. Tạo màn hình khóa cảnh báo đỏ
+    let overlayId = "anti_pickup_overlay";
+    let overlay = document.getElementById(overlayId);
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = overlayId;
+        overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(220, 38, 38, 0.98); color:#fff; z-index:9999998; display:none; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px; user-select:none;";
+        overlay.innerHTML = `
+            <i class="bi bi-phone-vibrate" style="font-size: 4.5rem; margin-bottom: 15px;"></i>
+            <h3 style="font-weight: 900; letter-spacing: 1px; text-transform: uppercase;">CẢNH BÁO DI CHUYỂN THIẾT BỊ!</h3>
+            <p style="font-size: 1.05rem; max-width: 420px; line-height: 1.5; margin-top: 10px;">
+                Hệ thống phát hiện bạn đang cầm điện thoại lên hoặc nghiêng máy.<br><br>
+                <b class="text-warning">Vui lòng đặt điện thoại nằm phẳng hoàn toàn trên mặt bàn</b> để màn hình làm bài tự động mở lại!
+            </p>
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    // 3. Lắng nghe góc nghiêng (Beta: Trước-Sau, Gamma: Trái-Phải)
+    let tiltStreak = 0;
+    let isCurrentlyTilted = false;
+
+    window._sensorOrientationHandler = function(event) {
+        if (window.is_study_mode !== false || !window.is_exam_started) {
+            window.remove_hardware_sensor_lock();
+            return;
+        }
+
+        let beta = event.beta;   // Nằm phẳng trên bàn: ~ 0 độ
+        let gamma = event.gamma; // Nằm phẳng trên bàn: ~ 0 độ
+        if (beta === null || gamma === null) return;
+
+        // Cho phép độ nghiêng mặt bàn tối đa 18 độ
+        let maxTolerance = 18;
+        let isFlat = Math.abs(beta) <= maxTolerance && Math.abs(gamma) <= maxTolerance;
+
+        let step3 = document.getElementById('step_3');
+        let resultOverlay = document.getElementById('glass_result_overlay');
+        let isDoingExam = step3 && step3.style.display !== 'none' && !resultOverlay;
+
+        if (!isFlat && isDoingExam) {
+            tiltStreak++;
+            // Phải nghiêng liên tục > 4 nhịp (~0.2 giây) mới khóa để chống nhiễu khi gõ phím
+            if (tiltStreak > 4) {
+                overlay.style.display = 'flex';
+                if (!isCurrentlyTilted) {
+                    isCurrentlyTilted = true;
+                    window.offense_count = (window.offense_count || 0) + 1;
+                    if (typeof window.play_sound === 'function') window.play_sound('error');
+                }
+            }
+        } else {
+            tiltStreak = 0;
+            isCurrentlyTilted = false;
+            overlay.style.display = 'none';
+        }
+    };
+
+    window.addEventListener('deviceorientation', window._sensorOrientationHandler, true);
+};
+
+// Hàm gỡ bỏ khóa cảm biến khi nộp bài hoặc thoát ra sảnh
+window.remove_hardware_sensor_lock = function() {
+    if (window._sensorOrientationHandler) {
+        window.removeEventListener('deviceorientation', window._sensorOrientationHandler, true);
+        window._sensorOrientationHandler = null;
+    }
+    let overlay = document.getElementById("anti_pickup_overlay");
+    if (overlay) overlay.remove();
+};

@@ -738,6 +738,10 @@ window.check_fill_correct = function(q) {
 // 🏆 TÍNH ĐIỂM, HIỂN THỊ POPUP VÀ SAO LƯU ĐỀ GỐC
 // =========================================================================
 function calculate_and_show_result() {
+    // 🌟 TẮT KHÓA CẢM BIẾN & WATERMARK NGAY KHI ĐÃ CHẤM ĐIỂM / NỘP BÀI
+    if (typeof window.remove_hardware_sensor_lock === 'function') window.remove_hardware_sensor_lock();
+    if (typeof window.remove_exam_watermark === 'function') window.remove_exam_watermark();
+
     if (typeof window.play_sound === 'function') window.play_sound('finish'); 
 
     if (!window.session_original_questions) { window.session_original_questions = [...questions]; }
@@ -783,16 +787,24 @@ function calculate_and_show_result() {
     let existingOverlay = document.getElementById(overlayId); if (existingOverlay) existingOverlay.remove();
 
     // ===============================================================
-    // 🌟 NẾU ĐANG LÀ THI THẬT: TẮT ĐIỂM SỐ, CHỈ BÁO NỘP THÀNH CÔNG
+    // 🌟 NẾU ĐANG LÀ THI THẬT: TẮT ĐIỂM SỐ, CHỈ BÁO NỘP / THU BÀI
     // ===============================================================
     if (window.is_study_mode === false) {
+        let isForced = Boolean(window.is_force_submitting || window.last_submit_reason);
+        let borderColor = isForced ? '#f59e0b' : '#10b981';
+        let iconHtml = isForced 
+            ? '<i class="bi bi-alarm-fill text-warning" style="font-size: 5rem; text-shadow: 0 0 20px rgba(245, 158, 11, 0.5);"></i>'
+            : '<i class="bi bi-check-circle-fill text-success" style="font-size: 5rem; text-shadow: 0 0 20px rgba(16, 185, 129, 0.5);"></i>';
+        
+        let titleText = isForced ? 'HỆ THỐNG ĐÃ THU BÀI THI' : 'ĐÃ NỘP BÀI THÀNH CÔNG';
+
         let overlayHtml = `
-        <div id="${overlayId}" class="animate__animated animate__fadeIn" style="position: fixed; inset: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 999999; display: flex; align-items: center; justify-content: center;  overflow: hidden; margin: 0; padding: 0;">
-            <div class="text-center animate__animated animate__zoomIn p-4 position-relative" style="background: rgba(30, 41, 59, 0.95); border: 1px solid #10b981; border-radius: 24px; box-shadow: 0 20px 50px rgba(16, 185, 129, 0.4); width: 92%; max-width: 400px;">
-                <div class="mb-3"><i class="bi bi-check-circle-fill text-success" style="font-size: 5rem; text-shadow: 0 0 20px rgba(16, 185, 129, 0.5);"></i></div>
-                <h5 class="fw-bold text-white mb-2 text-uppercase" style="letter-spacing: 1px;">ĐÃ NỘP BÀI THÀNH CÔNG</h5>
+        <div id="${overlayId}" class="animate__animated animate__fadeIn" style="position: fixed; inset: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 999999; display: flex; align-items: center; justify-content: center; overflow: hidden; margin: 0; padding: 0;">
+            <div class="text-center animate__animated animate__zoomIn p-4 position-relative" style="background: rgba(30, 41, 59, 0.95); border: 1px solid ${borderColor}; border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5); width: 92%; max-width: 400px;">
+                <div class="mb-3">${iconHtml}</div>
+                <h5 class="fw-bold text-white mb-2 text-uppercase" style="letter-spacing: 1px;">${titleText}</h5>
                 <p class="text-white-50 mb-4" style="font-size: 0.9rem;">Hệ thống đã ghi nhận bài làm của bạn.<br>Giảng viên sẽ kiểm tra lại trên hệ thống và công bố điểm sau.</p>
-                <button class="btn w-100 fw-bold py-3 shadow" style="background: #10b981; color: white; border-radius: 12px; font-size: 0.95rem;" onclick="exit_quiz_to_menu()">
+                <button class="btn w-100 fw-bold py-3 shadow" style="background: ${borderColor}; color: white; border-radius: 12px; font-size: 0.95rem;" onclick="exit_quiz_to_menu()">
                     QUAY VỀ TRANG CHỦ
                 </button>
             </div>
@@ -1204,28 +1216,36 @@ window.send_result_to_server = async function(correct_count, total_count) {
     let is_exam = (window.is_study_mode === false && window.proctoring_state && window.proctoring_state.exam_code);
 
    if (is_exam) {
+        // Phân biệt trạng thái nộp chủ động hay bị hệ thống thu bài
+        let isForced = Boolean(window.is_force_submitting || window.last_submit_reason);
+        let submitLabel = isForced ? `Đã thu bài: ${score10}đ` : `Đã nộp: ${score10}đ`;
+
         // === LƯU VÀO BẢNG exam_results (Cập nhật điểm thi thật) ===
         let payload = {
-            exam_code: window.proctoring_state.exam_code, // 🌟 Đã bổ sung mã đề
-            student_id: studentId,                        // 🌟 Đã bổ sung mã sinh viên
+            exam_code: window.proctoring_state.exam_code,
+            student_id: studentId,
             score: score10,
             is_submitted: true,
+            client_status: submitLabel, // 🌟 Lưu rõ "Đã nộp: Xđ" hoặc "Đã thu bài: Xđ"
             submitted_at: new Date().toISOString()
         };
 
         try {
-            const { error } = await window.db.from('exam_results')
+            const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+            const { error } = await clientDb.from('exam_results')
                 .upsert(payload, { onConflict: 'exam_code,student_id' });
             
             if (error) throw error;
+            localStorage.setItem('submitted_' + payload.exam_code + '_' + studentId, 'true');
             console.log("✅ Đã cập nhật điểm thi Online lên Supabase!");
         } catch (err) {
             console.error("Lỗi lưu điểm thi Online:", err.message);
-            // Sửa lại cách gọi show_toast hoặc alert cho an toàn
-            if (typeof window.show_toast === 'function') {
+            // Đóng dấu đã nộp ở máy cục bộ để chặn thi lại và cất vào kho chờ có mạng nộp bù
+            localStorage.setItem('submitted_' + payload.exam_code + '_' + studentId, 'true');
+            if (typeof window.save_exam_offline_vault === 'function') {
+                window.save_exam_offline_vault(payload.exam_code, studentId, payload);
+            } else if (typeof window.show_toast === 'function') {
                 window.show_toast("⚠️ Lỗi mạng, chưa thể gửi điểm lên hệ thống!", true);
-            } else {
-                alert("⚠️ Lỗi mạng, chưa thể gửi điểm lên hệ thống! " + err.message);
             }
         }
 
