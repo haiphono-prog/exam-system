@@ -4602,9 +4602,13 @@ window.force_submit_exam = function(reasonMsg) {
 // =========================================================================
 window.start_countdown = function() {
     if (window.timer_interval) clearInterval(window.timer_interval);
-    window.warned_5_mins = false; // Cờ kiểm soát thông báo 5 phút
+    window.warned_5_mins = false;
 
-    if (window.is_study_mode !== false && !window.is_resumed_exam) {
+    // Nhận diện chắc chắn có đang trong Phòng thi thật hay không
+    let isRealExam = (window.is_study_mode === false) || Boolean(window.proctoring_state && window.proctoring_state.is_active);
+
+    if (!isRealExam && !window.is_resumed_exam) {
+        // CHỈ KHI ÔN TẬP TỰ DO mới tính 60 giây / 1 câu
         let giay_cho_moi_cau = 60; 
         let tong_thoi_gian = 0;
         
@@ -4620,15 +4624,21 @@ window.start_countdown = function() {
             });
         }
         window.time_left = (tong_thoi_gian > 0) ? tong_thoi_gian : 2700;
-    }
-
-    // 🌟 NẾU PHÒNG THI CÓ CÀI GIỜ ĐÓNG CỬA (auto_close) SỚM HƠN THỜI GIAN LÀM BÀI -> ÉP THEO GIỜ ĐÓNG CỬA
-    let personalDeadline = Date.now() + (window.time_left * 1000);
-    if (window.is_study_mode === false && window.current_exam_hard_deadline) {
-        window.exam_deadline_time = Math.min(personalDeadline, window.current_exam_hard_deadline);
-        window.time_left = Math.ceil((window.exam_deadline_time - Date.now()) / 1000);
+        window.exam_deadline_time = Date.now() + (window.time_left * 1000);
     } else {
-        window.exam_deadline_time = personalDeadline;
+        // 🌟 NẾU LÀ THI THẬT: Bắt buộc ưu tiên lấy mốc exam_deadline_time hoặc current_exam_time_limit đã cài đặt
+        if (!window.exam_deadline_time || window.exam_deadline_time <= Date.now()) {
+            let fallbackSeconds = (window.current_exam_time_limit_mins || 45) * 60;
+            let baseSec = (window.time_left && window.time_left > 0) ? window.time_left : fallbackSeconds;
+            window.exam_deadline_time = Date.now() + (baseSec * 1000);
+        }
+
+        // Khống chế không được vượt quá Giờ đóng cửa phòng thi (auto_close)
+        if (window.current_exam_hard_deadline && window.current_exam_hard_deadline < window.exam_deadline_time) {
+            window.exam_deadline_time = window.current_exam_hard_deadline;
+        }
+
+        window.time_left = Math.max(0, Math.ceil((window.exam_deadline_time - Date.now()) / 1000));
     }
 
     if (window.time_left <= 0) {
@@ -6506,37 +6516,35 @@ window.check_realtime_exam_status = async function(examCode, studentId) {
         window.show_toast("💡 Hệ thống đã bật Lưu nháp Đám mây bảo vệ bài thi của bạn trên Zalo!", false);
     }
 
+    // 🌟 Đọc chuẩn số phút làm bài từ mọi kiểu tên cột (timeLimit / time_limit / duration)
+    let configMinutes = parseFloat(ex.timeLimit || ex.time_limit || ex.duration || 45);
+    if (isNaN(configMinutes) || configMinutes <= 0) configMinutes = 45;
+    window.current_exam_time_limit_mins = configMinutes;
+    window.is_study_mode = false; // Khóa cứng chế độ Thi thật trước khi tính giờ
+
     let isResumed = false;
     if (typeof window.restore_exam_draft === 'function') {
         isResumed = window.restore_exam_draft(ex.examCode, window._temp_cloud_draft);
     }
 
     if (!isResumed) {
-        let fullDurationMs = ex.timeLimit * 60 * 1000;
+        let fullDurationMs = configMinutes * 60 * 1000;
         let firstStartKey = `first_start_${ex.examCode}_${window.current_student_id}`;
         let savedFirstStart = localStorage.getItem(firstStartKey);
 
-        // 1. Ưu tiên tính từ Giờ mở phòng chung của lớp (auto_open) nếu có cài đặt
-        let rawOpenTime = ex.auto_open || ex.autoOpen || ex.startDate || ex.startTime || null;
-        let classOpenMs = rawOpenTime ? new Date(rawOpenTime).getTime() : null;
-
         let baseStartTime = Date.now();
-        if (classOpenMs && classOpenMs <= Date.now() && (Date.now() - classOpenMs) < fullDurationMs) {
-            // Nếu lớp đã bắt đầu thi -> Tính giờ gốc theo giờ mở đề của cả lớp
-            baseStartTime = classOpenMs;
-        } else if (savedFirstStart && (Date.now() - parseInt(savedFirstStart)) < fullDurationMs) {
-            // Nếu không cài giờ mở phòng nhưng SV đã từng vào thi trước đó -> Tính từ lúc SV bấm vào lần đầu
+        // Nếu sinh viên này đã từng mở đề này trước đó (trong cùng ca thi) -> Giữ nguyên mốc giờ bấm vào lần đầu
+        if (savedFirstStart && !isNaN(parseInt(savedFirstStart)) && (Date.now() - parseInt(savedFirstStart)) < fullDurationMs) {
             baseStartTime = parseInt(savedFirstStart);
         } else {
-            // Lần đầu tiên vào thi
             localStorage.setItem(firstStartKey, String(baseStartTime));
         }
 
-        // Chốt hạn nộp bài cá nhân dựa trên mốc bắt đầu gốc
+        // Chốt hạn nộp bài cá nhân = Giờ bắt đầu + Số phút cài đặt của kỳ thi
         let personalDeadline = baseStartTime + fullDurationMs;
 
-        // Khống chế thêm một tầng bằng Giờ đóng phòng (auto_close) nếu có
-        if (window.current_exam_hard_deadline) {
+        // Nếu phòng thi có cài Giờ đóng cửa (auto_close) vẫn còn hiệu lực trong tương lai -> Không được vượt quá giờ đóng phòng
+        if (window.current_exam_hard_deadline && window.current_exam_hard_deadline > Date.now()) {
             window.exam_deadline_time = Math.min(personalDeadline, window.current_exam_hard_deadline);
         } else {
             window.exam_deadline_time = personalDeadline;
@@ -6544,7 +6552,7 @@ window.check_realtime_exam_status = async function(examCode, studentId) {
 
         window.time_left = Math.max(0, Math.ceil((window.exam_deadline_time - Date.now()) / 1000));
 
-        // Lưu ngay đề vừa trộn lên Cloud
+        // Lưu ngay đề vừa trộn và mốc thời gian chuẩn lên Cloud
         setTimeout(() => { if (typeof window.auto_save_exam_draft === 'function') window.auto_save_exam_draft(true); }, 500);
     }
 
