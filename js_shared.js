@@ -6205,23 +6205,20 @@ window.start_online_exam = async function(ex) {
     if (!qs || qs.length === 0) return window.show_toast("❌ Đề thi này chưa có câu hỏi nào!", true);
 
     // 🌟 CHỐT CHẶN 1: XIN QUYỀN CẢM BIẾN iOS NGAY LÚC BẤM "THI NGAY"
-    // Nếu sinh viên bấm "Cancel" (Từ chối) -> Cấm vào phòng thi ngay lập tức!
+    // Nếu sinh viên bấm "Cancel" -> Hiện bảng báo lỗi và ÉP ĐĂNG XUẤT KHI BẤM "ĐÃ HIỂU"
     let isMobileDevice = /iPhone|iPad|iPod|Android|Mobi/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     if (isMobileDevice && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         try {
             const permState = await DeviceOrientationEvent.requestPermission();
             window._iosSensorPermState = permState;
             if (permState !== 'granted') {
-                window.show_alert(
-                    "🚫 TỪ CHỐI CẢM BIẾN PHÒNG THI",
-                    "Bạn vừa bấm <b>Cancel (Từ chối)</b> quyền cảm biến chuyển động nên hệ thống <b>KHÔNG MỞ ĐỀ THI</b>.<br><br>Để vào thi trên điện thoại, bắt buộc phải cấp quyền cảm biến đặt máy trên bàn.<br><br>👉 <b>Cách khắc phục:</b> Hãy thoát hoàn toàn trang web (hoặc tải lại trang), bấm vào thi và chọn <b>Allow (Cho phép)</b>!",
-                    false
-                );
+                window.show_cancel_sensor_signout_modal();
                 return; // ⛔ DỪNG NGAY LẬP TỨC, KHÔNG TẢI ĐỀ THI!
             }
         } catch (e) {
-            // Trường hợp Safari khóa hàm do đã từng bấm Cancel trước đó trong cùng phiên
-            window._iosSensorPermState = 'blocked_or_error';
+            // Trường hợp Safari khóa hàm do đã từng bấm Cancel trước đó -> Cũng ép đăng xuất luôn!
+            window.show_cancel_sensor_signout_modal();
+            return;
         }
     }
 
@@ -10268,8 +10265,61 @@ window.addEventListener('beforeunload', function(e) {
 });
 
 // =========================================================================
+// 🚪 HÀM HIỂN THỊ BẢNG CẢNH BÁO & TỰ ĐỘNG SIGN OUT KHI BẤM "CANCEL" CẢM BIẾN
+// =========================================================================
+window.show_cancel_sensor_signout_modal = function() {
+    let modalId = "sensor_cancel_signout_modal";
+    let oldModal = document.getElementById(modalId);
+    if (oldModal) oldModal.remove();
+
+    let modal = document.createElement('div');
+    modal.id = modalId;
+    modal.style.cssText = "position:fixed; inset:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.98); color:#fff; z-index:9999999; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px; user-select:none;";
+    modal.innerHTML = `
+        <div class="animate__animated animate__zoomIn" style="background:#1e293b; border:2px solid #ef4444; border-radius:20px; padding:28px 20px; max-width:390px; width:100%; box-shadow:0 20px 50px rgba(239, 68, 68, 0.4);">
+            <i class="bi bi-shield-x text-danger" style="font-size:4rem;"></i>
+            <h5 class="fw-bold text-white mt-2 mb-2 text-uppercase">TỪ CHỐI CẢM BIẾN PHÒNG THI!</h5>
+            <p class="text-white-50 small mb-4" style="line-height:1.6;">
+                Bạn vừa bấm <b class="text-danger">Cancel (Từ chối)</b> quyền truy cập cảm biến góc nghiêng nên hệ thống không cho phép vào phòng thi.<br><br>
+                Hệ thống sẽ <b>tự động Đăng xuất</b> để làm mới phiên bảo mật. Khi đăng nhập lại, vui lòng chọn <b class="text-warning">"Allow" (Cho phép)</b>!
+            </p>
+            <button type="button" class="btn btn-danger w-100 fw-bold py-3 text-white shadow" style="border-radius:12px; font-size:0.95rem;" onclick="window.force_signout_after_sensor_cancel()">
+                <i class="bi bi-box-arrow-right me-1"></i> ĐÃ HIỂU & ĐĂNG XUẤT NGAY
+            </button>
+        </div>
+    `;
+    document.body.appendChild(modal);
+};
+
+// Hàm thực thi Đăng xuất (Sign Out) + Tải lại trang sạch sẽ
+window.force_signout_after_sensor_cancel = function() {
+    window.remove_hardware_sensor_lock();
+    window._iosSensorPermState = null;
+
+    // 1. Xóa các biến phiên đăng nhập hiện tại của sinh viên (Giữ nguyên các cờ chống nộp lại bài)
+    window.current_student_id = null;
+    window.current_student_name = null;
+    window.current_student_class = null;
+    localStorage.removeItem('current_student_id');
+    localStorage.removeItem('current_student_name');
+    localStorage.removeItem('current_student_class');
+    localStorage.removeItem('saved_student_session');
+    localStorage.removeItem('student_login_info');
+    sessionStorage.clear();
+
+    // 2. Nếu hệ thống có hàm logout sẵn thì gọi kèm, sau đó ép reload lại trang để Safari reset hộp thoại Allow
+    try {
+        if (typeof window.logout_student === 'function') window.logout_student();
+        else if (typeof window.handle_logout === 'function') window.handle_logout();
+        else if (typeof window.sign_out === 'function') window.sign_out();
+    } catch (e) {}
+
+    // 3. Tải lại trang mới hoàn toàn để iOS cho phép hiện lại bảng "Allow" ở lần đăng nhập kế tiếp
+    window.location.reload();
+};
+
+// =========================================================================
 // 📱 CẢM BIẾN VẬT LÝ: ÉP ĐẶT ĐIỆN THOẠI NẰM YÊN TRÊN BÀN KHI THI
-// (Chống vượt mặt: Kiểm tra xung phần cứng thực tế - Nếu Cancel là khóa cứng!)
 // =========================================================================
 window.init_hardware_sensor_lock = function() {
     let isMobile = /iPhone|iPad|iPod|Android|Mobi/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -10277,9 +10327,8 @@ window.init_hardware_sensor_lock = function() {
 
     window.remove_hardware_sensor_lock();
     window.is_exam_started = true;
-    window._hasReceivedRealSensorEvent = false; // Cờ kiểm chứng có tín hiệu thật từ phần cứng hay không
+    window._hasReceivedRealSensorEvent = false;
 
-    // 1. Tạo màn hình khóa cảnh báo đỏ khi nghiêng máy
     let overlayId = "anti_pickup_overlay";
     let overlay = document.getElementById(overlayId);
     if (!overlay) {
@@ -10311,10 +10360,7 @@ window.init_hardware_sensor_lock = function() {
         let gamma = event.gamma;
         if (beta === null || gamma === null) return;
 
-        // 🌟 Đánh dấu: Đã nhận được xung tín hiệu thực tế từ con quay hồi chuyển!
         window._hasReceivedRealSensorEvent = true;
-        let blockModal = document.getElementById("ios_sensor_gate_modal");
-        if (blockModal) blockModal.remove();
 
         let resultOverlay = document.getElementById('glass_result_overlay');
         if (resultOverlay) {
@@ -10343,65 +10389,14 @@ window.init_hardware_sensor_lock = function() {
 
     window.addEventListener('deviceorientation', window._sensorOrientationHandler, true);
 
-    // 2. HẬU KIỂM TRÊN iOS: Sau 1000ms kể từ khi vào phòng, nếu cảm biến KHÔNG phát ra bất kỳ tín hiệu nào
-    // (Do sinh viên đã bấm Cancel trước đó), lập tức KHÓA CỨNG MÀN HÌNH - KHÔNG CHO LÀM BÀI!
+    // Chốt bảo hiểm phụ: Nếu sau 1 giây vào phòng mà iOS vẫn không phát tín hiệu cảm biến -> Cũng bật bảng bắt Sign Out!
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         window._sensorVerifyTimeout = setTimeout(() => {
             if (!window._hasReceivedRealSensorEvent && window.is_study_mode === false) {
-                window.show_ios_sensor_hard_lock();
+                window.show_cancel_sensor_signout_modal();
             }
         }, 1000);
     }
-};
-
-// Màn hình khóa cứng khi phát hiện cảm biến bị từ chối (Cancel) - Tuyệt đối không cho mở đề nếu chưa có tín hiệu thật
-window.show_ios_sensor_hard_lock = function() {
-    let gateId = "ios_sensor_gate_modal";
-    if (document.getElementById(gateId)) return;
-
-    let gate = document.createElement('div');
-    gate.id = gateId;
-    gate.style.cssText = "position:fixed; inset:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.99); color:#fff; z-index:9999999; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px; user-select:none;";
-    gate.innerHTML = `
-        <div style="background:#1e293b; border:2px solid #ef4444; border-radius:20px; padding:28px 20px; max-width:400px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.9);">
-            <i class="bi bi-slash-circle-fill text-danger" style="font-size:3.8rem;"></i>
-            <h5 class="fw-bold text-white mt-3 mb-2 text-uppercase">CHƯA CẤP QUYỀN CẢM BIẾN!</h5>
-            <p class="text-white-50 small mb-3" style="line-height:1.6;">
-                Hệ thống phát hiện cảm biến góc nghiêng đang bị tắt (do bạn đã chọn <b class="text-danger">Cancel / Từ chối</b>).<br><br>
-                Bài thi đã bị <b>khóa tạm thời</b>. Bạn bắt buộc phải cấp quyền <b class="text-warning">"Allow" (Cho phép)</b> thì màn hình đề thi mới mở ra.
-            </p>
-            <div id="ios_retry_msg" class="alert alert-warning py-2 small fw-bold mb-3" style="font-size:0.8rem;">
-                👉 Hãy bấm nút <b>"Tải lại & Cấp quyền lại"</b> bên dưới, sau đó vào lại đề và nhớ chọn <b>Allow</b>!
-            </div>
-            <button type="button" class="btn btn-warning w-100 fw-bold py-3 text-dark shadow mb-2" style="border-radius:12px; font-size:0.95rem;" onclick="window.retry_ios_sensor_permission()">
-                <i class="bi bi-shield-check me-1"></i> THỬ KÍCH HOẠT LẠI CẢM BIẾN
-            </button>
-            <button type="button" class="btn btn-outline-light w-100 fw-bold py-2" style="border-radius:12px; font-size:0.85rem;" onclick="location.reload()">
-                <i class="bi bi-arrow-clockwise me-1"></i> TẢI LẠI TRANG ĐỂ CHỌN "ALLOW"
-            </button>
-        </div>
-    `;
-    document.body.appendChild(gate);
-};
-
-// Khi bấm "Thử kích hoạt lại": Chỉ khi nào có tín hiệu phần cứng thật (_hasReceivedRealSensorEvent === true) mới mở khóa!
-window.retry_ios_sensor_permission = async function() {
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        try {
-            const state = await DeviceOrientationEvent.requestPermission();
-            if (state === 'granted') {
-                // Chờ 500ms xem có xung thật chạy về không, nếu có thì _sensorOrientationHandler sẽ tự gỡ bảng khóa
-                setTimeout(() => {
-                    if (!window._hasReceivedRealSensorEvent) {
-                        location.reload();
-                    }
-                }, 600);
-                return;
-            }
-        } catch (e) {}
-    }
-    // Nếu iOS đã khóa hộp thoại trong tab này do lần trước bấm Cancel -> Tự động tải lại trang để iOS hỏi lại hộp thoại Allow!
-    location.reload();
 };
 
 window.remove_hardware_sensor_lock = function() {
@@ -10415,6 +10410,6 @@ window.remove_hardware_sensor_lock = function() {
     }
     let overlay = document.getElementById("anti_pickup_overlay");
     if (overlay) overlay.remove();
-    let gate = document.getElementById("ios_sensor_gate_modal");
+    let gate = document.getElementById("sensor_cancel_signout_modal");
     if (gate) gate.remove();
 };
