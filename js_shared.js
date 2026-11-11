@@ -6204,12 +6204,24 @@ window.start_online_exam = async function(ex) {
     } catch(e) { return window.show_toast("❌ Lỗi dữ liệu đề thi từ máy chủ!", true); }
     if (!qs || qs.length === 0) return window.show_toast("❌ Đề thi này chưa có câu hỏi nào!", true);
 
-    // 🌟 XIN QUYỀN CẢM BIẾN iOS NGAY TẠI CÚ CHẠM ĐẦU TIÊN (TRƯỚC KHI GỌI SUPABASE)
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+    // 🌟 CHỐT CHẶN 1: XIN QUYỀN CẢM BIẾN iOS NGAY LÚC BẤM "THI NGAY"
+    // Nếu sinh viên bấm "Cancel" (Từ chối) -> Cấm vào phòng thi ngay lập tức!
+    let isMobileDevice = /iPhone|iPad|iPod|Android|Mobi/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    if (isMobileDevice && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         try {
-            window._iosSensorPermState = await DeviceOrientationEvent.requestPermission();
+            const permState = await DeviceOrientationEvent.requestPermission();
+            window._iosSensorPermState = permState;
+            if (permState !== 'granted') {
+                window.show_alert(
+                    "🚫 TỪ CHỐI CẢM BIẾN PHÒNG THI",
+                    "Bạn vừa bấm <b>Cancel (Từ chối)</b> quyền cảm biến chuyển động nên hệ thống <b>KHÔNG MỞ ĐỀ THI</b>.<br><br>Để vào thi trên điện thoại, bắt buộc phải cấp quyền cảm biến đặt máy trên bàn.<br><br>👉 <b>Cách khắc phục:</b> Hãy thoát hoàn toàn trang web (hoặc tải lại trang), bấm vào thi và chọn <b>Allow (Cho phép)</b>!",
+                    false
+                );
+                return; // ⛔ DỪNG NGAY LẬP TỨC, KHÔNG TẢI ĐỀ THI!
+            }
         } catch (e) {
-            window._iosSensorPermState = 'error';
+            // Trường hợp Safari khóa hàm do đã từng bấm Cancel trước đó trong cùng phiên
+            window._iosSensorPermState = 'blocked_or_error';
         }
     }
 
@@ -10257,119 +10269,146 @@ window.addEventListener('beforeunload', function(e) {
 
 // =========================================================================
 // 📱 CẢM BIẾN VẬT LÝ: ÉP ĐẶT ĐIỆN THOẠI NẰM YÊN TRÊN BÀN KHI THI
-// (Phiên bản chống kẹt nút trên iOS & Zalo WebView)
+// (Chống vượt mặt: Kiểm tra xung phần cứng thực tế - Nếu Cancel là khóa cứng!)
 // =========================================================================
 window.init_hardware_sensor_lock = function() {
     let isMobile = /iPhone|iPad|iPod|Android|Mobi/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     if (!isMobile || window.is_study_mode !== false) return;
 
     window.remove_hardware_sensor_lock();
+    window.is_exam_started = true;
+    window._hasReceivedRealSensorEvent = false; // Cờ kiểm chứng có tín hiệu thật từ phần cứng hay không
 
-    // Hàm gắn bộ lắng nghe góc nghiêng
-    const attachOrientationListener = () => {
-        let overlayId = "anti_pickup_overlay";
-        let overlay = document.getElementById(overlayId);
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.id = overlayId;
-            overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(220, 38, 38, 0.98); color:#fff; z-index:9999998; display:none; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px; user-select:none;";
-            overlay.innerHTML = `
-                <i class="bi bi-phone-vibrate" style="font-size: 4.5rem; margin-bottom: 15px;"></i>
-                <h3 style="font-weight: 900; letter-spacing: 1px; text-transform: uppercase;">CẢNH BÁO DI CHUYỂN THIẾT BỊ!</h3>
-                <p style="font-size: 1.05rem; max-width: 420px; line-height: 1.5; margin-top: 10px;">
-                    Hệ thống phát hiện bạn đang cầm điện thoại lên hoặc nghiêng máy.<br><br>
-                    <b class="text-warning">Vui lòng đặt điện thoại nằm phẳng hoàn toàn trên mặt bàn</b> để màn hình làm bài tự động mở lại!
-                </p>
-            `;
-            document.body.appendChild(overlay);
+    // 1. Tạo màn hình khóa cảnh báo đỏ khi nghiêng máy
+    let overlayId = "anti_pickup_overlay";
+    let overlay = document.getElementById(overlayId);
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.id = overlayId;
+        overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(220, 38, 38, 0.98); color:#fff; z-index:9999998; display:none; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px; user-select:none;";
+        overlay.innerHTML = `
+            <i class="bi bi-phone-vibrate" style="font-size: 4.5rem; margin-bottom: 15px;"></i>
+            <h3 style="font-weight: 900; letter-spacing: 1px; text-transform: uppercase;">CẢNH BÁO DI CHUYỂN THIẾT BỊ!</h3>
+            <p style="font-size: 1.05rem; max-width: 420px; line-height: 1.5; margin-top: 10px;">
+                Hệ thống phát hiện bạn đang cầm điện thoại lên hoặc nghiêng máy.<br><br>
+                <b class="text-warning">Vui lòng đặt điện thoại nằm phẳng hoàn toàn trên mặt bàn</b> để màn hình làm bài tự động mở lại!
+            </p>
+        `;
+        document.body.appendChild(overlay);
+    }
+
+    let tiltStreak = 0;
+    let isCurrentlyTilted = false;
+    let maxTolerance = 18; // Độ nghiêng mặt bàn tối đa cho phép (18 độ)
+
+    window._sensorOrientationHandler = function(event) {
+        if (window.is_study_mode !== false) {
+            window.remove_hardware_sensor_lock();
+            return;
         }
 
-        let tiltStreak = 0;
-        let isCurrentlyTilted = false;
+        let beta = event.beta;
+        let gamma = event.gamma;
+        if (beta === null || gamma === null) return;
 
-        window._sensorOrientationHandler = function(event) {
-            if (window.is_study_mode !== false || !window.is_exam_started) {
-                window.remove_hardware_sensor_lock();
-                return;
-            }
+        // 🌟 Đánh dấu: Đã nhận được xung tín hiệu thực tế từ con quay hồi chuyển!
+        window._hasReceivedRealSensorEvent = true;
+        let blockModal = document.getElementById("ios_sensor_gate_modal");
+        if (blockModal) blockModal.remove();
 
-            let beta = event.beta;
-            let gamma = event.gamma;
-            if (beta === null || gamma === null) return;
+        let resultOverlay = document.getElementById('glass_result_overlay');
+        if (resultOverlay) {
+            overlay.style.display = 'none';
+            return;
+        }
 
-            let maxTolerance = 18; // Độ nghiêng mặt bàn tối đa cho phép (18 độ)
-            let isFlat = Math.abs(beta) <= maxTolerance && Math.abs(gamma) <= maxTolerance;
+        let isFlat = Math.abs(beta) <= maxTolerance && Math.abs(gamma) <= maxTolerance;
 
-            let step3 = document.getElementById('step_3');
-            let resultOverlay = document.getElementById('glass_result_overlay');
-            let isDoingExam = step3 && step3.style.display !== 'none' && !resultOverlay;
-
-            if (!isFlat && isDoingExam) {
-                tiltStreak++;
-                if (tiltStreak > 4) {
-                    overlay.style.display = 'flex';
-                    if (!isCurrentlyTilted) {
-                        isCurrentlyTilted = true;
-                        window.offense_count = (window.offense_count || 0) + 1;
-                        if (typeof window.play_sound === 'function') window.play_sound('error');
-                    }
+        if (!isFlat) {
+            tiltStreak++;
+            if (tiltStreak > 3) {
+                overlay.style.display = 'flex';
+                if (!isCurrentlyTilted) {
+                    isCurrentlyTilted = true;
+                    window.offense_count = (window.offense_count || 0) + 1;
+                    if (typeof window.play_sound === 'function') window.play_sound('error');
                 }
-            } else {
-                tiltStreak = 0;
-                isCurrentlyTilted = false;
-                overlay.style.display = 'none';
             }
-        };
-
-        window.addEventListener('deviceorientation', window._sensorOrientationHandler, true);
+        } else {
+            tiltStreak = 0;
+            isCurrentlyTilted = false;
+            overlay.style.display = 'none';
+        }
     };
 
-    // Luôn gắn bộ lắng nghe trước
-    attachOrientationListener();
+    window.addEventListener('deviceorientation', window._sensorOrientationHandler, true);
 
-    // Nếu là iOS có hàm requestPermission VÀ ở Bước 1 chưa xin được quyền ('granted')
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function' && window._iosSensorPermState !== 'granted') {
-        let gateId = "ios_sensor_gate_modal";
-        let gate = document.getElementById(gateId);
-        if (gate) gate.remove();
-
-        gate = document.createElement('div');
-        gate.id = gateId;
-        gate.style.cssText = "position:fixed; inset:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.96); color:#fff; z-index:9999999; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px; user-select:none;";
-        gate.innerHTML = `
-            <div style="background:#1e293b; border:2px solid #38bdf8; border-radius:20px; padding:28px 20px; max-width:390px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.8);">
-                <i class="bi bi-phone-landscape text-info" style="font-size:3.5rem;"></i>
-                <h5 class="fw-bold text-white mt-2 mb-2 text-uppercase">XÁC NHẬN ĐẶT MÁY TRÊN BÀN</h5>
-                <p class="text-white-50 small mb-3" style="line-height:1.5;">
-                    Vui lòng đặt điện thoại <b>nằm phẳng trên mặt bàn</b>, sau đó bấm nút bên dưới để bắt đầu làm bài (Chọn <b>Allow / Cho phép</b> nếu máy hỏi).
-                </p>
-                <button type="button" class="btn btn-info w-100 fw-bold py-3 text-dark shadow" style="border-radius:12px; font-size:0.95rem;" onclick="window.confirm_ios_sensor_gate()">
-                    <i class="bi bi-check2-circle me-1"></i> TÔI ĐÃ ĐẶT MÁY TRÊN BÀN - MỞ ĐỀ
-                </button>
-            </div>
-        `;
-        document.body.appendChild(gate);
+    // 2. HẬU KIỂM TRÊN iOS: Sau 1000ms kể từ khi vào phòng, nếu cảm biến KHÔNG phát ra bất kỳ tín hiệu nào
+    // (Do sinh viên đã bấm Cancel trước đó), lập tức KHÓA CỨNG MÀN HÌNH - KHÔNG CHO LÀM BÀI!
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        window._sensorVerifyTimeout = setTimeout(() => {
+            if (!window._hasReceivedRealSensorEvent && window.is_study_mode === false) {
+                window.show_ios_sensor_hard_lock();
+            }
+        }, 1000);
     }
 };
 
-// Hàm xử lý khi bấm nút xác nhận trên iOS (Đảm bảo đóng bảng 100%, không bao giờ bị kẹt)
-window.confirm_ios_sensor_gate = function() {
-    let gate = document.getElementById("ios_sensor_gate_modal");
+// Màn hình khóa cứng khi phát hiện cảm biến bị từ chối (Cancel) - Tuyệt đối không cho mở đề nếu chưa có tín hiệu thật
+window.show_ios_sensor_hard_lock = function() {
+    let gateId = "ios_sensor_gate_modal";
+    if (document.getElementById(gateId)) return;
+
+    let gate = document.createElement('div');
+    gate.id = gateId;
+    gate.style.cssText = "position:fixed; inset:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.99); color:#fff; z-index:9999999; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px; user-select:none;";
+    gate.innerHTML = `
+        <div style="background:#1e293b; border:2px solid #ef4444; border-radius:20px; padding:28px 20px; max-width:400px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.9);">
+            <i class="bi bi-slash-circle-fill text-danger" style="font-size:3.8rem;"></i>
+            <h5 class="fw-bold text-white mt-3 mb-2 text-uppercase">CHƯA CẤP QUYỀN CẢM BIẾN!</h5>
+            <p class="text-white-50 small mb-3" style="line-height:1.6;">
+                Hệ thống phát hiện cảm biến góc nghiêng đang bị tắt (do bạn đã chọn <b class="text-danger">Cancel / Từ chối</b>).<br><br>
+                Bài thi đã bị <b>khóa tạm thời</b>. Bạn bắt buộc phải cấp quyền <b class="text-warning">"Allow" (Cho phép)</b> thì màn hình đề thi mới mở ra.
+            </p>
+            <div id="ios_retry_msg" class="alert alert-warning py-2 small fw-bold mb-3" style="font-size:0.8rem;">
+                👉 Hãy bấm nút <b>"Tải lại & Cấp quyền lại"</b> bên dưới, sau đó vào lại đề và nhớ chọn <b>Allow</b>!
+            </div>
+            <button type="button" class="btn btn-warning w-100 fw-bold py-3 text-dark shadow mb-2" style="border-radius:12px; font-size:0.95rem;" onclick="window.retry_ios_sensor_permission()">
+                <i class="bi bi-shield-check me-1"></i> THỬ KÍCH HOẠT LẠI CẢM BIẾN
+            </button>
+            <button type="button" class="btn btn-outline-light w-100 fw-bold py-2" style="border-radius:12px; font-size:0.85rem;" onclick="location.reload()">
+                <i class="bi bi-arrow-clockwise me-1"></i> TẢI LẠI TRANG ĐỂ CHỌN "ALLOW"
+            </button>
+        </div>
+    `;
+    document.body.appendChild(gate);
+};
+
+// Khi bấm "Thử kích hoạt lại": Chỉ khi nào có tín hiệu phần cứng thật (_hasReceivedRealSensorEvent === true) mới mở khóa!
+window.retry_ios_sensor_permission = async function() {
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        DeviceOrientationEvent.requestPermission().then(state => {
-            window._iosSensorPermState = state;
-            if (gate) gate.remove();
-        }).catch(err => {
-            if (gate) gate.remove();
-        });
-        // Bảo hiểm: Sau 1.5 giây nếu Safari không phản hồi hộp thoại thì tự mở đề
-        setTimeout(() => { if (gate) gate.remove(); }, 1500);
-    } else {
-        if (gate) gate.remove();
+        try {
+            const state = await DeviceOrientationEvent.requestPermission();
+            if (state === 'granted') {
+                // Chờ 500ms xem có xung thật chạy về không, nếu có thì _sensorOrientationHandler sẽ tự gỡ bảng khóa
+                setTimeout(() => {
+                    if (!window._hasReceivedRealSensorEvent) {
+                        location.reload();
+                    }
+                }, 600);
+                return;
+            }
+        } catch (e) {}
     }
+    // Nếu iOS đã khóa hộp thoại trong tab này do lần trước bấm Cancel -> Tự động tải lại trang để iOS hỏi lại hộp thoại Allow!
+    location.reload();
 };
 
 window.remove_hardware_sensor_lock = function() {
+    if (window._sensorVerifyTimeout) {
+        clearTimeout(window._sensorVerifyTimeout);
+        window._sensorVerifyTimeout = null;
+    }
     if (window._sensorOrientationHandler) {
         window.removeEventListener('deviceorientation', window._sensorOrientationHandler, true);
         window._sensorOrientationHandler = null;
