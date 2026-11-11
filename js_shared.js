@@ -10248,85 +10248,130 @@ window.addEventListener('beforeunload', function(e) {
 
 // =========================================================================
 // 📱 CẢM BIẾN VẬT LÝ: ÉP ĐẶT ĐIỆN THOẠI NẰM YÊN TRÊN BÀN KHI THI
+// (Tích hợp cổng bắt buộc bấm "Allow" trực tiếp trên iOS chống sinh viên bấm Cancel)
 // =========================================================================
 window.init_hardware_sensor_lock = async function() {
-    // Chỉ kích hoạt trên thiết bị di động / máy tính bảng VÀ khi đang THI THẬT
     let isMobile = /iPhone|iPad|iPod|Android|Mobi/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     if (!isMobile || window.is_study_mode !== false) return;
 
-    window.remove_hardware_sensor_lock(); // Dọn sạch phiên cảm biến cũ nếu có
+    window.remove_hardware_sensor_lock();
 
-    // 1. Xin quyền cảm biến trên iOS 13+ (Bắt buộc gọi ngay lúc bấm nút vào thi)
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        try {
-            const permissionState = await DeviceOrientationEvent.requestPermission();
-            if (permissionState !== 'granted') {
-                window.show_toast("⚠️ Vui lòng cấp quyền Cảm biến chuyển động để vào phòng thi!", true);
+    // Hàm gắn bộ lắng nghe góc nghiêng sau khi đã có quyền
+    const attachOrientationListener = () => {
+        let overlayId = "anti_pickup_overlay";
+        let overlay = document.getElementById(overlayId);
+        if (!overlay) {
+            overlay = document.createElement('div');
+            overlay.id = overlayId;
+            overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(220, 38, 38, 0.98); color:#fff; z-index:9999998; display:none; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px; user-select:none;";
+            overlay.innerHTML = `
+                <i class="bi bi-phone-vibrate" style="font-size: 4.5rem; margin-bottom: 15px;"></i>
+                <h3 style="font-weight: 900; letter-spacing: 1px; text-transform: uppercase;">CẢNH BÁO DI CHUYỂN THIẾT BỊ!</h3>
+                <p style="font-size: 1.05rem; max-width: 420px; line-height: 1.5; margin-top: 10px;">
+                    Hệ thống phát hiện bạn đang cầm điện thoại lên hoặc nghiêng máy.<br><br>
+                    <b class="text-warning">Vui lòng đặt điện thoại nằm phẳng hoàn toàn trên mặt bàn</b> để màn hình làm bài tự động mở lại!
+                </p>
+            `;
+            document.body.appendChild(overlay);
+        }
+
+        let tiltStreak = 0;
+        let isCurrentlyTilted = false;
+
+        window._sensorOrientationHandler = function(event) {
+            if (window.is_study_mode !== false || !window.is_exam_started) {
+                window.remove_hardware_sensor_lock();
+                return;
             }
-        } catch (err) {
-            console.warn("Thiết bị không yêu cầu xin quyền cảm biến:", err);
-        }
-    }
 
-    // 2. Tạo màn hình khóa cảnh báo đỏ
-    let overlayId = "anti_pickup_overlay";
-    let overlay = document.getElementById(overlayId);
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.id = overlayId;
-        overlay.style.cssText = "position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(220, 38, 38, 0.98); color:#fff; z-index:9999998; display:none; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px; user-select:none;";
-        overlay.innerHTML = `
-            <i class="bi bi-phone-vibrate" style="font-size: 4.5rem; margin-bottom: 15px;"></i>
-            <h3 style="font-weight: 900; letter-spacing: 1px; text-transform: uppercase;">CẢNH BÁO DI CHUYỂN THIẾT BỊ!</h3>
-            <p style="font-size: 1.05rem; max-width: 420px; line-height: 1.5; margin-top: 10px;">
-                Hệ thống phát hiện bạn đang cầm điện thoại lên hoặc nghiêng máy.<br><br>
-                <b class="text-warning">Vui lòng đặt điện thoại nằm phẳng hoàn toàn trên mặt bàn</b> để màn hình làm bài tự động mở lại!
-            </p>
-        `;
-        document.body.appendChild(overlay);
-    }
+            let beta = event.beta;
+            let gamma = event.gamma;
+            if (beta === null || gamma === null) return;
 
-    // 3. Lắng nghe góc nghiêng (Beta: Trước-Sau, Gamma: Trái-Phải)
-    let tiltStreak = 0;
-    let isCurrentlyTilted = false;
+            let maxTolerance = 18; // Độ nghiêng mặt bàn tối đa cho phép (18 độ)
+            let isFlat = Math.abs(beta) <= maxTolerance && Math.abs(gamma) <= maxTolerance;
 
-    window._sensorOrientationHandler = function(event) {
-        if (window.is_study_mode !== false || !window.is_exam_started) {
-            window.remove_hardware_sensor_lock();
-            return;
-        }
+            let step3 = document.getElementById('step_3');
+            let resultOverlay = document.getElementById('glass_result_overlay');
+            let isDoingExam = step3 && step3.style.display !== 'none' && !resultOverlay;
 
-        let beta = event.beta;   // Nằm phẳng trên bàn: ~ 0 độ
-        let gamma = event.gamma; // Nằm phẳng trên bàn: ~ 0 độ
-        if (beta === null || gamma === null) return;
-
-        // Cho phép độ nghiêng mặt bàn tối đa 18 độ
-        let maxTolerance = 18;
-        let isFlat = Math.abs(beta) <= maxTolerance && Math.abs(gamma) <= maxTolerance;
-
-        let step3 = document.getElementById('step_3');
-        let resultOverlay = document.getElementById('glass_result_overlay');
-        let isDoingExam = step3 && step3.style.display !== 'none' && !resultOverlay;
-
-        if (!isFlat && isDoingExam) {
-            tiltStreak++;
-            // Phải nghiêng liên tục > 4 nhịp (~0.2 giây) mới khóa để chống nhiễu khi gõ phím
-            if (tiltStreak > 4) {
-                overlay.style.display = 'flex';
-                if (!isCurrentlyTilted) {
-                    isCurrentlyTilted = true;
-                    window.offense_count = (window.offense_count || 0) + 1;
-                    if (typeof window.play_sound === 'function') window.play_sound('error');
+            if (!isFlat && isDoingExam) {
+                tiltStreak++;
+                if (tiltStreak > 4) {
+                    overlay.style.display = 'flex';
+                    if (!isCurrentlyTilted) {
+                        isCurrentlyTilted = true;
+                        window.offense_count = (window.offense_count || 0) + 1;
+                        if (typeof window.play_sound === 'function') window.play_sound('error');
+                    }
                 }
+            } else {
+                tiltStreak = 0;
+                isCurrentlyTilted = false;
+                overlay.style.display = 'none';
             }
-        } else {
-            tiltStreak = 0;
-            isCurrentlyTilted = false;
-            overlay.style.display = 'none';
-        }
+        };
+
+        window.addEventListener('deviceorientation', window._sensorOrientationHandler, true);
     };
 
-    window.addEventListener('deviceorientation', window._sensorOrientationHandler, true);
+    // Kiểm tra xem có phải iPhone/iPad yêu cầu xin quyền cảm biến hay không
+    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        try {
+            // Thử gọi thẳng (Nếu trong cùng phiên làm việc sinh viên đã bấm Allow trước đó thì vào thẳng luôn)
+            const preCheck = await DeviceOrientationEvent.requestPermission();
+            if (preCheck === 'granted') {
+                attachOrientationListener();
+                return;
+            }
+        } catch (e) {
+            // Bị chặn do sau lệnh await của Supabase -> Hiển thị màn hình hướng dẫn bấm Allow trực tiếp
+        }
+
+        let gateId = "ios_sensor_gate_modal";
+        let gate = document.getElementById(gateId);
+        if (gate) gate.remove();
+
+        gate = document.createElement('div');
+        gate.id = gateId;
+        gate.style.cssText = "position:fixed; inset:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.98); color:#fff; z-index:9999999; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px; user-select:none;";
+        gate.innerHTML = `
+            <div style="background:#1e293b; border:2px solid #38bdf8; border-radius:20px; padding:28px 20px; max-width:390px; width:100%; box-shadow:0 20px 50px rgba(0,0,0,0.8);">
+                <i class="bi bi-shield-lock-fill text-info" style="font-size:3.5rem;"></i>
+                <h5 class="fw-bold text-white mt-2 mb-2 text-uppercase">BẢO MẬT PHÒNG THI DI ĐỘNG</h5>
+                <p class="text-white-50 small mb-3" style="line-height:1.5;">
+                    1. Đặt điện thoại <b>nằm phẳng trên mặt bàn</b>.<br>
+                    2. Bấm nút bên dưới và chọn <b class="text-warning">"Allow" (Cho phép)</b> khi hộp thoại xuất hiện để mở đề thi.
+                </p>
+                <div id="ios_sensor_err" class="alert alert-danger py-2 small fw-bold mb-3" style="display:none; font-size:0.8rem;">
+                    🚫 Bạn đã bấm Từ chối (Cancel)! Không thể mở đề thi khi chưa bật cảm biến. Vui lòng tải lại trang và chọn "Allow".
+                </div>
+                <button id="btn_grant_ios_sensor" class="btn btn-info w-100 fw-bold py-3 text-dark shadow" style="border-radius:12px; font-size:0.95rem;">
+                    <i class="bi bi-check2-circle me-1"></i> BẤM ĐỂ MỞ ĐỀ & CHỌN "ALLOW"
+                </button>
+            </div>
+        `;
+        document.body.appendChild(gate);
+
+        document.getElementById('btn_grant_ios_sensor').onclick = async function() {
+            try {
+                const state = await DeviceOrientationEvent.requestPermission();
+                if (state === 'granted') {
+                    gate.remove();
+                    attachOrientationListener();
+                } else {
+                    document.getElementById('ios_sensor_err').style.display = 'block';
+                }
+            } catch (err) {
+                // Nếu trình duyệt nhúng không hỗ trợ API này thì cho qua để không kẹt
+                gate.remove();
+                attachOrientationListener();
+            }
+        };
+    } else {
+        // Thiết bị Android: Tự động bật cảm biến ngay lập tức mà không cần hỏi!
+        attachOrientationListener();
+    }
 };
 
 // Hàm gỡ bỏ khóa cảm biến khi nộp bài hoặc thoát ra sảnh
@@ -10337,4 +10382,6 @@ window.remove_hardware_sensor_lock = function() {
     }
     let overlay = document.getElementById("anti_pickup_overlay");
     if (overlay) overlay.remove();
+    let gate = document.getElementById("ios_sensor_gate_modal");
+    if (gate) gate.remove();
 };
