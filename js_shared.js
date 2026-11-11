@@ -4433,10 +4433,15 @@ window.handle_perm_change = function(el) {
     }
 };
 // =========================================================================
-// ⏱️ HÀM CƯỠNG CHẾ THU BÀI (KHÔNG HỎI HAN)
+// ⏱️ HÀM CƯỠNG CHẾ THU BÀI (BẢN VÁ LỖI CHỐNG KẸT NÚT VÀ SPAM)
 // =========================================================================
 window.force_submit_exam = function() {
+    // 🌟 KHÓA SPAM: Nếu đang trong quá trình nộp bài rồi thì không gọi lại nữa
+    if (window.is_force_submitting) return;
+    window.is_force_submitting = true;
+
     if (window.timer_interval) clearInterval(window.timer_interval);
+    if (window.realtime_exam_monitor) clearInterval(window.realtime_exam_monitor); // Tắt luôn radar
     
     let confirmModal = document.getElementById('custom_confirm');
     if (confirmModal) confirmModal.style.display = 'none';
@@ -4452,11 +4457,14 @@ window.force_submit_exam = function() {
 
     setTimeout(() => {
         if (typeof calculate_and_show_result === 'function') calculate_and_show_result();
+        
+        // Mở khóa sau 10 giây đề phòng lỗi kẹt mạng
+        setTimeout(() => { window.is_force_submitting = false; }, 10000);
     }, 1000);
 };
 
 // =========================================================================
-// ⏱️ HÀM ĐẾM NGƯỢC (BỊT KÍN LỖ HỔNG)
+// ⏱️ HÀM ĐẾM NGƯỢC (BẢN VÁ LỖI CHỐNG HACK NGỦ ĐÔNG MÁY)
 // =========================================================================
 window.start_countdown = function() {
     if (window.timer_interval) clearInterval(window.timer_interval);
@@ -4476,12 +4484,10 @@ window.start_countdown = function() {
         });
     }
 
-    // 🌟 CHỈ CẤP LẠI GIỜ NẾU LÀ BÀI THI MỚI (CHƯA TỪNG LÀM)
     if (!window.is_resumed_exam) {
         window.time_left = (tong_thoi_gian > 0) ? tong_thoi_gian : 2700;
     }
 
-    // 🌟 KỊCH BẢN ĐÁNH ÚP: NẾU VÀO LẠI MÀ ĐÃ HẾT GIỜ -> THU BÀI LUÔN
     if (window.time_left <= 0) {
         let prog_el = document.getElementById('prog_text');
         if (prog_el) { prog_el.innerText = "00:00"; prog_el.style.color = "#ef4444"; }
@@ -4489,9 +4495,14 @@ window.start_countdown = function() {
         return;
     }
 
+    // 🌟 CHỐT DEADLINE THỰC TẾ DỰA VÀO ĐỒNG HỒ QUỐC TẾ (Bỏ qua việc máy ngủ đông)
+    window.exam_deadline_time = Date.now() + (window.time_left * 1000);
+
     window.timer_interval = setInterval(() => {
-        window.time_left--; 
-        
+        // 🌟 TÍNH SỐ GIÂY BẰNG CÁCH TRỪ THỜI GIAN THỰC
+        let now = Date.now();
+        window.time_left = Math.ceil((window.exam_deadline_time - now) / 1000);
+
         if (window.time_left % 5 === 0) {
             if (typeof window.auto_save_exam_draft === 'function') window.auto_save_exam_draft();
         }
@@ -4507,7 +4518,6 @@ window.start_countdown = function() {
             else prog_el.style.color = "#ff4d4d"; 
         }
 
-        // 🌟 KỊCH BẢN THÔNG THƯỜNG: HẾT GIỜ TRONG LÚC ĐANG LÀM
         if (window.time_left <= 0) { 
             window.force_submit_exam();
         }
@@ -9673,3 +9683,50 @@ window.remove_exam_watermark = function() {
     if (window.watermarkInterval) clearInterval(window.watermarkInterval);
     if (window.watermarkAutoKiller) clearInterval(window.watermarkAutoKiller);
 };
+
+// =========================================================================
+// 🚑 CẤP CỨU MẠNG: TỰ ĐỘNG NỘP LẠI BÀI THI KHI CÓ INTERNET TRỞ LẠI
+// =========================================================================
+
+// 1. Lưu tạm kết quả khi rớt mạng
+window.save_exam_offline_vault = function(examCode, studentId, payloadData) {
+    let vaultKey = 'offline_vault_' + examCode + '_' + studentId;
+    localStorage.setItem(vaultKey, JSON.stringify(payloadData));
+    if (typeof window.show_toast === 'function') {
+        window.show_toast("⚠️ BẠN ĐANG MẤT MẠNG! Bài thi đã được lưu tạm. Vui lòng KHÔNG đóng trình duyệt, hệ thống sẽ tự nộp khi có mạng lại!", true);
+    }
+};
+
+// 2. Con robot tự động đánh hơi Internet
+window.addEventListener('online', () => {
+    if (typeof window.show_toast === 'function') window.show_toast("🌐 Đã kết nối lại Internet! Đang đồng bộ dữ liệu...");
+    window.sync_offline_vault();
+});
+
+// 3. Xả kho tải lên Supabase
+window.sync_offline_vault = async function() {
+    const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+    if (!clientDb) return;
+
+    // Quét toàn bộ LocalStorage tìm các bài bị kẹt
+    for (let i = 0; i < localStorage.length; i++) {
+        let key = localStorage.key(i);
+        if (key && key.startsWith('offline_vault_')) {
+            try {
+                let payload = JSON.parse(localStorage.getItem(key));
+                // Đẩy lên Supabase bù
+                let { error } = await clientDb.from('exam_results').upsert(payload, { onConflict: 'exam_code,student_id' });
+                
+                if (!error) {
+                    localStorage.removeItem(key); // Xóa khỏi kho tạm sau khi nộp thành công
+                    if (typeof window.show_toast === 'function') window.show_toast("✅ CẤP CỨU THÀNH CÔNG: Đã nộp bù bài thi về máy chủ!");
+                }
+            } catch (err) {
+                console.log("Lỗi đồng bộ nộp bù:", err);
+            }
+        }
+    }
+};
+
+// Quét kho 1 lần mỗi khi học sinh F5 hoặc vừa vào web
+setTimeout(() => { window.sync_offline_vault(); }, 3000);
