@@ -141,6 +141,105 @@ window.render_quiz = function() {
     
     inject_dynamic_ui_styles(); 
 
+    // 🌟 HIỂN THỊ ĐẦY ĐỦ HỌ VÀ TÊN SINH VIÊN + TỰ ĐỘNG CO GIÃN CỠ CHỮ VỪA KHÍT KHOẢNG TRỐNG
+    setTimeout(() => {
+        let oldBadge = document.getElementById('exam_header_student_name');
+        if (oldBadge) oldBadge.remove();
+
+        // Chỉ hiện khi đang Thi thật (hoặc bật giám sát phòng thi)
+        let isExamNow = (window.is_study_mode === false) || Boolean(window.proctoring_state && window.proctoring_state.is_active);
+        if (!isExamNow) return;
+
+        let timerEl = document.getElementById('prog_text');
+        if (!timerEl) return;
+
+        // Tìm thanh Header bao ngoài toàn bộ chiều ngang màn hình
+        let barEl = timerEl.parentElement;
+        while (barEl && barEl !== document.body && barEl.getBoundingClientRect().width < window.innerWidth * 0.6) {
+            barEl = barEl.parentElement;
+        }
+        if (!barEl || barEl === document.body) barEl = timerEl.parentElement;
+
+        if (window.getComputedStyle(barEl).position === 'static') {
+            barEl.style.position = 'relative';
+        }
+
+        let sName = String(window.current_student_name || window.current_student_id || "Thí sinh").trim();
+        let nameBadge = document.createElement('div');
+        nameBadge.id = 'exam_header_student_name';
+        nameBadge.style.cssText = `
+            position: absolute !important;
+            right: 8px !important;
+            top: 50% !important;
+            transform: translateY(-50%) !important;
+            z-index: 99999 !important;
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: flex-end !important;
+            gap: 4px !important;
+            padding: 0 !important;
+            background: transparent !important;
+            border: none !important;
+            box-shadow: none !important;
+            pointer-events: none !important;
+            white-space: nowrap !important;
+        `;
+        nameBadge.innerHTML = `
+            <i id="exam_header_student_icon" class="bi bi-person-check-fill" style="font-size: 15px !important; color: #4ade80 !important; line-height: 1 !important; flex-shrink: 0 !important;"></i>
+            <span id="exam_header_student_text" style="font-size: 14.5px !important; font-weight: 700 !important; color: #f8fafc !important; white-space: nowrap !important; line-height: 1.2 !important;">${sName}</span>
+        `;
+
+        barEl.appendChild(nameBadge);
+
+        // Hàm tự động đo khoảng cách từ mép phải đồng hồ (#prog_text) tới lề phải và co giãn chữ
+        const autoFitStudentName = () => {
+            let badge = document.getElementById('exam_header_student_name');
+            let textEl = document.getElementById('exam_header_student_text');
+            let iconEl = document.getElementById('exam_header_student_icon');
+            let tEl = document.getElementById('prog_text');
+            if (!badge || !textEl || !tEl) return;
+
+            let barRect = barEl.getBoundingClientRect();
+            let timerRect = tEl.getBoundingClientRect();
+
+            // Khoảng trống tối đa từ mép phải đồng hồ đến mép phải thanh menu (chừa 16px đệm an toàn)
+            let availableWidth = Math.max(70, (barRect.right - timerRect.right) - 16);
+
+            // Bắt đầu từ cỡ chữ đẹp nhất (14.5px ~ 0.9rem), nếu dài hơn khoảng trống thì giảm dần từng 0.5px
+            let fontSize = 14.5;
+            textEl.style.setProperty('font-size', fontSize + 'px', 'important');
+            if (iconEl) iconEl.style.setProperty('font-size', (fontSize + 0.5) + 'px', 'important');
+
+            while (badge.scrollWidth > availableWidth && fontSize > 8.5) {
+                fontSize -= 0.5;
+                textEl.style.setProperty('font-size', fontSize + 'px', 'important');
+                if (iconEl) iconEl.style.setProperty('font-size', fontSize + 'px', 'important');
+            }
+        };
+
+        autoFitStudentName();
+        window.removeEventListener('resize', window._autoFitExamNameHandler);
+        window._autoFitExamNameHandler = autoFitStudentName;
+        window.addEventListener('resize', window._autoFitExamNameHandler);
+    }, 100);
+
+    // 🌟 HIỂN THỊ HỌ VÀ TÊN SINH VIÊN TRÊN THANH MENU TRÊN CÙNG KHI ĐANG THI THẬT
+    let rightHeader = document.querySelector('#step_3 .text-end');
+    if (rightHeader) {
+        let oldBadge = document.getElementById('exam_header_student_name');
+        if (oldBadge) oldBadge.remove();
+
+        if (window.is_study_mode === false) {
+            let sName = window.current_student_name || window.current_student_id || "Thí sinh";
+            let nameBadge = document.createElement('div');
+            nameBadge.id = 'exam_header_student_name';
+            nameBadge.className = 'text-info fw-bold text-truncate d-flex align-items-center';
+            nameBadge.style.cssText = 'max-width: 145px; font-size: 0.8rem; letter-spacing: 0.2px;';
+            nameBadge.innerHTML = `<i class="bi bi-person-check-fill text-success me-1"></i><span class="text-truncate">${sName}</span>`;
+            rightHeader.appendChild(nameBadge);
+        }
+    } 
+
     let ui_template = '1'; 
     let currentSub = window.current_subject || window.currentSubject || '';
     if (currentSub && typeof subjectConfig !== 'undefined' && subjectConfig[currentSub]) {
@@ -776,102 +875,248 @@ function calculate_and_show_result() {
         } else { q.is_correct = false; current_streak = 0; } 
     });
 
+    // 🌟 BỔ SUNG CHẤM ĐÚNG CHO CẢ CÂU HỎI ĐẢO ĐÁP ÁN TRONG PHÒNG THI THẬT
+    correct = 0;
+    const cleanCompareText = (s) => String(s || "").replace(/^[A-D][\.\)]\s*/i, '').replace(/\{\{(.*?)::.*?::.*?\}\}/g, '$1').replace(/<[^>]*>/g, '').toLowerCase().normalize('NFC').replace(/\\/g, '').replace(/\s+/g, '').replace(/["“”]/g, '');
+
+    questions.forEach(q => {
+        let is_correct = false;
+        let cType = q.type ? String(q.type).toLowerCase().trim() : '';
+
+        if (cType === 'single' || cType === 'mcq' || cType === 'true_false' || cType === 'tf' || cType === 'đúng sai' || cType === '') {
+            let raw_ans = String(q.a || q.answer || "").trim();
+            let user_ans = String(q.ans_user || "").trim();
+
+            if (user_ans !== "") {
+                if (cleanCompareText(user_ans) === cleanCompareText(raw_ans)) {
+                    is_correct = true;
+                } else if (/^[A-D]$/i.test(raw_ans) && Array.isArray(q.opts)) {
+                    let letterIdx = raw_ans.toUpperCase().charCodeAt(0) - 65;
+                    let optText = q.opts[letterIdx];
+                    if (optText !== undefined && cleanCompareText(user_ans) === cleanCompareText(optText)) {
+                        is_correct = true;
+                    }
+                }
+            }
+        } else if (cType === 'fill' || cType === 'short' || cType === 'điền khuyết') {
+            if (check_fill_correct(q)) is_correct = true;
+        } else if (cType === 'hotspot') {
+            if (typeof window.check_hotspot_correct === 'function' && window.check_hotspot_correct(q)) is_correct = true;
+        } else if (cType === 'arrange' || cType === 'sắp xếp') {
+            if (typeof window.check_arrange_correct === 'function' && window.check_arrange_correct(q)) is_correct = true;
+        }
+        q.is_correct = is_correct;
+        if (is_correct) correct++;
+    });
+
     window.quiz_earned_items = earned_items;
     let wrong_count = total - correct;
     let score10 = total > 0 ? ((correct / total) * 10).toFixed(1) : 0;
-    
-    // Vẫn âm thầm chấm điểm và gửi lên Server bình thường
-    if (typeof send_result_to_server === 'function') send_result_to_server(correct, total);
+
+    // 🛑 KHÓA NGAY CỜ ĐÃ KẾT THÚC THI ĐỂ CHẶN MỌI GÓI TIN LƯU NHÁP (HEARTBEAT) GHI ĐÈ NGƯỢC LẠI 'ONLINE'
+    window._is_exam_submitting_or_done = true;
+    if (window.timer_interval) clearInterval(window.timer_interval);
+    if (window.realtime_exam_monitor) clearInterval(window.realtime_exam_monitor);
 
     let overlayId = 'glass_result_overlay';
     let existingOverlay = document.getElementById(overlayId); if (existingOverlay) existingOverlay.remove();
 
     // ===============================================================
-    // 🌟 NẾU ĐANG LÀ THI THẬT: TẮT ĐIỂM SỐ, CHỈ BÁO NỘP / THU BÀI
+    // 🌟 NẾU ĐANG LÀ THI THẬT: CHUẨN "SUPER APP TRÀN VIỀN" (FULL 100dvh)
     // ===============================================================
     if (window.is_study_mode === false) {
-        let isForced = Boolean(window.is_force_submitting || window.last_submit_reason);
-        let borderColor = isForced ? '#f59e0b' : '#10b981';
-        let iconHtml = isForced 
-            ? '<i class="bi bi-alarm-fill text-warning" style="font-size: 5rem; text-shadow: 0 0 20px rgba(245, 158, 11, 0.5);"></i>'
-            : '<i class="bi bi-check-circle-fill text-success" style="font-size: 5rem; text-shadow: 0 0 20px rgba(16, 185, 129, 0.5);"></i>';
-        
-        let titleText = isForced ? 'HỆ THỐNG ĐÃ THU BÀI THI' : 'ĐÃ NỘP BÀI THÀNH CÔNG';
+        let capturedIsForced = Boolean(window.is_force_submitting || window.last_submit_reason);
+        let capturedReasonText = window.last_submit_reason || "";
+        window._captured_force_flag = capturedIsForced;
 
         let overlayHtml = `
-        <div id="${overlayId}" class="animate__animated animate__fadeIn" style="position: fixed; inset: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 999999; display: flex; align-items: center; justify-content: center; overflow: hidden; margin: 0; padding: 0;">
-            <div class="text-center animate__animated animate__zoomIn p-4 position-relative" style="background: rgba(30, 41, 59, 0.95); border: 1px solid ${borderColor}; border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5); width: 92%; max-width: 400px;">
-                <div class="mb-3">${iconHtml}</div>
-                <h5 class="fw-bold text-white mb-2 text-uppercase" style="letter-spacing: 1px;">${titleText}</h5>
-                <p class="text-white-50 mb-4" style="font-size: 0.9rem;">Hệ thống đã ghi nhận bài làm của bạn.<br>Giảng viên sẽ kiểm tra lại trên hệ thống và công bố điểm sau.</p>
-                <button class="btn w-100 fw-bold py-3 shadow" style="background: ${borderColor}; color: white; border-radius: 12px; font-size: 0.95rem;" onclick="exit_quiz_to_menu()">
-                    QUAY VỀ TRANG CHỦ
+        <div id="${overlayId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column animate__animated animate__fadeInUp" style="background: #212529; z-index: 9999999; height: 100dvh; max-height: 100dvh; overflow: hidden; user-select: none;">
+            
+            <!-- NGUYÊN TẮC 1: HEADER ĐỒNG BỘ SUPER APP TRÀN VIỀN -->
+            <div class="d-flex justify-content-between align-items-center p-3 border-bottom border-secondary bg-dark flex-shrink-0" style="margin-left: -0.5px; margin-right: -0.5px;">
+                <button type="button" id="${overlayId}_back_btn" class="btn btn-sm text-light fw-bold d-flex align-items-center p-1 shadow-none bg-transparent border-0 d-none" onclick="if(typeof window.cleanup_proctoring_and_fullscreen==='function') window.cleanup_proctoring_and_fullscreen(); exit_quiz_to_menu();">
+                    <i class="bi bi-chevron-left fs-4"></i><span class="ms-1">Thoát</span>
                 </button>
+                <div id="${overlayId}_left_spacer" style="width: 65px;"></div>
+                <h6 id="${overlayId}_header_title" class="fw-bold text-white mb-0 text-center flex-grow-1 text-truncate text-uppercase" style="font-size: 1.05rem; letter-spacing: 0.5px;">
+                    ĐANG ĐỒNG BỘ BÀI NỘP
+                </h6>
+                <div style="width: 65px;"></div>
+            </div>
+
+            <!-- NGUYÊN TẮC 2: BODY TỰ CUỘN CĂN GIỮA MÀN HÌNH -->
+            <div class="flex-grow-1 overflow-auto d-flex flex-column justify-content-center align-items-center p-3" style="background: transparent; min-height: 0;">
+                <div id="${overlayId}_box" class="mx-auto w-100 text-center" style="max-width: 480px;">
+                    <div class="mb-3"><div class="spinner-border text-info" style="width: 4rem; height: 4rem; border-width: 5px;"></div></div>
+                    <h5 class="fw-bold text-info mb-3 text-uppercase" style="letter-spacing: 1px;">ĐANG GỬI KẾT QUẢ LÊN MÁY CHỦ...</h5>
+                    <div class="p-3 rounded-3 text-start" style="background: #1a1d20; border: 1px solid #2b3035;">
+                        <div class="text-warning fw-bold text-center" style="font-size: 0.9rem;">
+                            ⚠️ Vui lòng giữ nguyên màn hình 2 giây để máy chủ ghi nhận điểm số (Không tắt trình duyệt lúc này)!
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NGUYÊN TẮC 3: FOOTER NEO ĐÁY TRÀN VIỀN 100% -->
+            <div id="${overlayId}_footer" class="border-top border-secondary bg-dark flex-shrink-0 d-flex w-100 mt-auto d-none" style="margin-left: -0.5px; margin-right: -0.5px;">
             </div>
         </div>`;
+
         document.body.insertAdjacentHTML('beforeend', overlayHtml);
         let submitBtn = document.getElementById('submit_btn'); if (submitBtn) submitBtn.style.display = 'none';
-        
-        // 🌟 BẢN VÁ LỖI CẮT ĐỒNG HỒ CHÍNH XÁC CHO THI THẬT
-        if (typeof clearInterval === 'function' && window.timer_interval) clearInterval(window.timer_interval);
-        
-        return; // ⛔ THOÁT HÀM: Không render bảng điểm phía dưới nữa
+
+        if (typeof window.send_result_to_server === 'function') {
+            window.send_result_to_server(correct, total, capturedIsForced).then((syncOk) => {
+                // Ngắt ngay mọi cảnh báo vi phạm, cảm biến & thoát Full-screen ngay khi đã gửi điểm xong
+                if (typeof window.cleanup_proctoring_and_fullscreen === 'function') {
+                    window.cleanup_proctoring_and_fullscreen();
+                }
+
+                let box = document.getElementById(overlayId + '_box');
+                let headerTitle = document.getElementById(overlayId + '_header_title');
+                let backBtn = document.getElementById(overlayId + '_back_btn');
+                let leftSpacer = document.getElementById(overlayId + '_left_spacer');
+                let footerEl = document.getElementById(overlayId + '_footer');
+                if (!box) return;
+
+                if (backBtn) backBtn.classList.remove('d-none');
+                if (leftSpacer) leftSpacer.classList.add('d-none');
+                if (footerEl) footerEl.classList.remove('d-none');
+
+                let iconHtml = capturedIsForced 
+                    ? '<i class="bi bi-alarm-fill text-warning" style="font-size: 4.8rem; filter: drop-shadow(0 0 18px rgba(245, 158, 11, 0.45));"></i>'
+                    : '<i class="bi bi-check-circle-fill text-success" style="font-size: 4.8rem; filter: drop-shadow(0 0 18px rgba(16, 185, 129, 0.45));"></i>';
+                let titleText = capturedIsForced ? 'HỆ THỐNG ĐÃ THU BÀI THI' : 'ĐÃ NỘP BÀI THÀNH CÔNG';
+
+                if (syncOk !== false) {
+                    if (headerTitle) headerTitle.innerText = capturedIsForced ? 'THÔNG BÁO THU BÀI' : 'HOÀN TẤT NỘP BÀI';
+                    let reasonBlock = capturedReasonText ? `
+                        <div class="d-flex align-items-start gap-2 mb-2 pb-2 border-bottom border-secondary border-opacity-25">
+                            <i class="bi bi-info-circle-fill text-warning mt-1"></i>
+                            <div>
+                                <div class="text-white-50 small">Lý do kết thúc ca thi:</div>
+                                <div class="fw-bold text-warning" style="font-size: 0.95rem;">${capturedReasonText}</div>
+                            </div>
+                        </div>` : '';
+
+                    box.innerHTML = `
+                        <div class="mb-3">${iconHtml}</div>
+                        <h4 class="fw-bold text-white mb-3 text-uppercase" style="letter-spacing: 0.5px;">${titleText}</h4>
+                        <div class="p-3 rounded-3 mb-3 text-start" style="background: #1a1d20; border: 1px solid #2b3035;">
+                            ${reasonBlock}
+                            <div class="d-flex align-items-start gap-2">
+                                <i class="bi bi-shield-check text-success mt-1"></i>
+                                <div class="text-white-50" style="font-size: 0.9rem; line-height: 1.5;">
+                                    Hệ thống máy chủ đã ghi nhận bài làm của bạn an toàn 100%. Giảng viên sẽ công bố điểm sau.
+                                </div>
+                            </div>
+                        </div>`;
+
+                    if (footerEl) {
+                        footerEl.innerHTML = `
+                        <button type="button" class="btn fw-bold py-3 flex-grow-1 d-flex justify-content-center align-items-center text-info bg-transparent border-0" style="border-radius: 0; font-size: 1rem;" onclick="if(typeof window.cleanup_proctoring_and_fullscreen==='function') window.cleanup_proctoring_and_fullscreen(); exit_quiz_to_menu();">
+                            <i class="bi bi-house-door-fill fs-5 me-2"></i><span>QUAY VỀ TRANG CHỦ</span>
+                        </button>`;
+                    }
+                } else {
+                    if (headerTitle) headerTitle.innerText = 'CẢNH BÁO KẾT NỐI';
+                    box.innerHTML = `
+                        <div class="mb-3"><i class="bi bi-wifi-off text-danger" style="font-size: 4.5rem;"></i></div>
+                        <h4 class="fw-bold text-danger mb-3 text-uppercase">MẠNG YẾU - CHƯA GỬI ĐƯỢC BÀI!</h4>
+                        <div class="p-3 rounded-3 mb-3 text-start" style="background: #1a1d20; border: 1px solid #2b3035;">
+                            <div class="text-white-50 mb-2" style="font-size: 0.9rem;">Kết nối mạng trên thiết bị của bạn bị gián đoạn nên điểm chưa lên được máy chủ.</div>
+                            <div class="text-warning fw-bold" style="font-size: 0.9rem;">👉 Hãy kiểm tra lại WiFi/4G và bấm nút Gửi lại ở thanh dưới đáy màn hình!</div>
+                        </div>`;
+
+                    if (footerEl) {
+                        footerEl.innerHTML = `
+                        <button type="button" class="btn fw-bold py-3 flex-grow-1 d-flex justify-content-center align-items-center text-white-50 bg-transparent border-0 border-end border-secondary" style="border-radius: 0;" onclick="if(typeof window.cleanup_proctoring_and_fullscreen==='function') window.cleanup_proctoring_and_fullscreen(); exit_quiz_to_menu();">
+                            <i class="bi bi-hdd-fill fs-5 me-2"></i><span>LƯU MÁY & THOÁT</span>
+                        </button>
+                        <button type="button" class="btn fw-bold py-3 flex-grow-1 d-flex justify-content-center align-items-center text-warning bg-transparent border-0" style="border-radius: 0;" onclick="window.retry_sync_exam_result()">
+                            <i class="bi bi-cloud-arrow-up-fill fs-5 me-2"></i><span>GỬI LẠI BÀI NỘP</span>
+                        </button>`;
+                    }
+                }
+            });
+        }
+        return; // ⛔ THOÁT HÀM
     }
 
+    // Nếu là Ôn tập tự do: Gửi điểm như cũ
+    if (typeof send_result_to_server === 'function') send_result_to_server(correct, total, false);
+
     // ===============================================================
-    // 🌟 NẾU LÀ ÔN TẬP: BÁO ĐIỂM VÀ CÚP CHI TIẾT NHƯ CŨ
+    // 🌟 NẾU LÀ ÔN TẬP: CHUẨN "SUPER APP TRÀN VIỀN" (FULL 100dvh)
     // ===============================================================
     let trophyIcon = score10 >= 8 
-        ? '<i class="bi bi-trophy-fill text-warning" style="font-size: 4rem; text-shadow: 0 0 20px rgba(255,193,7,0.6);"></i>' 
-        : '<i class="bi bi-star-half text-info" style="font-size: 4rem; text-shadow: 0 0 20px rgba(14,165,233,0.6);"></i>';
+        ? '<i class="bi bi-trophy-fill text-warning" style="font-size: 4.5rem; filter: drop-shadow(0 0 18px rgba(255,193,7,0.5));"></i>' 
+        : '<i class="bi bi-star-half text-info" style="font-size: 4.5rem; filter: drop-shadow(0 0 18px rgba(14,165,233,0.5));"></i>';
 
     let phoneZalo = "0905106848"; 
     let stdName = window.current_student_name || window.current_student_id || "BẠN";
     let smsText = encodeURIComponent(`📝 BÁO CÁO NỘP BÀI:\n👤 ${stdName.split(' ').pop().toUpperCase()}\n📚 Bài: ${window.selected_lessons_text}\n🎯 Điểm: ${score10}/10 (Đúng ${correct}/${total})\n👉 Ba kiểm tra Gmail để xem chi tiết nhé!`);
 
     let overlayHtml = `
-    <div id="${overlayId}" class="animate__animated animate__fadeIn" style="position: fixed; inset: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 999999; display: flex; align-items: center; justify-content: center;  overflow: hidden; margin: 0; padding: 0;">
-        <div class="text-center animate__animated animate__zoomIn p-4 position-relative" style="background: rgba(30, 41, 59, 0.95); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 24px; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8); width: 92%; max-width: 360px; max-height: 95vh; overflow-y: auto;">
-            <button class="btn-close btn-close-white position-absolute" style="top: 20px; left: 20px; z-index: 100; opacity: 0.8; transition: 0.3s;" onclick="exit_quiz_to_menu()"></button>
-            <div class="mb-2 mt-2">${trophyIcon}</div>
-            <h5 class="fw-bold text-white mb-1 text-uppercase" style="letter-spacing: 1px;">HOÀN THÀNH!</h5>
-            
-            <div class="d-flex justify-content-center gap-3 mb-4 mt-3">
-                <div class="p-3 d-flex flex-column justify-content-center shadow-sm" style="background: rgba(255,255,255,0.05); border-radius: 16px; min-width: 100px; border: 1px solid rgba(255,255,255,0.1);">
-                    <div style="font-size: 2.5rem; font-weight: 900; color: #4ade80; line-height: 1; text-shadow: 0 0 15px rgba(74,222,128,0.3);">${score10}</div>
-                    <div class="text-white-50 mt-1 fw-bold" style="font-size: 0.7rem; text-transform: uppercase;">Điểm số</div>
-                </div>
-                <div class="d-flex flex-column gap-2 justify-content-center flex-grow-1">
-                    <div class="px-3 py-2 d-flex align-items-center justify-content-between shadow-sm" style="background: rgba(74, 222, 128, 0.1); border-radius: 12px; border: 1px solid rgba(74, 222, 128, 0.2);">
-                        <span style="color: #4ade80; font-size: 0.8rem;"><i class="bi bi-check-circle-fill me-1"></i> Đúng</span>
-                        <strong style="color: #4ade80; font-size: 1.1rem;">${correct}</strong>
-                    </div>
-                    <div class="px-3 py-2 d-flex align-items-center justify-content-between shadow-sm" style="background: rgba(248, 113, 113, 0.1); border-radius: 12px; border: 1px solid rgba(248, 113, 113, 0.2);">
-                        <span style="color: #f87171; font-size: 0.8rem;"><i class="bi bi-x-circle-fill me-1"></i> Sai</span>
-                        <strong style="color: #f87171; font-size: 1.1rem;">${wrong_count}</strong>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="d-flex flex-column gap-2">
-                <button class="btn w-100 fw-bold py-2" onclick="redo_entire_quiz()" style="border-radius: 12px; font-size: 0.85rem; background: linear-gradient(135deg, rgba(14,165,233,0.8), rgba(37,99,235,0.8)); border: 1px solid rgba(14,165,233,0.5); color: #fff;">
-                    <i class="bi bi-arrow-repeat me-2"></i> LÀM LẠI TOÀN BÀI
-                </button>
-                ${wrong_count > 0 ? `
-                <button class="btn w-100 fw-bold py-2" onclick="redo_wrong_questions()" style="background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.3); color: #f87171; border-radius: 12px; font-size: 0.85rem;">
-                    <i class="bi bi-x-circle me-2"></i> CHỈ LÀM LẠI ${wrong_count} CÂU SAI
-                </button>` : ''}
-                
-                <button class="btn w-100 fw-bold py-2 mt-1 d-flex align-items-center justify-content-center gap-2 shadow" 
-                        style="background: #34C759; color: white; border-radius: 12px; font-size: 0.85rem;" 
-                        onclick="window.send_imessage_receipt('${smsText}', '${phoneZalo}')">
-                    <i class="bi bi-chat-text-fill fs-5"></i> BÁO ĐIỂM QUA iMESSAGE
-                </button>
+    <div id="${overlayId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column animate__animated animate__fadeInUp" style="background: #212529; z-index: 999999; height: 100dvh; max-height: 100dvh; overflow: hidden;">
+        
+        <!-- HEADER ĐỒNG BỘ SUPER APP TRÀN VIỀN -->
+        <div class="d-flex justify-content-between align-items-center p-3 border-bottom border-secondary bg-dark flex-shrink-0" style="margin-left: -0.5px; margin-right: -0.5px;">
+            <button type="button" class="btn btn-sm text-light fw-bold d-flex align-items-center p-1 shadow-none bg-transparent border-0" onclick="exit_quiz_to_menu()">
+                <i class="bi bi-chevron-left fs-4"></i><span class="ms-1">Thoát</span>
+            </button>
+            <h6 class="fw-bold text-white mb-0 text-center flex-grow-1 text-truncate text-uppercase" style="font-size: 1.05rem; letter-spacing: 0.5px;">
+                KẾT QUẢ ÔN TẬP
+            </h6>
+            <div style="width: 65px;"></div>
+        </div>
 
-                <button class="btn w-100 fw-bold py-2 mt-1" onclick="reveal_all_answers()" style="border-radius: 12px; font-size: 0.85rem; background: transparent; color: rgba(255,255,255,0.8); border: 1px dashed rgba(255,255,255,0.3);">
-                    <i class="bi bi-search me-2"></i> XEM ĐÁP ÁN
-                </button>
+        <!-- BODY TỰ CUỘN CĂN GIỮA -->
+        <div class="flex-grow-1 overflow-auto d-flex flex-column justify-content-center align-items-center p-3" style="background: transparent; min-height: 0;">
+            <div class="mx-auto w-100 text-center" style="max-width: 440px;">
+                <div class="mb-2">${trophyIcon}</div>
+                <h5 class="fw-bold text-white mb-3 text-uppercase" style="letter-spacing: 1px;">HOÀN THÀNH BÀI HỌC!</h5>
+                
+                <div class="d-flex justify-content-center gap-3 mb-3">
+                    <div class="p-3 d-flex flex-column justify-content-center shadow-sm" style="background: #1a1d20; border-radius: 16px; min-width: 115px; border: 1px solid #2b3035;">
+                        <div style="font-size: 2.6rem; font-weight: 900; color: #4ade80; line-height: 1;">${score10}</div>
+                        <div class="text-white-50 mt-1 fw-bold" style="font-size: 0.72rem; text-transform: uppercase;">Điểm số</div>
+                    </div>
+                    <div class="d-flex flex-column gap-2 justify-content-center flex-grow-1">
+                        <div class="px-3 py-2 d-flex align-items-center justify-content-between shadow-sm" style="background: #1a1d20; border-radius: 12px; border: 1px solid rgba(74, 222, 128, 0.3);">
+                            <span style="color: #4ade80; font-size: 0.85rem;"><i class="bi bi-check-circle-fill me-1"></i> Câu Đúng</span>
+                            <strong style="color: #4ade80; font-size: 1.15rem;">${correct}</strong>
+                        </div>
+                        <div class="px-3 py-2 d-flex align-items-center justify-content-between shadow-sm" style="background: #1a1d20; border-radius: 12px; border: 1px solid rgba(248, 113, 113, 0.3);">
+                            <span style="color: #f87171; font-size: 0.85rem;"><i class="bi bi-x-circle-fill me-1"></i> Câu Sai</span>
+                            <strong style="color: #f87171; font-size: 1.15rem;">${wrong_count}</strong>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="d-flex flex-column gap-2">
+                    ${wrong_count > 0 ? `
+                    <button class="btn w-100 fw-bold py-2" onclick="redo_wrong_questions()" style="background: #1a1d20; border: 1px solid rgba(239, 68, 68, 0.4); color: #f87171; border-radius: 12px; font-size: 0.9rem; height: 46px;">
+                        <i class="bi bi-x-circle me-2"></i> CHỈ LÀM LẠI ${wrong_count} CÂU SAI
+                    </button>` : ''}
+                    
+                    <button class="btn w-100 fw-bold py-2 d-flex align-items-center justify-content-center gap-2 shadow-sm" 
+                            style="background: #34C759; color: white; border-radius: 12px; font-size: 0.9rem; height: 46px;" 
+                            onclick="window.send_imessage_receipt('${smsText}', '${phoneZalo}')">
+                        <i class="bi bi-chat-text-fill fs-5"></i> BÁO ĐIỂM QUA iMESSAGE
+                    </button>
+                </div>
             </div>
+        </div>
+
+        <!-- FOOTER NEO ĐÁY TRÀN VIỀN -->
+        <div class="border-top border-secondary bg-dark flex-shrink-0 d-flex w-100 mt-auto" style="margin-left: -0.5px; margin-right: -0.5px;">
+            <button type="button" class="btn fw-bold py-3 flex-grow-1 d-flex justify-content-center align-items-center text-warning bg-transparent border-0 border-end border-secondary" style="border-radius: 0;" onclick="reveal_all_answers()">
+                <i class="bi bi-search fs-5 me-2"></i><span>XEM ĐÁP ÁN</span>
+            </button>
+            <button type="button" class="btn fw-bold py-3 flex-grow-1 d-flex justify-content-center align-items-center text-info bg-transparent border-0" style="border-radius: 0;" onclick="redo_entire_quiz()">
+                <i class="bi bi-arrow-repeat fs-5 me-2"></i><span>LÀM LẠI TOÀN BÀI</span>
+            </button>
         </div>
     </div>`;
 
@@ -1197,15 +1442,20 @@ function submit_final() {
     });
 }
 
+// Hàm bấm nút Gửi lại khi mạng yếu
+window.retry_sync_exam_result = function(correct, total) {
+    calculate_and_show_result();
+};
+
 // =========================================================================
-// 🏆 ĐỘNG CƠ LƯU ĐIỂM SUPABASE V2
+// 🏆 ĐỘNG CƠ LƯU ĐIỂM SUPABASE V2 (CHỐNG LỆCH HOA/THƯỜNG & TỰ ĐỘNG THỬ LẠI 3 LẦN)
 // =========================================================================
-window.send_result_to_server = async function(correct_count, total_count) {
+window.send_result_to_server = async function(correct_count, total_count, forcedFlag = null) {
     if (typeof window.finalize_question_time === 'function') {
         window.finalize_question_time();
     }
 
-    const studentId = window.current_student_id || "Guest";
+    const studentId = String(window.current_student_id || "Guest").trim();
     let devId = localStorage.getItem('mcq_device_id') || ('DEV_' + Math.floor(Math.random()*1000000));
     localStorage.setItem('mcq_device_id', devId);
 
@@ -1215,38 +1465,80 @@ window.send_result_to_server = async function(correct_count, total_count) {
     // Phân luồng: Thi thật (Thi Online) hay Ôn tập tự do
     let is_exam = (window.is_study_mode === false && window.proctoring_state && window.proctoring_state.exam_code);
 
-   if (is_exam) {
-        // Phân biệt trạng thái nộp chủ động hay bị hệ thống thu bài
-        let isForced = Boolean(window.is_force_submitting || window.last_submit_reason);
+    if (is_exam) {
+        window._is_exam_submitting_or_done = true;
+        let isForced = (forcedFlag !== null) ? Boolean(forcedFlag) : Boolean(window._captured_force_flag || window.is_force_submitting || window.last_submit_reason);
         let submitLabel = isForced ? `Đã thu bài: ${score10}đ` : `Đã nộp: ${score10}đ`;
+        let examCode = window.proctoring_state.exam_code;
 
-        // === LƯU VÀO BẢNG exam_results (Cập nhật điểm thi thật) ===
         let payload = {
-            exam_code: window.proctoring_state.exam_code,
+            exam_code: examCode,
             student_id: studentId,
             score: score10,
             is_submitted: true,
-            client_status: submitLabel, // 🌟 Lưu rõ "Đã nộp: Xđ" hoặc "Đã thu bài: Xđ"
+            progress: 100,
+            client_status: submitLabel,
             submitted_at: new Date().toISOString()
         };
 
-        try {
-            const clientDb = typeof db !== 'undefined' ? db : window._supabase;
-            const { error } = await clientDb.from('exam_results')
-                .upsert(payload, { onConflict: 'exam_code,student_id' });
-            
-            if (error) throw error;
-            localStorage.setItem('submitted_' + payload.exam_code + '_' + studentId, 'true');
-            console.log("✅ Đã cập nhật điểm thi Online lên Supabase!");
-        } catch (err) {
-            console.error("Lỗi lưu điểm thi Online:", err.message);
-            // Đóng dấu đã nộp ở máy cục bộ để chặn thi lại và cất vào kho chờ có mạng nộp bù
-            localStorage.setItem('submitted_' + payload.exam_code + '_' + studentId, 'true');
-            if (typeof window.save_exam_offline_vault === 'function') {
-                window.save_exam_offline_vault(payload.exam_code, studentId, payload);
-            } else if (typeof window.show_toast === 'function') {
-                window.show_toast("⚠️ Lỗi mạng, chưa thể gửi điểm lên hệ thống!", true);
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        let successSync = false;
+        let lastErrText = "";
+
+        // 🌟 THỬ TỐI ĐA 3 LẦN LIÊN TIẾP (Chống rớt gói tin 4G chập chờn)
+        for (let attempt = 1; attempt <= 3; attempt++) {
+            try {
+                // Bước A: Tìm dòng hiện có bằng .ilike để bắt trúng cả mã IN HOA lẫn chữ thường!
+                const { data: existingRows, error: selErr } = await clientDb
+                    .from('exam_results')
+                    .select('student_id')
+                    .eq('exam_code', examCode)
+                    .ilike('student_id', studentId);
+
+                if (selErr) throw selErr;
+
+                if (existingRows && existingRows.length > 0) {
+                    // Cập nhật trực tiếp vào TẤT CẢ các dòng khớp mã SV đó (tránh tạo 2 dòng HOA/thường lệch nhau)
+                    const { error: updErr } = await clientDb
+                        .from('exam_results')
+                        .update({
+                            score: score10,
+                            is_submitted: true,
+                            progress: 100,
+                            client_status: submitLabel,
+                            submitted_at: payload.submitted_at
+                        })
+                        .eq('exam_code', examCode)
+                        .ilike('student_id', studentId);
+                    if (updErr) throw updErr;
+                } else {
+                    // Nếu chưa có dòng nào thì mới Insert/Upsert
+                    const { error: insErr } = await clientDb
+                        .from('exam_results')
+                        .upsert(payload, { onConflict: 'exam_code,student_id' });
+                    if (insErr) throw insErr;
+                }
+
+                successSync = true;
+                break; // Thành công -> Thoát vòng lặp
+            } catch (err) {
+                lastErrText = err.message || "Lỗi kết nối";
+                console.warn(`[Lần ${attempt}/3] Lỗi gửi điểm thi Online:`, lastErrText);
+                await new Promise(r => setTimeout(r, 800)); // Nghỉ 0.8s rồi thử lại
             }
+        }
+
+        localStorage.setItem('submitted_' + examCode + '_' + studentId, 'true');
+
+        if (successSync) {
+            console.log("✅ Đã cập nhật điểm thi Online lên Supabase thành công 100%!");
+            return true;
+        } else {
+            // Lưu vào Két sắt Offline để tự động nộp bù khi có mạng lại
+            if (typeof window.save_exam_offline_vault === 'function') {
+                window.save_exam_offline_vault(examCode, studentId, payload);
+            }
+            return false;
         }
 
     } else {
@@ -1579,43 +1871,57 @@ window.init_question_time_tracker = function() {
     };
 };
 
-// 2. Cửa sổ Báo cáo câu sai (Gắn cờ)
+// 2. Cửa sổ Báo cáo câu sai (Gắn cờ - Chuẩn Super App Tràn Viền)
 window.open_report_modal = function(qIndex) {
     let q = window.questions[qIndex];
     let modalId = 'report_question_modal';
     let existing = document.getElementById(modalId);
     if (existing) existing.remove();
 
-    let qPreview = (q.q || q.vi || "Nội dung câu hỏi").substring(0, 80) + "...";
+    let qPreview = (q.q || q.vi || "Nội dung câu hỏi").substring(0, 120) + "...";
 
     let html = `
-    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex align-items-center justify-content-center animate__animated animate__fadeIn" style="background: rgba(0,0,0,0.9); z-index: 99999;  padding: 15px;">
-        <div class="glass-panel p-4 shadow-lg d-flex flex-column w-100 animate__animated animate__zoomIn" style="max-width: 500px; border-radius: 20px; background: #1a1a1a !important; border: 1px solid rgba(239, 68, 68, 0.5);">
-            
-            <div class="d-flex justify-content-between align-items-center mb-3 pb-2 border-bottom" style="border-color: #2a2a2a !important;">
-                <h5 class="fw-bold text-danger mb-0"><i class="bi bi-flag-fill me-2"></i> BÁO LỖI CÂU ${qIndex + 1}</h5>
-                <button class="btn-close btn-close-white" onclick="document.getElementById('${modalId}').remove()"></button>
+    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column animate__animated animate__fadeInUp" style="background: #212529; z-index: 999999; height: 100dvh; max-height: 100dvh; overflow: hidden;">
+        
+        <!-- HEADER ĐỒNG BỘ SUPER APP TRÀN VIỀN -->
+        <div class="d-flex justify-content-between align-items-center p-3 border-bottom border-secondary bg-dark flex-shrink-0" style="margin-left: -0.5px; margin-right: -0.5px;">
+            <button type="button" class="btn btn-sm text-light fw-bold d-flex align-items-center p-1 shadow-none bg-transparent border-0" onclick="document.getElementById('${modalId}').remove()">
+                <i class="bi bi-chevron-left fs-4"></i><span class="ms-1">Thoát</span>
+            </button>
+            <h6 class="fw-bold text-danger mb-0 text-center flex-grow-1 text-truncate text-uppercase" style="font-size: 1.05rem; letter-spacing: 0.5px;">
+                <i class="bi bi-flag-fill me-1"></i> BÁO LỖI CÂU ${qIndex + 1}
+            </h6>
+            <div style="width: 65px;"></div>
+        </div>
+
+        <!-- BODY TỰ CUỘN CĂN GIỮA -->
+        <div class="flex-grow-1 overflow-auto d-flex flex-column justify-content-center p-3" style="background: transparent; min-height: 0;">
+            <div class="mx-auto w-100" style="max-width: 520px;">
+                <div class="p-3 mb-3 rounded-3" style="background: #1a1d20; border: 1px solid #2b3035; font-size: 0.9rem; font-style: italic; color: rgba(255,255,255,0.8);">
+                    "${qPreview}"
+                </div>
+                
+                <label class="text-white-50 fw-bold small mb-2 text-uppercase">Phân loại lỗi:</label>
+                <select id="report_type_${qIndex}" class="form-select text-white mb-3 fw-bold" style="background: #1a1d20; border: 1px solid #2b3035; border-radius: 12px; height: 48px;">
+                    <option value="Sai đáp án">Sai đáp án</option>
+                    <option value="Lỗi chính tả/Đề mờ">Lỗi chính tả / Đề mờ</option>
+                    <option value="Lỗi hình ảnh/Media">Lỗi hình ảnh / Video</option>
+                    <option value="Khác">Lỗi khác</option>
+                </select>
+                
+                <label class="text-white-50 fw-bold small mb-2 text-uppercase">Mô tả chi tiết (Tùy chọn):</label>
+                <textarea id="report_note_${qIndex}" class="form-control text-white mb-2 custom-scrollbar" rows="4" placeholder="Ví dụ: Theo giáo trình thì đáp án đúng phải là B..." style="background: #1a1d20; border: 1px solid #2b3035; border-radius: 12px; padding: 12px;"></textarea>
             </div>
-            
-            <div class="p-2 mb-3 rounded" style="background: rgba(255,255,255,0.05); font-size: 0.85rem; font-style: italic; color: rgba(255,255,255,0.7);">
-                "${qPreview}"
-            </div>
-            
-            <label class="text-white-50 fw-bold small mb-2">Phân loại lỗi:</label>
-            <select id="report_type_${qIndex}" class="form-select bg-dark text-white mb-3" style="border: 1px solid rgba(255,255,255,0.2);">
-                <option value="Sai đáp án">Sai đáp án</option>
-                <option value="Lỗi chính tả/Đề mờ">Lỗi chính tả / Đề mờ</option>
-                <option value="Lỗi hình ảnh/Media">Lỗi hình ảnh / Video</option>
-                <option value="Khác">Lỗi khác</option>
-            </select>
-            
-            <label class="text-white-50 fw-bold small mb-2">Mô tả chi tiết (Tùy chọn):</label>
-            <textarea id="report_note_${qIndex}" class="form-control bg-dark text-white mb-4 custom-scrollbar" rows="3" placeholder="Ví dụ: Theo sách giáo khoa thì đáp án phải là B..." style="border: 1px solid rgba(255,255,255,0.2);"></textarea>
-            
-            <div class="d-flex justify-content-end gap-2">
-                <button class="btn btn-outline-light px-4 rounded-pill fw-bold" onclick="document.getElementById('${modalId}').remove()">HỦY</button>
-                <button class="btn btn-danger px-4 rounded-pill fw-bold shadow-sm" onclick="window.submit_question_report(${qIndex})"><i class="bi bi-send-fill me-1"></i> GỬI BÁO CÁO</button>
-            </div>
+        </div>
+
+        <!-- FOOTER NEO ĐÁY TRÀN VIỀN -->
+        <div class="border-top border-secondary bg-dark flex-shrink-0 d-flex w-100 mt-auto" style="margin-left: -0.5px; margin-right: -0.5px;">
+            <button type="button" class="btn fw-bold py-3 flex-grow-1 d-flex justify-content-center align-items-center text-white-50 bg-transparent border-0 border-end border-secondary" style="border-radius: 0;" onclick="document.getElementById('${modalId}').remove()">
+                <i class="bi bi-x-lg fs-5 me-2"></i><span>HỦY BỎ</span>
+            </button>
+            <button type="button" class="btn btn-danger fw-bold py-3 flex-grow-1 d-flex justify-content-center align-items-center text-danger bg-transparent border-0" style="border-radius: 0;" onclick="window.submit_question_report(${qIndex})">
+                <i class="bi bi-send-fill fs-5 me-2"></i><span>GỬI BÁO CÁO</span>
+            </button>
         </div>
     </div>`;
     

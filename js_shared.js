@@ -2030,172 +2030,616 @@ window.toggle_view_mode = function() {
 
 
 // =========================================================================
-// 📝 ADMIN: TRA CỨU NHẬT KÝ ÔN TẬP TOÀN HỆ THỐNG TỪ SUPABASE
+// 📝 ADMIN: TRUNG TÂM NHẬT KÝ HỆ THỐNG TOÀN DIỆN (CHUẨN SUPER APP TRÀN VIỀN)
+// Hợp nhất Lịch sử Ôn tập (study_logs) + Phòng Thi Online (exam_results)
+// Tích hợp 3 tầng Tab: Phân loại | Theo Ngày (10 ngày) | Theo Lớp
 // =========================================================================
+window.admin_history_filter_tab = 'all';   // 'all' | 'exam' | 'study' | 'alert'
+window.admin_history_date_tab = 'ALL_10';  // 'ALL_10' | '0' (Hôm nay) | '1' (Hôm qua) ... '9'
+window.admin_history_class_tab = 'ALL';    // 'ALL' | Mã lớp
+
 window.open_admin_history_modal = function() {
-    let invKey = 'mcq_inventory_' + (window.current_student_id || 'guest');
-    let inventoryCount = parseInt(localStorage.getItem(invKey)) || 0;
-    let studentNameDisplay = window.current_student_name || window.current_student_id || "Admin";
-    let rankMiniHtml = typeof window.get_user_rank_html === 'function' ? window.get_user_rank_html(true) : '👑';
+    let modalId = 'admin_system_log_modal';
+    let oldModal = document.getElementById(modalId);
+    if (oldModal) oldModal.remove();
 
-    // Xóa cửa sổ popup cũ nếu có
-    let oldModal = document.getElementById('admin_history_modal');
-    if(oldModal) oldModal.remove();
-
-    // Chèn thẳng vào container chính để đè màn hình
-    const container = document.getElementById('dash_subject_cards_container');
-    if(!container) return;
+    window.admin_history_filter_tab = 'all';
+    window.admin_history_date_tab = 'ALL_10';
+    window.admin_history_class_tab = 'ALL';
 
     let html = `
-    <!-- HEADER TÀNG HÌNH CHUẨN ĐỒNG BỘ -->
-    <div class="col-12 px-0 animate__animated animate__fadeIn sticky-top z-3 mb-0" style="top: 0;">
-        <div class="d-flex justify-content-between align-items-center p-3 border-bottom border-secondary bg-dark" style="margin-left: -0.5px; margin-right: -0.5px;">
-            <button class="btn btn-sm text-light fw-bold d-flex align-items-center p-1 shadow-none bg-transparent border-0" onclick="window.render_admin_hub()">
-                <i class="bi bi-chevron-left fs-4"></i><span class="d-none d-md-inline ms-1">Thoát</span>
-            </button>
-            <h6 class="text-white fw-bold mb-0 text-center flex-grow-1 text-truncate px-2 text-uppercase" style="font-size: 1.1rem; letter-spacing: 0.5px;">
-                NHẬT KÝ HỆ THỐNG
-            </h6>
-            <div class="d-flex align-items-center gap-2 flex-shrink-0">
-                <span class="text-white-50 d-none d-sm-block fw-bold ms-2" style="font-size: 0.75rem;">${studentNameDisplay}</span>
-                
-                <!-- Ô Quà không nền, không viền -->
-                <div class="d-flex align-items-center gap-1 stat-card-hover ms-1" title="Túi Đồ" style="cursor: pointer;" onclick="window.toggle_inventory_popover(event)">
-                    <span style="font-size: 1.1rem;">🎁</span>
-                    <span class="text-warning fw-bold" style="font-size: 0.85rem;" id="dashboard_inventory_count">${inventoryCount}</span>
-                </div>
-                <div style="transform: scale(0.85);">${rankMiniHtml}</div>
-            </div>
-        </div>
+    <style>
+        .log-tab-btn {
+            background: #1a1d20;
+            border: 1px solid #2b3035;
+            color: #94a3b8;
+            border-radius: 10px;
+            font-size: 0.76rem;
+            font-weight: 700;
+            padding: 6px 10px;
+            transition: 0.2s;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .log-tab-btn.active {
+            background: rgba(14, 165, 233, 0.15) !important;
+            border-color: #0ea5e9 !important;
+            color: #38bdf8 !important;
+            box-shadow: 0 0 10px rgba(14, 165, 233, 0.2);
+        }
+        .log-date-btn {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid #2b3035;
+            color: #cbd5e1;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 4px 11px;
+            transition: 0.2s;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .log-date-btn.active {
+            background: rgba(16, 185, 129, 0.18) !important;
+            border-color: #10b981 !important;
+            color: #4ade80 !important;
+            font-weight: 700;
+        }
+        .log-class-btn {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid #2b3035;
+            color: #cbd5e1;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            padding: 4px 11px;
+            transition: 0.2s;
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        .log-class-btn.active {
+            background: rgba(245, 158, 11, 0.18) !important;
+            border-color: #f59e0b !important;
+            color: #fbbf24 !important;
+            font-weight: 700;
+        }
+        .log-scroll-strip::-webkit-scrollbar { display: none; }
+        .log-scroll-strip { -ms-overflow-style: none; scrollbar-width: none; }
+        .log-item-card {
+            background: #1a1d20;
+            border: 1px solid #2b3035;
+            border-radius: 12px;
+            transition: 0.2s;
+        }
+        .log-item-card:hover {
+            border-color: rgba(56, 189, 248, 0.4);
+            background: #1e242b;
+        }
+    </style>
+
+    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column animate__animated animate__fadeInUp" style="background: #212529; z-index: 999999; height: 100dvh; max-height: 100dvh; overflow: hidden;">
         
-        <!-- THANH CÔNG CỤ TÌM KIẾM -->
-        <div class="w-100 bg-dark p-2 border-bottom border-secondary d-flex gap-2 align-items-center" style="margin-left: -0.5px; margin-right: -0.5px;">
-            <div class="position-relative flex-grow-1">
-                <i class="bi bi-search position-absolute top-50 translate-middle-y text-white-50" style="left: 12px; font-size: 0.8rem;"></i>
-                <input type="text" id="admin_search_history" class="form-control bg-secondary bg-opacity-10 text-white border-secondary ps-4 w-100" placeholder="Nhập Mã SV hoặc Bài học để lọc..." oninput="window.filter_admin_history(this.value)" style="font-size: 0.85rem; border-radius: 8px;">
-            </div>
-            <button class="btn btn-success fw-bold text-white shadow-sm px-3 flex-shrink-0" style="border-radius: 8px;" onclick="window.fetch_admin_history()"><i class="bi bi-arrow-clockwise"></i></button>
+        <!-- 1. HEADER CHUẨN SUPER APP TRÀN VIỀN -->
+        <div class="d-flex justify-content-between align-items-center p-3 border-bottom border-secondary bg-dark flex-shrink-0" style="margin-left: -0.5px; margin-right: -0.5px;">
+            <button type="button" class="btn btn-sm text-light fw-bold d-flex align-items-center p-1 shadow-none bg-transparent border-0" onclick="document.getElementById('${modalId}').remove()">
+                <i class="bi bi-chevron-left fs-4"></i><span class="ms-1">Thoát</span>
+            </button>
+            <h6 class="fw-bold text-white mb-0 text-center flex-grow-1 text-truncate text-uppercase" style="font-size: 1.05rem; letter-spacing: 0.5px;">
+                NHẬT KÝ HỆ THỐNG (10 NGÀY QUA)
+            </h6>
+            <button type="button" class="btn btn-sm text-info fw-bold p-1 shadow-none bg-transparent border-0 d-flex align-items-center" onclick="window.fetch_admin_history()" title="Làm mới dữ liệu">
+                <i class="bi bi-arrow-clockwise fs-5"></i>
+            </button>
         </div>
-    </div>
-    
-    <!-- DANH SÁCH LỊCH SỬ -->
-    <div id="admin_history_list" class="w-100 p-2 custom-scrollbar" style="max-height: calc(100vh - 120px); overflow-y: auto;">
-        <div class="text-center p-5"><span class="spinner-border text-success"></span><div class="text-success mt-2 small fw-bold">Đang tải nhật ký...</div></div>
+
+        <!-- 2. BỘ LỌC 3 TẦNG TAB (PHÂN LOẠI + THEO NGÀY + THEO LỚP) -->
+        <div class="bg-dark border-bottom border-secondary p-2 flex-shrink-0" style="margin-left: -0.5px; margin-right: -0.5px;">
+            <div class="mx-auto" style="max-width: 950px;">
+                
+                <!-- TẦNG 1: 4 Nút Tab Phân Loại -->
+                <div class="d-flex gap-1 overflow-auto log-scroll-strip pb-1 mb-1">
+                    <button type="button" id="log_tab_all" class="log-tab-btn active flex-grow-1 text-center" onclick="window.switch_admin_history_tab('all')">
+                        🌐 Tất cả (<span id="log_cnt_all">0</span>)
+                    </button>
+                    <button type="button" id="log_tab_exam" class="log-tab-btn flex-grow-1 text-center" onclick="window.switch_admin_history_tab('exam')">
+                        🛡️ Phòng thi (<span id="log_cnt_exam">0</span>)
+                    </button>
+                    <button type="button" id="log_tab_study" class="log-tab-btn flex-grow-1 text-center" onclick="window.switch_admin_history_tab('study')">
+                        📚 Ôn tập (<span id="log_cnt_study">0</span>)
+                    </button>
+                    <button type="button" id="log_tab_alert" class="log-tab-btn flex-grow-1 text-center" onclick="window.switch_admin_history_tab('alert')">
+                        ⚠️ Vi phạm (<span id="log_cnt_alert">0</span>)
+                    </button>
+                </div>
+
+                <!-- TẦNG 2: Thanh Tab Theo Ngày (Hôm nay, Hôm qua, ... trong 10 ngày) -->
+                <div id="admin_date_tabs_strip" class="d-flex align-items-center gap-1 overflow-auto log-scroll-strip py-1 mb-1">
+                </div>
+
+                <!-- TẦNG 3: Thanh Tab Chọn Theo Lớp -->
+                <div id="admin_class_tabs_strip" class="d-flex align-items-center gap-1 overflow-auto log-scroll-strip py-1 mb-2">
+                </div>
+
+                <!-- Ô Tìm Kiếm Nhanh -->
+                <div class="position-relative w-100">
+                    <i class="bi bi-search position-absolute top-50 translate-middle-y text-white-50" style="left: 11px; font-size: 0.82rem;"></i>
+                    <input type="text" id="admin_search_history" class="form-control text-white ps-4 w-100" placeholder="Tìm Mã SV, Họ tên, Lớp, Môn, Bài học, IP..." oninput="window.render_admin_history_list()" style="background: #1a1d20; border: 1px solid #2b3035; font-size: 0.85rem; border-radius: 10px; height: 36px;">
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 3. BODY DANH SÁCH NHẬT KÝ TỰ CUỘN -->
+        <div class="flex-grow-1 overflow-auto custom-scrollbar p-2 p-md-3" style="background: transparent; min-height: 0;">
+            <div id="admin_history_list" class="mx-auto w-100" style="max-width: 950px;">
+                <div class="text-center p-5">
+                    <span class="spinner-border text-info"></span>
+                    <div class="text-info mt-2 small fw-bold">Đang tổng hợp toàn bộ dữ liệu Ôn tập & Thi trong 10 ngày qua...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. FOOTER NEO ĐÁY TRÀN VIỀN -->
+        <div class="border-top border-secondary bg-dark flex-shrink-0 d-flex w-100 mt-auto" style="margin-left: -0.5px; margin-right: -0.5px;">
+            <button type="button" class="btn fw-bold py-3 flex-grow-1 d-flex justify-content-center align-items-center text-white-50 bg-transparent border-0 border-end border-secondary" style="border-radius: 0;" onclick="document.getElementById('${modalId}').remove()">
+                <i class="bi bi-x-lg fs-5 me-2"></i><span>ĐÓNG CỬA SỔ</span>
+            </button>
+            <button type="button" class="btn fw-bold py-3 flex-grow-1 d-flex justify-content-center align-items-center text-success bg-transparent border-0" style="border-radius: 0;" onclick="window.export_admin_history_excel()">
+                <i class="bi bi-file-earmark-excel-fill fs-5 me-2"></i><span>XUẤT EXCEL NHẬT KÝ</span>
+            </button>
+        </div>
+
     </div>`;
-    
-    container.innerHTML = html;
+
+    document.body.insertAdjacentHTML('beforeend', html);
     window.fetch_admin_history();
+};
+
+// Chuyển Tab Phân Loại
+window.switch_admin_history_tab = function(tabName) {
+    window.admin_history_filter_tab = tabName;
+    ['all', 'exam', 'study', 'alert'].forEach(t => {
+        let btn = document.getElementById('log_tab_' + t);
+        if (btn) btn.classList.toggle('active', t === tabName);
+    });
+    window.render_admin_history_list();
+};
+
+// Chuyển Tab Ngày (Hôm nay, Hôm qua, ... 10 ngày)
+window.switch_admin_history_date_tab = function(dayKey) {
+    window.admin_history_date_tab = String(dayKey);
+    document.querySelectorAll('.log-date-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-day') === String(dayKey));
+    });
+    window.render_admin_history_list();
+};
+
+// Chuyển Tab Lớp Học
+window.switch_admin_history_class_tab = function(classCode) {
+    window.admin_history_class_tab = String(classCode);
+    document.querySelectorAll('.log-class-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-class') === String(classCode));
+    });
+    window.render_admin_history_list();
 };
 
 window.fetch_admin_history = async function() {
     let container = document.getElementById('admin_history_list');
-    if(!container) return;
-    container.innerHTML = `<div class="text-center p-4"><span class="spinner-border text-success"></span><div class="text-success mt-2 small fw-bold">Đang tải nhật ký từ Supabase...</div></div>`;
-    
+    if (!container) return;
+    container.innerHTML = `<div class="text-center p-5"><span class="spinner-border text-info"></span><div class="text-info mt-2 small fw-bold">Đang đồng bộ danh bạ Sinh viên, Nhật ký Ôn tập & Phòng thi...</div></div>`;
+
     try {
-        const { data, error } = await db.from('study_logs')
-            .select('*')
-            .order('time', { ascending: false })
-            .limit(200);
-            
-        if (error) throw error;
-        window.admin_full_history = data || [];
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
 
-        // =================================================================
-        // 🌟 BƯỚC THÊM MỚI: TẠO TỪ ĐIỂN DỊCH MÃ SV SANG TÊN SV
-        // =================================================================
+        // Mốc 00:00:00 của Hôm nay và mốc giới hạn 10 ngày gần nhất (Hôm nay + 9 ngày trước = 10 ngày)
+        const now = new Date();
+        const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+        const tenDaysAgoMs = todayStart - (9 * 86400000);
+
+        // 1. Tải song song: Danh bạ Users + Bảng Lớp + Bảng Đề thi (kèm status, auto_open, auto_close) + Lịch sử Ôn tập + Kết quả Thi thật
+        const [usersRes, classesRes, examsRes, studyRes, examResultsRes] = await Promise.all([
+            clientDb.from('users').select('student_id, full_name, class_code, role'),
+            clientDb.from('classes').select('class_code, class_name'),
+            clientDb.from('online_exams').select('exam_code, exam_name, subject_key, status, auto_open, auto_close, created_at'),
+            clientDb.from('study_logs').select('*').limit(1000),
+            clientDb.from('exam_results').select('*').limit(1000)
+        ]);
+
+        // 2. Xây dựng Từ điển Sinh viên & Tập hợp Lớp
         window.admin_student_dict = {};
-        try {
-            // Trường hợp 1: Nếu thầy dùng file TSV/Google Sheets (đã tải sẵn vào biến window.parsed_students)
-            if (typeof window.parsed_students !== 'undefined' && Array.isArray(window.parsed_students)) {
-                window.parsed_students.forEach(s => {
-                    let stId = String(s.id || s.student_id || s.MaSV).toLowerCase();
-                    let stName = s.name || s.full_name || s.HoTen;
-                    if (stId && stName) window.admin_student_dict[stId] = stName;
-                });
-            } else {
-                // Trường hợp 2: Kéo bảng tên từ Supabase (Giả sử bảng tên là 'students')
-                const { data: stData } = await db.from('students').select('student_id, full_name, name, ho_ten');
-                if (stData) {
-                    stData.forEach(s => {
-                        let stId = String(s.student_id).toLowerCase();
-                        let stName = s.full_name || s.name || s.ho_ten;
-                        window.admin_student_dict[stId] = stName;
-                    });
-                }
-            }
-        } catch(err) { console.log("Không tải được từ điển tên:", err); }
-        // =================================================================
+        let classSet = new Set();
+        (classesRes.data || []).forEach(c => {
+            if (c.class_code) classSet.add(String(c.class_code).trim().toUpperCase());
+        });
 
-        window.render_admin_history_list(document.getElementById('admin_search_history').value);
-    } catch(e) {
-        container.innerHTML = `<div class="text-danger text-center p-4 fw-bold">Lỗi tải dữ liệu: ${e.message}</div>`;
+        (usersRes.data || []).forEach(u => {
+            if (!u.student_id) return;
+            let cleanId = String(u.student_id).trim().toLowerCase();
+            let cCode = String(u.class_code || '').trim().toUpperCase();
+            if (cCode) classSet.add(cCode);
+            window.admin_student_dict[cleanId] = {
+                rawId: u.student_id,
+                name: u.full_name || '',
+                classCode: cCode || (u.role && u.role !== 'all' ? u.role.toUpperCase() : '')
+            };
+        });
+
+        // 3. Xây dựng Từ điển Kỳ thi (Kèm trạng thái Đóng/Mở và Ngày mở đề để định vị đúng ngày cho các bài chưa nộp)
+        let examMap = {};
+        (examsRes.data || []).forEach(ex => {
+            let exTimeStr = ex.auto_open || ex.created_at || ex.auto_close || null;
+            let exTs = exTimeStr ? new Date(exTimeStr).getTime() : 0;
+            if (isNaN(exTs)) exTs = 0;
+
+            let st = String(ex.status || '').toUpperCase();
+            let isRoomOpen = st.includes('MỞ') && (!ex.auto_close || new Date(ex.auto_close).getTime() > Date.now());
+
+            examMap[ex.exam_code] = {
+                name: ex.exam_name || ex.exam_code,
+                subject_key: ex.subject_key || '',
+                examTs: exTs,
+                isRoomOpen: isRoomOpen
+            };
+        });
+
+        // Hàm tính số ngày cách hôm nay (Nếu không rõ ngày thì trả về 999 để loại bỏ, KHÔNG gán nhầm vào Hôm nay)
+        const getDayOffset = (ts) => {
+            if (!ts || ts <= 0) return 999;
+            let d = new Date(ts);
+            let itemDayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+            return Math.round((todayStart - itemDayStart) / 86400000);
+        };
+
+        // 4. Chuẩn hóa & Hợp nhất 2 nguồn nhật ký (Chỉ giữ các bản ghi thực sự trong vòng 10 ngày qua)
+        let unifiedLogs = [];
+
+        // A. Nguồn Ôn tập (study_logs)
+        (studyRes.data || []).forEach(row => {
+            let rawTime = row.logout_time || row.time || row.created_at || null;
+            let ts = rawTime ? new Date(rawTime).getTime() : 0;
+            if (isNaN(ts) || ts <= 0) return;
+
+            // Lọc bỏ các bản ghi cũ hơn 10 ngày
+            if (ts < tenDaysAgoMs) return;
+            let dayOffset = getDayOffset(ts);
+            if (dayOffset < 0 || dayOffset > 9) return;
+
+            let sid = String(row.student_id || 'Guest').trim();
+            let uInfo = window.admin_student_dict[sid.toLowerCase()] || { rawId: sid, name: '', classCode: '' };
+            if (uInfo.classCode) classSet.add(uInfo.classCode);
+
+            let subjKey = row.subject_key || row.subject || '';
+            let subjName = (window.subjectConfig && window.subjectConfig[subjKey]) ? window.subjectConfig[subjKey].name : (subjKey || 'Môn học');
+            let lessonStr = row.lesson_name || row.lesson || row.lesson_id || '';
+            if (lessonStr && !String(lessonStr).toLowerCase().startsWith('bài')) lessonStr = 'Bài ' + lessonStr;
+
+            let offense = parseInt(row.offense_count) || 0;
+            let awaySec = parseInt(row.away_time) || 0;
+
+            unifiedLogs.push({
+                logType: 'study',
+                dayOffset: dayOffset,
+                studentId: uInfo.rawId || sid,
+                studentName: uInfo.name,
+                classCode: uInfo.classCode || 'KHÁC',
+                subjectName: subjName,
+                title: lessonStr || 'Ôn tập tự do',
+                score: (row.score !== undefined && row.score !== null) ? parseFloat(row.score) : null,
+                correctInfo: (row.correct !== undefined && row.total) ? `${row.correct}/${row.total} câu` : '',
+                modeLabel: String(row.mode || 'quiz').toUpperCase(),
+                statusBadge: 'Hoàn thành',
+                isAlert: offense > 0,
+                alertText: offense > 0 ? `Rời tab x${offense}${awaySec > 0 ? ` (${awaySec}s)` : ''}` : '',
+                deviceInfo: row.device || '',
+                timestamp: ts,
+                timeDisplay: new Date(ts).toLocaleString('vi-VN'),
+                progress: 100
+            });
+        });
+
+        // B. Nguồn Phòng thi Online (exam_results)
+        (examResultsRes.data || []).forEach(row => {
+            let stRaw = String(row.client_status || '').trim();
+            let prog = Number(row.progress) || 0;
+            // Bỏ qua các dòng chỉ mới cấp quyền Miễn CB mà chưa vào thi thật
+            if (!row.is_submitted && prog === 0 && (!stRaw || stRaw === 'NULL') && row.draft_data && row.draft_data.bypass_sensor === true && !row.draft_data.questions) {
+                return;
+            }
+
+            let exInfo = examMap[row.exam_code] || { name: row.exam_code || 'Đề thi', subject_key: '', examTs: 0, isRoomOpen: false };
+
+            // Tìm thời gian thực tế: Ưu tiên submitted_at -> thời gian lưu nháp trong draft_data -> thời gian mở đề thi (examTs)
+            let draftTime = (row.draft_data && (row.draft_data.updated_at || row.draft_data.saved_at || row.draft_data.timestamp || row.draft_data.time)) || null;
+            let rawTime = row.submitted_at || row.updated_at || row.created_at || draftTime || null;
+            let ts = rawTime ? new Date(rawTime).getTime() : 0;
+            if (isNaN(ts) || ts <= 0) {
+                ts = exInfo.examTs || 0; // Lấy đúng ngày tổ chức kỳ thi đó
+            }
+
+            // Nếu không xác định được ngày hoặc ca thi đã cũ hơn 10 ngày -> Loại bỏ!
+            if (ts <= 0 || ts < tenDaysAgoMs) return;
+            let dayOffset = getDayOffset(ts);
+            if (dayOffset < 0 || dayOffset > 9) return;
+
+            let isSub = Boolean(row.is_submitted);
+            // Chỉ coi là "Đang thi" nếu chưa nộp VÀ phòng thi hiện đang MỞ trong hôm nay (dayOffset === 0)
+            let isLiveDoingNow = (!isSub && exInfo.isRoomOpen && dayOffset === 0);
+
+            let sid = String(row.student_id || 'Guest').trim();
+            let uInfo = window.admin_student_dict[sid.toLowerCase()] || { rawId: sid, name: '', classCode: '' };
+            if (uInfo.classCode) classSet.add(uInfo.classCode);
+
+            let subjName = (exInfo.subject_key && window.subjectConfig && window.subjectConfig[exInfo.subject_key])
+                ? window.subjectConfig[exInfo.subject_key].name
+                : `Mã đề: ${row.exam_code}`;
+
+            let isAbsent = Boolean(row.is_absent) || Number(row.score) === -1;
+            let isLocked = Boolean(row.is_locked);
+            let isForced = stRaw.includes('Đã thu bài');
+
+            let statusText = isSub 
+                ? (isForced ? 'Thu bài' : 'Đã nộp') 
+                : (isLiveDoingNow ? `Đang thi (${prog}%)` : `Chưa nộp (${prog}%)`);
+
+            let alertMessages = [];
+            if (isAbsent) alertMessages.push('Đình chỉ / Vắng');
+            if (isLocked) alertMessages.push('Đang khóa máy');
+            if (isForced) alertMessages.push('Cưỡng chế thu bài');
+            if (!isSub && !isLiveDoingNow) {
+                alertMessages.push(`Chưa nộp bài (${prog}%)`);
+            } else if (isLiveDoingNow) {
+                if (stRaw === 'AWAY') alertMessages.push(`Đang rời màn hình tại ${prog}%`);
+                if (stRaw === 'OFFLINE') alertMessages.push(`Mất kết nối tại ${prog}%`);
+            }
+
+            unifiedLogs.push({
+                logType: 'exam',
+                dayOffset: dayOffset,
+                examCode: row.exam_code,
+                studentId: uInfo.rawId || sid,
+                studentName: uInfo.name,
+                classCode: uInfo.classCode || 'KHÁC',
+                subjectName: subjName,
+                title: exInfo.name,
+                score: (isSub || (row.score !== null && Number(row.score) === -1)) ? parseFloat(row.score) : null,
+                correctInfo: `Tiến độ: ${prog}%`,
+                modeLabel: 'THI ONLINE',
+                statusBadge: statusText,
+                isSubmitted: isSub,
+                isLiveDoing: isLiveDoingNow,
+                isAlert: alertMessages.length > 0,
+                alertText: alertMessages.join(' • '),
+                deviceInfo: '',
+                timestamp: ts,
+                timeDisplay: new Date(ts).toLocaleString('vi-VN'),
+                progress: prog
+            });
+        });
+
+        // 5. Sắp xếp chuẩn theo thời gian thực (Chỉ ưu tiên lên đầu nếu thực sự đang thi Live hôm nay)
+        unifiedLogs.sort((a, b) => {
+            if (a.isLiveDoing && !b.isLiveDoing) return -1;
+            if (!a.isLiveDoing && b.isLiveDoing) return 1;
+            return b.timestamp - a.timestamp;
+        });
+
+        window.admin_full_history = unifiedLogs;
+
+        // 6. VẼ THANH TAB THEO NGÀY (HÔM NAY, HÔM QUA, ... TRONG VÒNG 10 NGÀY)
+        let dateStrip = document.getElementById('admin_date_tabs_strip');
+        if (dateStrip) {
+            let dayCounts = {};
+            unifiedLogs.forEach(item => {
+                dayCounts[item.dayOffset] = (dayCounts[item.dayOffset] || 0) + 1;
+            });
+
+            let dateTabsHtml = `
+            <span class="text-white-50 fw-bold me-1 flex-shrink-0" style="font-size: 0.7rem;"><i class="bi bi-calendar3 text-success me-1"></i>Ngày:</span>
+            <button type="button" data-day="ALL_10" class="log-date-btn ${window.admin_history_date_tab === 'ALL_10' ? 'active' : ''}" onclick="window.switch_admin_history_date_tab('ALL_10')">
+                10 ngày qua (${unifiedLogs.length})
+            </button>`;
+
+            for (let d = 0; d < 10; d++) {
+                let dObj = new Date(todayStart - d * 86400000);
+                let ddmm = `${String(dObj.getDate()).padStart(2, '0')}/${String(dObj.getMonth() + 1).padStart(2, '0')}`;
+                let label = d === 0 ? `Hôm nay (${ddmm})` : (d === 1 ? `Hôm qua (${ddmm})` : `${d} ngày trước (${ddmm})`);
+                let cnt = dayCounts[d] || 0;
+                let activeCls = String(window.admin_history_date_tab) === String(d) ? 'active' : '';
+                dateTabsHtml += `
+                <button type="button" data-day="${d}" class="log-date-btn ${activeCls}" onclick="window.switch_admin_history_date_tab('${d}')">
+                    ${label} <span class="ms-1 opacity-75">(${cnt})</span>
+                </button>`;
+            }
+            dateStrip.innerHTML = dateTabsHtml;
+        }
+
+        // 7. VẼ THANH TAB CHỌN THEO LỚP
+        let classStrip = document.getElementById('admin_class_tabs_strip');
+        if (classStrip) {
+            let classCounts = {};
+            unifiedLogs.forEach(item => {
+                let c = item.classCode || 'KHÁC';
+                classCounts[c] = (classCounts[c] || 0) + 1;
+            });
+
+            let sortedClasses = Array.from(classSet).sort();
+            let classTabsHtml = `
+            <span class="text-white-50 fw-bold me-1 flex-shrink-0" style="font-size: 0.7rem;"><i class="bi bi-people-fill text-warning me-1"></i>Lớp:</span>
+            <button type="button" data-class="ALL" class="log-class-btn ${window.admin_history_class_tab === 'ALL' ? 'active' : ''}" onclick="window.switch_admin_history_class_tab('ALL')">
+                Tất cả Lớp (${unifiedLogs.length})
+            </button>`;
+
+            sortedClasses.forEach(c => {
+                let cnt = classCounts[c] || 0;
+                let activeCls = window.admin_history_class_tab === c ? 'active' : '';
+                classTabsHtml += `
+                <button type="button" data-class="${c}" class="log-class-btn ${activeCls}" onclick="window.switch_admin_history_class_tab('${c}')">
+                    ${c} <span class="ms-1 opacity-75">(${cnt})</span>
+                </button>`;
+            });
+            classStrip.innerHTML = classTabsHtml;
+        }
+
+        window.render_admin_history_list();
+
+    } catch (e) {
+        console.error("Lỗi tải Nhật ký hệ thống:", e);
+        container.innerHTML = `<div class="text-danger text-center p-4 fw-bold">❌ Lỗi tải dữ liệu Nhật ký: ${e.message}</div>`;
     }
 };
 
-window.filter_admin_history = function(val) {
-    window.render_admin_history_list(val);
+window.filter_admin_history = function() {
+    window.render_admin_history_list();
 };
 
-window.render_admin_history_list = function(query) {
+window.render_admin_history_list = function() {
     let container = document.getElementById('admin_history_list');
-    if(!container || !window.admin_full_history) return;
+    if (!container || !window.admin_full_history) return;
 
-    let q = (query || "").toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    
-    let filtered = window.admin_full_history.filter(item => {
-        // 🌟 Bổ sung tên sinh viên vào chuỗi tìm kiếm để gõ tên cũng lọc ra được
-        let rawId = String(item.student_id || "").toLowerCase();
-        let sName = window.admin_student_dict && window.admin_student_dict[rawId] ? window.admin_student_dict[rawId] : "";
-        
-        let matchStr = (rawId + " " + sName + " " + (item.subject_key||"") + " " + (item.lesson_name||"")).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-        return q === "" || matchStr.includes(q);
+    let searchInput = document.getElementById('admin_search_history');
+    let rawQuery = searchInput ? searchInput.value : '';
+    let currentTab = window.admin_history_filter_tab || 'all';
+    let selectedDay = window.admin_history_date_tab || 'ALL_10';
+    let selectedClass = window.admin_history_class_tab || 'ALL';
+
+    const cleanStr = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd');
+    let q = cleanStr(rawQuery);
+
+    // Lọc theo Ngày + Lớp trước để cập nhật bộ đếm trên 4 nút Tab Phân loại sát thực tế
+    let baseByDateAndClass = window.admin_full_history.filter(item => {
+        if (selectedDay !== 'ALL_10' && String(item.dayOffset) !== String(selectedDay)) return false;
+        if (selectedClass !== 'ALL' && item.classCode !== selectedClass) return false;
+        if (q !== '') {
+            let haystack = cleanStr(`${item.studentId} ${item.studentName} ${item.classCode} ${item.subjectName} ${item.title} ${item.alertText} ${item.deviceInfo}`);
+            if (!haystack.includes(q)) return false;
+        }
+        return true;
     });
 
+    let setCnt = (id, val) => { let el = document.getElementById(id); if (el) el.innerText = val; };
+    setCnt('log_cnt_all', baseByDateAndClass.length);
+    setCnt('log_cnt_exam', baseByDateAndClass.filter(x => x.logType === 'exam').length);
+    setCnt('log_cnt_study', baseByDateAndClass.filter(x => x.logType === 'study').length);
+    setCnt('log_cnt_alert', baseByDateAndClass.filter(x => x.isAlert).length);
+
+    // Áp dụng tiếp Tab Phân loại (Tất cả / Phòng thi / Ôn tập / Vi phạm)
+    let filtered = baseByDateAndClass.filter(item => {
+        if (currentTab === 'exam' && item.logType !== 'exam') return false;
+        if (currentTab === 'study' && item.logType !== 'study') return false;
+        if (currentTab === 'alert' && !item.isAlert) return false;
+        return true;
+    });
+
+    window.admin_filtered_history_cache = filtered;
+
     if (filtered.length === 0) {
-        container.innerHTML = `<div class="text-center text-white-50 p-4 mt-3"><i class="bi bi-inbox fs-1 d-block mb-2"></i>Không tìm thấy lịch sử phù hợp.</div>`;
+        container.innerHTML = `
+        <div class="text-center text-white-50 p-5 mt-3" style="background: #1a1d20; border: 1px dashed #2b3035; border-radius: 16px;">
+            <i class="bi bi-inbox fs-1 d-block mb-2 opacity-50"></i>
+            <div class="fw-bold">Không có hoạt động nào khớp với Ngày / Lớp đang chọn.</div>
+        </div>`;
         return;
     }
 
     let html = '';
-    filtered.forEach(item => {
-        let d = new Date(item.time || item.logout_time);
-        let timeStr = isNaN(d.getTime()) ? '' : d.toLocaleString('vi-VN');
-        let score = parseFloat(item.score) || 0;
-        let isPass = score >= 5;
-        let subjName = window.subjectConfig && window.subjectConfig[item.subject_key] ? window.subjectConfig[item.subject_key].name : (item.subject_key || 'Khác');
-        
-        let cheatWarn = (item.offense_count > 0) ? `<span class="badge bg-danger shadow-sm ms-2" style="font-size: 0.6rem;"><i class="bi bi-exclamation-triangle-fill"></i> Rời Tab x${item.offense_count}</span>` : '';
+    filtered.slice(0, 350).forEach(item => {
+        let isExam = item.logType === 'exam';
+        let hasScore = (item.score !== null && !isNaN(item.score));
+        let scoreVal = hasScore ? item.score : 0;
+        let isPass = scoreVal >= 5;
 
-        // =================================================================
-        // 🌟 BƯỚC THÊM MỚI: GHÉP MÃ SV VÀ TÊN SV
-        // =================================================================
-        let rawId = String(item.student_id || 'Không rõ').toLowerCase();
-        let stuName = window.admin_student_dict && window.admin_student_dict[rawId] ? window.admin_student_dict[rawId] : null;
-        let displayIdentity = stuName ? `${item.student_id} - ${stuName}` : item.student_id;
-        // =================================================================
+        let borderColor = isExam ? (item.isAlert ? '#f59e0b' : '#0ea5e9') : (isPass ? '#10b981' : '#ef4444');
+        let typeBadge = isExam
+            ? `<span class="badge bg-info text-dark fw-bold me-1" style="font-size: 0.65rem;"><i class="bi bi-shield-lock-fill"></i> THI THẬT</span>`
+            : `<span class="badge bg-secondary bg-opacity-50 text-light me-1" style="font-size: 0.65rem;"><i class="bi bi-controller"></i> ${item.modeLabel}</span>`;
+
+        let classBadge = item.classCode
+            ? `<span class="badge bg-dark border border-secondary text-warning ms-1" style="font-size: 0.65rem;">${item.classCode}</span>`
+            : '';
+
+        let alertBadge = item.alertText
+            ? `<span class="badge bg-danger text-white ms-1 shadow-sm" style="font-size: 0.65rem;"><i class="bi bi-exclamation-triangle-fill me-1"></i>${item.alertText}</span>`
+            : '';
+
+        let identityStr = item.studentName ? `${item.studentId} - ${item.studentName}` : item.studentId;
+
+        let scoreHtml = '';
+        if (isExam && !item.isSubmitted) {
+            let labelIncomplete = item.isLiveDoing ? 'Đang thi' : 'Chưa nộp';
+            let colorIncomplete = item.isLiveDoing ? 'text-info' : 'text-warning';
+            scoreHtml = `<div class="fw-bold ${colorIncomplete}" style="font-size: 0.95rem;">${labelIncomplete}</div>
+                         <div class="badge bg-warning text-dark" style="font-size: 0.68rem;">Đạt ${item.progress}%</div>`;
+        } else if (scoreVal === -1) {
+            scoreHtml = `<div class="fw-bold text-danger" style="font-size: 1.05rem;">Vắng</div>`;
+        } else if (hasScore) {
+            scoreHtml = `<div class="fw-bold ${isPass ? 'text-success' : 'text-danger'}" style="font-size: 1.25rem; line-height: 1.1;">${scoreVal.toFixed(1)}đ</div>
+                         <div class="text-white-50" style="font-size: 0.68rem;">${item.statusBadge}</div>`;
+        } else {
+            scoreHtml = `<div class="text-white-50 small">--</div>`;
+        }
 
         html += `
-        <div class="p-2 mb-2 rounded shadow-sm d-flex justify-content-between align-items-center stat-card-hover" style="background: rgba(255,255,255,0.05); border-left: 3px solid ${isPass ? '#10b981' : '#ef4444'};">
-            <div style="line-height: 1.4; flex-grow: 1; min-width: 0;">
-                <div class="fw-bold text-warning d-flex align-items-center text-truncate" style="font-size: 0.9rem;">
-                    <i class="bi bi-person-badge me-1"></i>${displayIdentity} ${cheatWarn}
+        <div class="log-item-card p-3 mb-2 d-flex justify-content-between align-items-center gap-2" style="border-left: 4px solid ${borderColor};">
+            <div style="min-width: 0; flex-grow: 1;">
+                <div class="d-flex align-items-center flex-wrap gap-1 mb-1">
+                    <span class="fw-bold text-white" style="font-size: 0.92rem;">
+                        <i class="bi bi-person-badge text-info me-1"></i>${identityStr}
+                    </span>
+                    ${classBadge}
+                    ${alertBadge}
                 </div>
-                <div class="text-white-50 small text-truncate pe-2">
-                    <i class="bi bi-book text-info me-1"></i>${subjName}<b class="text-light"> ${item.lesson_name || ''}</b>
+                <div class="text-white-50 small text-truncate mb-1">
+                    ${typeBadge}
+                    <span class="text-info fw-bold">${item.subjectName}</span>
+                    <span class="mx-1">•</span>
+                    <span class="text-light fw-bold">${item.title}</span>
+                    ${item.correctInfo ? `<span class="text-white-50 ms-1">(${item.correctInfo})</span>` : ''}
                 </div>
-                <div class="text-info" style="font-size: 0.7rem;"><i class="bi bi-clock me-1"></i>${timeStr}</div>
+                <div class="d-flex align-items-center flex-wrap gap-2 text-white-50" style="font-size: 0.72rem;">
+                    <span><i class="bi bi-clock me-1 text-info"></i>${item.timeDisplay}</span>
+                    ${item.deviceInfo ? `<span class="text-truncate" style="max-width: 260px;"><i class="bi bi-hdd-network me-1"></i>${item.deviceInfo}</span>` : ''}
+                </div>
             </div>
-            <div class="text-end flex-shrink-0">
-                <div class="fw-bold ${isPass ? 'text-success' : 'text-danger'}" style="font-size: 1.25rem;">${score.toFixed(1)}đ</div>
-                <div class="badge border border-secondary text-white-50" style="font-size: 0.65rem;">${item.mode || 'quiz'}</div>
+            <div class="text-end flex-shrink-0 ps-2">
+                ${scoreHtml}
             </div>
         </div>`;
     });
-    
+
     container.innerHTML = html;
 };
-// ... Các hàm Admin Login ...
+
+// Xuất toàn bộ Nhật ký đang lọc ra file Excel
+window.export_admin_history_excel = function() {
+    let list = window.admin_filtered_history_cache || window.admin_full_history || [];
+    if (list.length === 0) return window.show_toast("⚠️ Không có dữ liệu nhật ký để xuất!", true);
+    if (typeof XLSX === 'undefined') return window.show_toast("⚠️ Thư viện Excel chưa được nạp!", true);
+
+    let rows = list.map((item, idx) => ({
+        "STT": idx + 1,
+        "Phân loại": item.logType === 'exam' ? "Thi Online" : "Ôn tập",
+        "Mã SV": item.studentId,
+        "Họ và Tên": item.studentName || "",
+        "Lớp": item.classCode || "",
+        "Môn học / Mã đề": item.subjectName,
+        "Bài học / Kỳ thi": item.title,
+        "Điểm số": (item.score !== null && !isNaN(item.score)) ? item.score : "",
+        "Trạng thái": item.statusBadge,
+        "Cảnh báo / Vi phạm": item.alertText || "Bình thường",
+        "Thời gian": item.timeDisplay,
+        "Thiết bị / IP": item.deviceInfo || ""
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [
+        { wch: 5 }, { wch: 12 }, { wch: 14 }, { wch: 24 }, { wch: 10 },
+        { wch: 22 }, { wch: 28 }, { wch: 10 }, { wch: 15 }, { wch: 25 }, { wch: 20 }, { wch: 30 }
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "NhatKy_HeThong");
+    XLSX.writeFile(wb, `Nhat_Ky_He_Thong_${new Date().toISOString().slice(0,10)}.xlsx`);
+    window.show_toast(`✅ Đã xuất ${rows.length} dòng nhật ký ra Excel!`);
+};
 
 // TRẠM DỊCH: Đồng bộ cột Supabase sang định dạng của App cũ để hiển thị bình thường
 window.map_supabase_questions = function(data) {
@@ -4551,15 +4995,16 @@ window.handle_perm_change = function(el) {
     }
 };
 // =========================================================================
-// ⏱️ HÀM CƯỠNG CHẾ THU BÀI (HIỂN THỊ RÕ LÝ DO CHO SINH VIÊN)
+// ⏱️ HÀM CƯỠNG CHẾ THU BÀI (ĐỒNG BỘ CHUẨN SUPER APP TRÀN VIỀN & TẮT FULL-SCREEN)
 // =========================================================================
 window.force_submit_exam = function(reasonMsg) {
     if (window.is_force_submitting) return;
     window.is_force_submitting = true;
 
-    // 🌟 GỠ KHÓA CẢM BIẾN & WATERMARK NGAY KHI THU BÀI
+    // 1. Gỡ khóa cảm biến, watermark & tắt trạng thái giám sát trước khi thoát Full-screen
     if (typeof window.remove_hardware_sensor_lock === 'function') window.remove_hardware_sensor_lock();
     if (typeof window.remove_exam_watermark === 'function') window.remove_exam_watermark();
+    if (window.proctoring_state) window.proctoring_state.is_active = false;
 
     if (window.timer_interval) clearInterval(window.timer_interval);
     if (window.realtime_exam_monitor) clearInterval(window.realtime_exam_monitor);
@@ -4569,32 +5014,27 @@ window.force_submit_exam = function(reasonMsg) {
 
     if (typeof window.clear_exam_draft === 'function') window.clear_exam_draft();
 
-    // Lưu lý do thu bài để có thể hiển thị trên bảng kết quả
-    let finalMsg = reasonMsg || "⏳ ĐÃ HẾT GIỜ LÀM BÀI! Hệ thống đang tự động thu bài...";
+    // 2. Lưu lý do thu bài để calculate_and_show_result hiển thị chuẩn trong khung Super App Tràn Viền
+    let finalMsg = reasonMsg || "⏳ ĐÃ HẾT GIỜ LÀM BÀI! Hệ thống đã tự động thu bài.";
     window.last_submit_reason = finalMsg;
     window.show_toast(finalMsg, true);
     
-    if (document.fullscreenElement || document.webkitFullscreenElement) {
-        if (document.exitFullscreen) document.exitFullscreen().catch(e => {});
-        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-    }
+    // 3. Thoát chế độ Toàn màn hình an toàn
+    try {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+            if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+            else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+        }
+    } catch (e) {}
 
+    // 4. Chấm điểm và mở màn hình kết thúc ca thi chuẩn Super App Tràn Viền
     setTimeout(() => {
         if (typeof calculate_and_show_result === 'function') calculate_and_show_result();
-        
-        // Chèn thêm dòng thông báo lý do thu bài vào bảng thông báo nộp bài thành công
         setTimeout(() => {
-            let resOverlay = document.getElementById('glass_result_overlay');
-            if (resOverlay && window.last_submit_reason) {
-                let pEl = resOverlay.querySelector('p');
-                if (pEl) {
-                    pEl.innerHTML = `<span class="badge bg-danger text-wrap mb-2 p-2" style="font-size: 0.85rem;">${window.last_submit_reason}</span><br>` + pEl.innerHTML;
-                }
-            }
             window.is_force_submitting = false; 
             window.last_submit_reason = null;
-        }, 300);
-    }, 800);
+        }, 500);
+    }, 400);
 };
 
 // =========================================================================
@@ -5592,7 +6032,7 @@ window.get_user_rank_html = function(isMini = false) {
             </div>`;
 };
 
-// 🌟 2. DỜI ICON SANG TRÁI ĐỒNG HỒ & FIX LỖI CLICK TRƯỢT
+// 🌟 2. DỜI ICON SANG TRÁI ĐỒNG HỒ & TỰ ĐỘNG ẨN KHI THI THẬT ĐỂ NHƯỜNG CHỖ CHO TÊN SINH VIÊN
 window.init_esport_features = function() {
     let quizInvBadge = document.getElementById('mini_inventory_badge');
     
@@ -5623,6 +6063,15 @@ window.init_esport_features = function() {
                 }
             }
         }
+
+        // 🛑 NẾU ĐANG THI THẬT -> ẨN NÚT NHIỆM VỤ ĐỂ KHÔNG ĐÈ LÊN HỌ VÀ TÊN SINH VIÊN
+        let isExamNow = (window.is_study_mode === false) || Boolean(window.proctoring_state && window.proctoring_state.is_active);
+        if (isExamNow) {
+            rankWrapper.style.setProperty('display', 'none', 'important');
+            return;
+        } else {
+            rankWrapper.style.display = '';
+        }
         
         // CHỈ cập nhật html khi lực chiến thay đổi (Ngăn chặn lỗi bấm trượt do tải lại liên tục)
         let newHtml = window.get_user_rank_html(true);
@@ -5633,8 +6082,12 @@ window.init_esport_features = function() {
 };
 setInterval(window.init_esport_features, 500);
 
-// 🌟 3. BẢNG CHỈ SỐ NHIỆM VỤ
+// 🌟 3. BẢNG CHỈ SỐ NHIỆM VỤ (ĐÃ KHÓA MỞ KHI ĐANG THI THẬT)
 window.open_esport_hub = function() {
+    if (window.is_study_mode === false) {
+        if (typeof window.play_sound === 'function') window.play_sound('error');
+        return window.show_toast("⚠️ TÍNH NĂNG BỊ KHÓA: Không được mở bảng Nhiệm vụ khi đang thi!", true);
+    }
     let oldHub = document.getElementById('esport_hub_modal'); if(oldHub) oldHub.remove();
     
     let invKey = 'mcq_inventory_' + (window.current_student_id || 'guest');
@@ -6205,23 +6658,26 @@ window.start_online_exam = async function(ex) {
     if (!qs || qs.length === 0) return window.show_toast("❌ Đề thi này chưa có câu hỏi nào!", true);
 
     // 🌟 CHỐT CHẶN 1: XIN QUYỀN CẢM BIẾN iOS NGAY LÚC BẤM "THI NGAY"
+    // (Nếu Giám thị đã bấm nút "Miễn CB" cho sinh viên này thì cho vào thẳng)
     let isMobileDevice = /iPhone|iPad|iPod|Android|Mobi/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    if (isMobileDevice && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        let t0 = Date.now();
+    if (isMobileDevice && !window._studentSensorBypassed && typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         try {
             const permState = await DeviceOrientationEvent.requestPermission();
-            let elapsedMs = Date.now() - t0;
             window._iosSensorPermState = permState;
 
             if (permState !== 'granted') {
-                // Nếu phản hồi < 150ms: Bảng Allow KHÔNG HỀ HIỆN RA do Safari vẫn nhớ lệnh Cancel của Tab cũ
-                let isCachedDeny = (elapsedMs < 150);
-                window.show_cancel_sensor_signout_modal(isCachedDeny);
-                return; // ⛔ DỪNG NGAY LẬP TỨC, KHÔNG MỞ ĐỀ THI!
+                let hasCloudBypass = await window.check_student_sensor_bypass(ex.examCode, window.current_student_id);
+                if (!hasCloudBypass) {
+                    window.show_cancel_sensor_signout_modal(ex.examCode);
+                    return; // ⛔ DỪNG NGAY LẬP TỨC, KHÔNG MỞ ĐỀ THI!
+                }
             }
         } catch (e) {
-            window.show_cancel_sensor_signout_modal(true);
-            return;
+            let hasCloudBypass = await window.check_student_sensor_bypass(ex.examCode, window.current_student_id);
+            if (!hasCloudBypass) {
+                window.show_cancel_sensor_signout_modal(ex.examCode);
+                return;
+            }
         }
     }
 
@@ -6618,24 +7074,33 @@ window.show_exam_review_modal = function(questionList, onConfirmCallback) {
 
     let html = `
     <style>
-        /* ĐÃ VÁ LỖI KHUẤT ĐÁY VÀ LAG CUỘN TRÊN DI ĐỘNG */
+        /* KHÓA CHIỀU CAO CHUẨN 100dvh CHO CẢ MÁY TÍNH VÀ DI ĐỘNG ĐỂ KHÔNG BỊ TRÔI MẤT FOOTER */
+        .review-sheet-wrapper { 
+            padding: 0 !important; 
+        }
+        .review-mobile-sheet { 
+            height: 100dvh !important; 
+            max-height: 100dvh !important; 
+            width: 100% !important;
+            max-width: 800px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            background: #212529 !important;
+            overflow: hidden !important;
+        }
+        #review_q_list {
+            flex: 1 1 auto !important;
+            min-height: 0 !important; /* Bắt buộc trong Flexbox để vùng giữa tự cuộn trên PC */
+            overflow-y: auto !important;
+            -webkit-overflow-scrolling: touch !important;
+            padding-bottom: 20px !important; 
+        }
         @media (max-width: 767.98px) {
-            .review-sheet-wrapper { 
-                padding: 0 !important; 
-            }
             .review-mobile-sheet { 
-                height: 100dvh !important; 
-                max-height: 100dvh !important; 
+                max-width: 100vw !important;
                 border-radius: 0 !important; 
                 border: none !important; 
                 margin: 0 !important;
-                max-width: 100vw !important;
-                display: flex !important;
-                flex-direction: column !important;
-            }
-            #review_q_list {
-                -webkit-overflow-scrolling: touch !important; /* Chống lag cảm ứng */
-                padding-bottom: 20px !important; 
             }
         }
         .review-q-card { transition: 0.2s; border: 1px solid #343a40; background: rgba(255,255,255,0.02); cursor: pointer; }
@@ -6643,11 +7108,11 @@ window.show_exam_review_modal = function(questionList, onConfirmCallback) {
         .review-q-card:has(.review-q-checkbox:checked) { background: rgba(56, 189, 248, 0.08) !important; border-color: #0ea5e9 !important; }
     </style>
 
-    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center review-sheet-wrapper animate__animated animate__fadeIn" style="background: #212529; z-index: 100000;">
-        <div class="d-flex flex-column w-100 review-mobile-sheet animate__animated animate__zoomIn" style="max-width: 800px; background: #212529 !important; overflow: hidden;">
+    <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center review-sheet-wrapper animate__animated animate__fadeIn" style="background: #212529; z-index: 100000; overflow: hidden;">
+        <div class="d-flex flex-column w-100 review-mobile-sheet animate__animated animate__zoomIn">
             
             <!-- HEADER TÀNG HÌNH ĐỒNG BỘ -->
-            <div class="p-3 border-bottom flex-shrink-0 d-flex align-items-center" style="border-color: rgba(255,255,255,0.05) !important; background: transparent;">
+            <div class="p-3 border-bottom flex-shrink-0 d-flex align-items-center bg-dark" style="border-color: rgba(255,255,255,0.1) !important;">
                 <button class="btn btn-sm text-light fw-bold d-flex align-items-center p-1 shadow-none bg-transparent border-0" onclick="document.getElementById('${modalId}').remove()">
                     <i class="bi bi-chevron-left fs-4"></i><span class="d-none d-md-inline ms-1">Thoát</span>
                 </button>
@@ -6660,20 +7125,20 @@ window.show_exam_review_modal = function(questionList, onConfirmCallback) {
                 <div style="width: 85px;" class="d-none d-md-block"></div>
             </div>
             
-            <!-- BODY (TỰ CUỘN) -->
-            <div class="p-2 p-md-3 flex-grow-1 custom-scrollbar" style="overflow-y: auto; background: transparent;" id="review_q_list"></div>
+            <!-- BODY (TỰ CUỘN TRÊN CẢ PC VÀ MOBILE) -->
+            <div class="p-2 p-md-3 custom-scrollbar" id="review_q_list"></div>
             
-            <!-- FOOTER TRÀN VIỀN XÓA NỀN -->
-            <div class="p-0 border-top flex-shrink-0 d-flex flex-column w-100" style="border-color: rgba(255,255,255,0.05) !important; background: transparent;">
-                <div class="text-center py-2" style="background: rgba(0,0,0,0.2);">
-                    <span class="text-white-50" style="font-size: 0.85rem;">Đã chọn: <strong id="review_selected_count" class="text-info fs-5">${questionList.length}</strong> / ${questionList.length}</span>
+            <!-- FOOTER TRÀN VIỀN CỐ ĐỊNH Ở ĐÁY -->
+            <div class="p-0 border-top flex-shrink-0 d-flex flex-column w-100 bg-dark" style="border-color: rgba(255,255,255,0.1) !important;">
+                <div class="text-center py-2" style="background: rgba(0,0,0,0.25);">
+                    <span class="text-white-50" style="font-size: 0.85rem;">Đã chọn: <strong id="review_selected_count" class="text-info fs-5">${questionList.length}</strong> / ${questionList.length} câu</span>
                 </div>
-                <div class="d-flex w-100 border-top" style="border-color: rgba(255,255,255,0.05) !important;">
-                    <button class="btn py-3 fw-bold flex-grow-1 d-flex justify-content-center align-items-center text-danger bg-transparent border-0 border-end" style="border-color: rgba(255,255,255,0.05) !important; border-radius: 0;" onclick="document.getElementById('${modalId}').remove()">
-                        <i class="bi bi-x-lg fs-4 fs-md-5"></i> <span class="d-none d-md-inline ms-2">HỦY BỎ</span>
+                <div class="d-flex w-100 border-top" style="border-color: rgba(255,255,255,0.1) !important;">
+                    <button class="btn py-3 fw-bold flex-grow-1 d-flex justify-content-center align-items-center text-danger bg-transparent border-0 border-end" style="border-color: rgba(255,255,255,0.1) !important; border-radius: 0;" onclick="document.getElementById('${modalId}').remove()">
+                        <i class="bi bi-x-lg fs-5 me-1"></i> <span>HỦY BỎ</span>
                     </button>
                     <button class="btn py-3 fw-bold flex-grow-1 d-flex justify-content-center align-items-center text-info bg-transparent border-0" style="border-radius: 0;" onclick="window.confirm_review_exam()">
-                        <i class="bi bi-check2-circle fs-4 fs-md-5"></i> <span class="d-none d-md-inline ms-2">TẠO PHÒNG</span>
+                        <i class="bi bi-check2-circle fs-5 me-1"></i> <span>TẠO PHÒNG</span>
                     </button>
                 </div>
             </div>
@@ -7274,18 +7739,34 @@ window.render_troubleshoot_list = function(searchQuery) {
                     <button class="btn btn-sm btn-danger py-0 px-2" style="font-size: 0.7rem; height: 22px;" onclick="event.preventDefault(); window.delete_student_score('${safeExamCode}', '${u.id}', '${safeName}')" title="Xóa điểm"><i class="bi bi-trash"></i></button>
                 </div>`;
         } else if (u.isStarted) {
+            let isBypassed = Boolean((u.sync && u.sync.bypass_sensor) || (window.sensor_bypass_map && window.sensor_bypass_map[u.id]));
+            let bypassBadge = isBypassed ? `<span class="badge bg-info text-dark ms-1" style="font-size: 0.62rem;">🔓 Đã miễn cảm biến</span>` : '';
+
             if (u.sync.client_status === 'ONLINE') {
-                statusBadge = `<span class="badge bg-success ms-1" style="font-size: 0.65rem;">Đang thi</span>`;
+                statusBadge = `<span class="badge bg-success ms-1" style="font-size: 0.65rem;">Đang thi</span>${bypassBadge}`;
                 if (!hasStrangeBehavior) borderClass = 'border-success';
             } else if (u.sync.client_status === 'AWAY') {
-                statusBadge = `<span class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem;">Rời Tab</span>`;
+                statusBadge = `<span class="badge bg-warning text-dark ms-1" style="font-size: 0.65rem;">Rời Tab</span>${bypassBadge}`;
             } else {
-                statusBadge = `<span class="badge bg-secondary ms-1 border border-secondary" style="font-size: 0.65rem; opacity: 0.8;">Đứt mạng/Thoát</span>`;
+                statusBadge = `<span class="badge bg-secondary ms-1 border border-secondary" style="font-size: 0.65rem; opacity: 0.8;">Đứt mạng/Thoát</span>${bypassBadge}`;
             }
-            actionHtml = `<button class="btn btn-sm btn-outline-secondary py-0 px-2 text-white-50 border-secondary" style="font-size: 0.7rem; height: 22px;" onclick="event.preventDefault(); window.delete_student_score('${safeExamCode}', '${u.id}', '${safeName}')" title="Reset Trạng thái">Reset</button>`;
-        } else { // <--- THÊM MỚI: UI KHI CHƯA VÀO THI
-            statusBadge = `<span class="badge bg-dark border border-secondary text-white-50 ms-1" style="font-size: 0.65rem;">Chưa vào thi</span>`;
-            actionHtml = `<button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size: 0.7rem; height: 22px; background: rgba(239, 68, 68, 0.1);" onclick="event.preventDefault(); window.mark_student_absent('${safeExamCode}', '${u.id}', '${safeName}')" title="Khóa tài khoản không cho thi"><i class="bi bi-person-x-fill"></i> Đánh Vắng</button>`;
+            let bypassBtnClass = isBypassed ? 'btn-info text-dark fw-bold' : 'btn-outline-info text-info';
+            actionHtml = `
+                <div class="d-flex gap-1">
+                    <button class="btn btn-sm ${bypassBtnClass} py-0 px-2" style="font-size: 0.68rem; height: 22px;" onclick="event.preventDefault(); window.admin_toggle_sensor_bypass('${safeExamCode}', '${u.id}', '${safeName}')" title="Cho phép thi không cần cảm biến góc nghiêng"><i class="bi bi-phone-flip"></i> ${isBypassed ? 'Đã miễn CB' : 'Miễn CB'}</button>
+                    <button class="btn btn-sm btn-outline-secondary py-0 px-2 text-white-50 border-secondary" style="font-size: 0.7rem; height: 22px;" onclick="event.preventDefault(); window.delete_student_score('${safeExamCode}', '${u.id}', '${safeName}')" title="Reset Trạng thái">Reset</button>
+                </div>`;
+        } else { // <--- UI KHI CHƯA VÀO THI (Kèm nút Miễn CB nếu máy bị chặn ngoài cửa)
+            let isBypassed = Boolean((u.sync && u.sync.bypass_sensor) || (window.sensor_bypass_map && window.sensor_bypass_map[u.id]));
+            let bypassBadge = isBypassed ? `<span class="badge bg-info text-dark ms-1" style="font-size: 0.62rem;">🔓 Đã miễn cảm biến</span>` : '';
+            statusBadge = `<span class="badge bg-dark border border-secondary text-white-50 ms-1" style="font-size: 0.65rem;">Chưa vào thi</span>${bypassBadge}`;
+            
+            let bypassBtnClass = isBypassed ? 'btn-info text-dark fw-bold' : 'btn-outline-info text-info';
+            actionHtml = `
+                <div class="d-flex gap-1">
+                    <button class="btn btn-sm ${bypassBtnClass} py-0 px-2" style="font-size: 0.68rem; height: 22px;" onclick="event.preventDefault(); window.admin_toggle_sensor_bypass('${safeExamCode}', '${u.id}', '${safeName}')" title="Cho phép máy này vào thi không cần cảm biến"><i class="bi bi-phone-flip"></i> ${isBypassed ? 'Đã miễn CB' : 'Miễn CB'}</button>
+                    <button class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size: 0.7rem; height: 22px; background: rgba(239, 68, 68, 0.1);" onclick="event.preventDefault(); window.mark_student_absent('${safeExamCode}', '${u.id}', '${safeName}')" title="Khóa tài khoản không cho thi"><i class="bi bi-person-x-fill"></i> Đánh Vắng</button>
+                </div>`;
         }
 
         let displayStt = (filterType === 'all') ? u.stt : displayIndex++;
@@ -8599,12 +9080,39 @@ window.save_edit_exam = async function(code) {
     } catch(err) { window.show_toast("❌ Lỗi: " + err.message, true); btn.innerHTML = ori; btn.disabled = false; }
 };
 
-window.toggle_exam_status = async function(code, newStatus) {
-    window.show_toast("⏳ Đang xử lý...");
-    try {
-        const { error } = await db.from('online_exams').update({ status: newStatus }).eq('exam_code', code);
-        if (error) throw error; window.show_toast("✅ Đã đổi trạng thái phòng thi!"); window.render_exam_management();
-    } catch(err) { window.show_toast("❌ Lỗi: " + err.message, true); }
+window.toggle_exam_status = function(code, newStatus) {
+    // 1. Lưu lại vị trí thanh cuộn hiện tại để không bị nhảy trang
+    if (typeof window.capture_exam_list_scroll === 'function') {
+        window.capture_exam_list_scroll();
+    }
+
+    // 2. Xác định hành động dựa trên newStatus (Trạng thái MỚI sắp chuyển sang)
+    let isOpening = String(newStatus || '').toUpperCase().includes('MỞ');
+
+    let title = isOpening ? "XÁC NHẬN MỞ PHÒNG THI" : "XÁC NHẬN ĐÓNG PHÒNG THI";
+    let msg = isOpening
+        ? `Bạn đã điểm danh sinh viên trước khi mở phòng thi [${code}] chưa?\n\nBấm Xác nhận để MỞ phòng thi ngay.`
+        : `Bạn có chắc chắn muốn ĐÓNG / TẮT phòng thi [${code}] không?`;
+
+    // 3. Hiện bảng thông báo chuẩn hệ thống (Hủy / Xác nhận)
+    window.show_alert(title, msg, async (confirmed) => {
+        if (!confirmed) {
+            // Nếu bấm HỦY: Vẽ lại nhẹ danh sách (tại đúng vị trí cuộn) để trả lại nút gạt nếu trình duyệt lỡ gạt sang
+            window.render_exam_management();
+            return;
+        }
+
+        // Nếu bấm XÁC NHẬN: Mới thực hiện gửi lệnh lên Supabase
+        window.show_toast("⏳ Đang xử lý...");
+        try {
+            const { error } = await db.from('online_exams').update({ status: newStatus }).eq('exam_code', code);
+            if (error) throw error;
+            window.show_toast("✅ Đã đổi trạng thái phòng thi!");
+            window.render_exam_management();
+        } catch (err) {
+            window.show_toast("❌ Lỗi: " + err.message, true);
+        }
+    });
 };
 
 window.delete_online_exam = function(code, name) {
@@ -9757,101 +10265,168 @@ window.mark_student_absent = function(examCode, studentId, studentName) {
 };
 
 // =========================================================================
-// 📋 ADMIN: MODULE ĐIỂM DANH CHUYÊN NGHIỆP TRƯỚC GIỜ THI
+// 📋 ADMIN: MODULE ĐIỂM DANH CHUYÊN NGHIỆP TRƯỚC GIỜ THI (BẢN NÂNG CẤP)
 // =========================================================================
 window.open_roll_call_modal = async function(examCode) {
-    if (typeof window.show_toast === 'function') window.show_toast("<span class='spinner-border spinner-border-sm me-2'></span> Đang nạp danh sách lớp...");
+    if (typeof window.show_toast === 'function') {
+        window.show_toast("<span class='spinner-border spinner-border-sm me-2'></span> Đang nạp danh sách điểm danh...");
+    }
     
     try {
         const clientDb = typeof db !== 'undefined' ? db : window._supabase;
         
-        // 1. Kéo thông tin đề thi để biết lớp nào được thi (đọc cột allowed_users)
-        const { data: exData, error: errEx } = await clientDb.from('online_exams').select('allowed_users, exam_name').eq('exam_code', examCode).single();
+        // 1. Kéo thông tin đề thi để biết lớp và sinh viên đặc cách nào được thi
+        const { data: exData, error: errEx } = await clientDb
+            .from('online_exams')
+            .select('allowed_users, exam_name')
+            .eq('exam_code', examCode)
+            .single();
         if (errEx) throw errEx;
 
         let allowedStr = exData.allowed_users || '';
-        let classes = allowedStr.split(',').map(c => c.trim().toUpperCase()).filter(Boolean);
+        let tokens = allowedStr.split(',').map(c => c.trim()).filter(Boolean);
+        let tokensUpper = tokens.map(c => c.toUpperCase());
 
-        if (classes.length === 0) {
-            return alert("⚠️ Đề thi này chưa được phân công cho lớp nào!\nThầy vui lòng bấm 'SỬA ĐỀ', mục 'Giao cho lớp' để gán lớp trước khi điểm danh.");
+        if (tokens.length === 0) {
+            return alert("⚠️ Đề thi này chưa được phân công cho lớp hoặc sinh viên nào!\nThầy vui lòng bấm 'SỬA ĐỀ' để gán lớp trước khi điểm danh.");
         }
 
-        // 2. Kéo danh sách toàn bộ sinh viên thuộc các lớp đó
-        const { data: students, error: errSt } = await clientDb.from('users').select('student_id, full_name, class_code').in('class_code', classes).neq('role', 'admin');
+        // 2. Kéo danh sách sinh viên (Bao gồm cả theo Lớp VÀ sinh viên Thi bù/Đặc cách)
+        const { data: allUsers, error: errSt } = await clientDb
+            .from('users')
+            .select('student_id, full_name, class_code, role')
+            .neq('role', 'admin')
+            .neq('role', 'all');
         if (errSt) throw errSt;
 
-        // 3. Kéo danh sách những em ĐÃ BỊ ĐÁNH VẮNG TRƯỚC ĐÓ (điểm = -1)
-        const { data: results, error: errRes } = await clientDb.from('exam_results').select('student_id, score').eq('exam_code', examCode).eq('score', -1);
+        let students = (allUsers || []).filter(u => {
+            let uClass = String(u.class_code || '').trim().toUpperCase();
+            let uRole = String(u.role || '').trim().toUpperCase();
+            let uId = String(u.student_id || '').trim().toUpperCase();
+            return tokensUpper.includes('ALL') || tokensUpper.includes(uClass) || tokensUpper.includes(uRole) || tokensUpper.includes(uId);
+        });
+
+        // 3. Kéo danh sách kết quả hiện tại của đề thi để biết ai ĐÃ VẮNG (-1) hoặc ĐÃ NỘP BÀI
+        const { data: results, error: errRes } = await clientDb
+            .from('exam_results')
+            .select('student_id, score, is_submitted, is_absent')
+            .eq('exam_code', examCode);
         if (errRes) throw errRes;
 
-        let absentIds = results.map(r => String(r.student_id).toLowerCase());
+        let absentIds = new Set();
+        let submittedIds = new Set();
+
+        (results || []).forEach(r => {
+            let sid = String(r.student_id || '').trim().toLowerCase();
+            if (Number(r.score) === -1 || r.is_absent === true) {
+                absentIds.add(sid);
+            } else if (r.is_submitted === true) {
+                submittedIds.add(sid);
+            }
+        });
         
         // 4. DỰNG GIAO DIỆN BẢNG ĐIỂM DANH
         let modalId = 'roll_call_modal_' + examCode;
         let existingModal = document.getElementById(modalId);
         if (existingModal) existingModal.remove();
 
-        let listHtml = '';
-        // Sắp xếp danh sách theo Tên (A-Z) để dễ dò
+        // Sắp xếp danh sách theo Tên (A-Z chuẩn tiếng Việt)
         students.sort((a, b) => {
             let nameA = (a.full_name || "").trim().split(' ').pop().toLowerCase();
             let nameB = (b.full_name || "").trim().split(' ').pop().toLowerCase();
-            return nameA.localeCompare(nameB);
-        }).forEach(st => {
-            let sId = String(st.student_id).toLowerCase();
-            let isAbsent = absentIds.includes(sId);
-            
-            // Giao diện Nút Bấm thay đổi theo trạng thái
-            let btnHtml = isAbsent 
-                ? `<button class="btn btn-sm btn-danger fw-bold shadow-sm" style="width: 105px;" onclick="window.toggle_roll_call_absent(this, '${examCode}', '${sId}')"><i class="bi bi-person-x-fill"></i> ĐÃ VẮNG</button>`
-                : `<button class="btn btn-sm btn-outline-danger fw-bold" style="width: 105px;" onclick="window.toggle_roll_call_absent(this, '${examCode}', '${sId}')">Đánh Vắng</button>`;
+            return nameA.localeCompare(nameB, 'vi');
+        });
+
+        let listHtml = '';
+        let absentCount = 0;
+
+        students.forEach((st, idx) => {
+            let rawId = String(st.student_id || '').trim();
+            let sId = rawId.toLowerCase();
+            let safeName = (st.full_name || rawId).replace(/'/g, "\\'");
+            let isAbsent = absentIds.has(sId);
+            let isSub = submittedIds.has(sId);
+            if (isAbsent) absentCount++;
+
+            let searchKey = `${st.full_name || ''} ${rawId} ${st.class_code || ''}`
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '');
+
+            let btnHtml = '';
+            if (isSub) {
+                btnHtml = `<span class="badge bg-success py-2 px-3" style="width: 110px;"><i class="bi bi-check2-all"></i> Đã nộp</span>`;
+            } else if (isAbsent) {
+                btnHtml = `<button class="btn btn-sm btn-danger fw-bold shadow-sm" style="width: 110px; border-radius: 8px;" onclick="window.toggle_roll_call_absent(this, '${examCode}', '${rawId}', '${safeName}')"><i class="bi bi-person-x-fill me-1"></i>ĐÃ VẮNG</button>`;
+            } else {
+                btnHtml = `<button class="btn btn-sm btn-outline-danger fw-bold" style="width: 110px; border-radius: 8px;" onclick="window.toggle_roll_call_absent(this, '${examCode}', '${rawId}', '${safeName}')">Đánh Vắng</button>`;
+            }
                 
-            let rowOpacity = isAbsent ? '0.4' : '1';
+            let rowOpacity = isAbsent ? '0.45' : '1';
+            let rowBorder = isAbsent ? 'border: 1px solid rgba(239,68,68,0.5); background: rgba(239,68,68,0.08);' : 'border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.04);';
             
             listHtml += `
-            <div class="d-flex justify-content-between align-items-center p-2 mb-2 rounded rollcall-row" style="background: rgba(255,255,255,0.05); opacity: ${rowOpacity}; border: 1px solid rgba(255,255,255,0.1); transition: 0.2s;">
-                <div style="line-height: 1.2;">
-                    <div class="fw-bold text-white" style="font-size: 0.95rem;">${st.full_name}</div>
-                    <div style="font-size: 0.75rem;"><span class="text-info fw-bold">${st.student_id.toUpperCase()}</span> <span class="text-white-50 mx-1">|</span> <span class="text-warning">${st.class_code}</span></div>
+            <div class="d-flex justify-content-between align-items-center p-2 px-3 mb-2 rounded-3 rollcall-row" data-search="${searchKey}" data-absent="${isAbsent ? '1' : '0'}" style="${rowBorder} opacity: ${rowOpacity}; transition: 0.2s;">
+                <div style="line-height: 1.3; min-width: 0;" class="pe-2">
+                    <div class="fw-bold text-white text-truncate" style="font-size: 0.95rem;">
+                        <span class="text-white-50 me-2" style="font-size: 0.8rem;">#${idx + 1}</span>${st.full_name || 'Chưa cập nhật tên'}
+                    </div>
+                    <div style="font-size: 0.75rem;" class="mt-1">
+                        <span class="text-info fw-bold font-monospace">${rawId.toUpperCase()}</span>
+                        <span class="text-white-50 mx-1">|</span>
+                        <span class="text-warning fw-bold">${st.class_code || 'Tự do'}</span>
+                    </div>
                 </div>
-                <div>${btnHtml}</div>
+                <div class="flex-shrink-0">${btnHtml}</div>
             </div>`;
         });
 
         if (students.length === 0) {
-            listHtml = `<div class="text-center p-4 text-white-50"><i class="bi bi-inbox fs-1"></i><br>Không có sinh viên nào trong danh sách lớp: ${classes.join(', ')}</div>`;
+            listHtml = `<div class="text-center p-5 text-white-50"><i class="bi bi-inbox fs-1 d-block mb-2"></i>Không có sinh viên nào thuộc đối tượng: ${tokensUpper.join(', ')}</div>`;
         }
 
-        // 🌟 GIAO DIỆN ĐIỂM DANH FULL-SCREEN (ĐỒNG BỘ VỚI PHÒNG GIÁM SÁT)
+        let presentCount = students.length - absentCount;
+
         let modalHtml = `
-        <div id="${modalId}" class="animate__animated animate__fadeInRight" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #0f172a; z-index: 9999; display: flex; flex-direction: column;">
+        <div id="${modalId}" class="animate__animated animate__fadeInRight" style="position: fixed; inset: 0; width: 100vw; height: 100vh; background: #0f172a; z-index: 99999; display: flex; flex-direction: column;">
             
             <!-- HEADER TOÀN MÀN HÌNH -->
-            <div class="p-3 border-bottom border-secondary d-flex justify-content-between align-items-center" style="background: #1e293b; box-shadow: 0 4px 12px rgba(0,0,0,0.5); z-index: 10;">
-                <div class="d-flex align-items-center gap-3">
-                    <!-- Nút Quay Lại -->
-                    <button type="button" class="btn btn-outline-secondary text-white border-0 p-1" onclick="document.getElementById('${modalId}').remove()">
-                        <i class="bi bi-chevron-left fs-3"></i>
+            <div class="p-3 border-bottom border-secondary d-flex justify-content-between align-items-center flex-shrink-0" style="background: #1e293b; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
+                <div class="d-flex align-items-center gap-2" style="min-width: 0;">
+                    <button type="button" class="btn btn-outline-secondary text-white border-0 p-1 me-1" onclick="document.getElementById('${modalId}').remove()">
+                        <i class="bi bi-chevron-left fs-4"></i>
                     </button>
-                    <div>
-                        <h5 class="fw-bold text-primary mb-0"><i class="bi bi-clipboard-check me-2"></i>SỔ ĐIỂM DANH</h5>
-                        <div class="text-white-50 small mt-1">Đề thi: <span class="text-warning fw-bold">${exData.exam_name}</span></div>
+                    <div class="text-truncate">
+                        <h6 class="fw-bold text-info mb-0 text-uppercase"><i class="bi bi-clipboard-check me-2"></i>SỔ ĐIỂM DANH PHÒNG THI</h6>
+                        <div class="text-white-50 small text-truncate">Đề: <span class="text-warning fw-bold">${exData.exam_name}</span></div>
                     </div>
                 </div>
-                <!-- Nút Hoàn Tất -->
-                <button class="btn btn-success fw-bold px-4 shadow-sm" style="border-radius: 8px;" onclick="document.getElementById('${modalId}').remove()">
-                    <i class="bi bi-check-lg me-1"></i> XONG
+                <button class="btn btn-success fw-bold px-3 py-2 shadow-sm flex-shrink-0" style="border-radius: 10px; font-size: 0.85rem;" onclick="document.getElementById('${modalId}').remove()">
+                    <i class="bi bi-check-lg me-1"></i> HOÀN TẤT
                 </button>
+            </div>
+
+            <!-- THANH TÌM KIẾM & THỐNG KÊ SĨ SỐ -->
+            <div class="p-2 px-3 border-bottom border-secondary bg-dark flex-shrink-0">
+                <div class="mx-auto d-flex flex-wrap justify-content-between align-items-center gap-2" style="max-width: 800px;">
+                    <div class="position-relative flex-grow-1">
+                        <i class="bi bi-search position-absolute top-50 translate-middle-y text-white-50" style="left: 12px; font-size: 0.85rem;"></i>
+                        <input type="text" class="form-control form-control-sm bg-secondary bg-opacity-10 text-white border-secondary ps-4" style="border-radius: 8px; height: 36px;" placeholder="Tìm nhanh tên hoặc mã sinh viên..." oninput="window.filter_roll_call_list('${modalId}', this.value)">
+                    </div>
+                    <div class="d-flex gap-2 align-items-center" style="font-size: 0.8rem;">
+                        <span class="badge bg-secondary py-2 px-2">Tổng: <b id="${modalId}_total">${students.length}</b></span>
+                        <span class="badge bg-success py-2 px-2">Có mặt: <b id="${modalId}_present">${presentCount}</b></span>
+                        <span class="badge bg-danger py-2 px-2">Vắng: <b id="${modalId}_absent">${absentCount}</b></span>
+                    </div>
+                </div>
             </div>
             
             <!-- DANH SÁCH LỚP (CUỘN) -->
-            <div class="p-3 flex-grow-1" style="overflow-y: auto; background: #0f172a;">
-                <div class="container-fluid mx-auto p-0" style="max-width: 800px;"> 
-                    <!-- max-width: 800px giúp danh sách căn giữa trên màn hình máy tính cho đỡ bị bè ngang quá mức, trên điện thoại vẫn full 100% -->
+            <div class="p-2 p-md-3 flex-grow-1 custom-scrollbar" style="overflow-y: auto; background: #0f172a;">
+                <div class="container-fluid mx-auto p-0" style="max-width: 800px;" id="${modalId}_list"> 
                     ${listHtml}
                 </div>
             </div>
-
         </div>`;
 
         document.body.insertAdjacentHTML('beforeend', modalHtml);
@@ -9859,6 +10434,124 @@ window.open_roll_call_modal = async function(examCode) {
     } catch (err) {
         console.error(err);
         alert("Lỗi tải danh sách điểm danh: " + err.message);
+    }
+};
+
+// Bộ lọc tìm kiếm nhanh trong Sổ điểm danh (Đã xử lý !important của Bootstrap & chữ Đ/đ)
+window.filter_roll_call_list = function(modalId, keyword) {
+    let modal = document.getElementById(modalId);
+    let container = document.getElementById(modalId + '_list') || modal || document;
+
+    const cleanVN = (str) => String(str || '')
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/đ/g, 'd')
+        .trim();
+
+    let kw = cleanVN(keyword);
+    let rows = container.querySelectorAll('.rollcall-row');
+
+    rows.forEach(row => {
+        // Quét cả data-search lẫn toàn bộ chữ hiển thị trong dòng (Tên, Mã SV, Lớp)
+        let rowText = cleanVN((row.getAttribute('data-search') || '') + ' ' + (row.innerText || row.textContent || ''));
+        if (kw === '' || rowText.includes(kw)) {
+            row.classList.remove('d-none');
+            row.style.setProperty('display', 'flex', 'important');
+        } else {
+            row.classList.add('d-none');
+            row.style.setProperty('display', 'none', 'important');
+        }
+    });
+};
+
+// Hàm Bật/Tắt trạng thái Vắng thi (Score = -1) trực tiếp trong Sổ điểm danh
+window.toggle_roll_call_absent = async function(btn, examCode, rawStudentId, studentName = '') {
+    const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+    let row = btn.closest('.rollcall-row');
+    let modal = btn.closest('[id^="roll_call_modal_"]');
+    let isCurrentlyAbsent = row && row.getAttribute('data-absent') === '1';
+
+    btn.disabled = true;
+    let oldHtml = btn.innerHTML;
+    btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span>`;
+
+    try {
+        if (!isCurrentlyAbsent) {
+            // ĐÁNH VẮNG: Ghi điểm -1 và is_submitted = true để khóa cửa phòng thi
+            const { data: existing } = await clientDb
+                .from('exam_results')
+                .select('student_id')
+                .eq('exam_code', examCode)
+                .ilike('student_id', rawStudentId);
+
+            if (existing && existing.length > 0) {
+                const { error } = await clientDb
+                    .from('exam_results')
+                    .update({ score: -1, is_submitted: true, client_status: 'VẮNG THI' })
+                    .eq('exam_code', examCode)
+                    .ilike('student_id', rawStudentId);
+                if (error) throw error;
+            } else {
+                const { error } = await clientDb
+                    .from('exam_results')
+                    .insert([{
+                        exam_code: examCode,
+                        student_id: rawStudentId,
+                        score: -1,
+                        is_submitted: true,
+                        client_status: 'VẮNG THI',
+                        submitted_at: new Date().toISOString()
+                    }]);
+                if (error) throw error;
+            }
+
+            if (row) {
+                row.setAttribute('data-absent', '1');
+                row.style.opacity = '0.45';
+                row.style.border = '1px solid rgba(239,68,68,0.5)';
+                row.style.background = 'rgba(239,68,68,0.08)';
+            }
+            btn.className = 'btn btn-sm btn-danger fw-bold shadow-sm';
+            btn.innerHTML = `<i class="bi bi-person-x-fill me-1"></i>ĐÃ VẮNG`;
+        } else {
+            // HỦY VẮNG: Xóa dòng đánh vắng (-1) để mở cửa cho sinh viên vào thi
+            const { error } = await clientDb
+                .from('exam_results')
+                .delete()
+                .eq('exam_code', examCode)
+                .ilike('student_id', rawStudentId)
+                .eq('score', -1);
+            if (error) throw error;
+
+            if (row) {
+                row.setAttribute('data-absent', '0');
+                row.style.opacity = '1';
+                row.style.border = '1px solid rgba(255,255,255,0.08)';
+                row.style.background = 'rgba(255,255,255,0.04)';
+            }
+            btn.className = 'btn btn-sm btn-outline-danger fw-bold';
+            btn.innerHTML = `Đánh Vắng`;
+        }
+
+        // Cập nhật lại bộ đếm Có mặt / Vắng trên Header của Sổ điểm danh
+        if (modal) {
+            let mId = modal.id;
+            let totalRows = modal.querySelectorAll('.rollcall-row').length;
+            let absRows = modal.querySelectorAll('.rollcall-row[data-absent="1"]').length;
+            let elPres = document.getElementById(mId + '_present');
+            let elAbs = document.getElementById(mId + '_absent');
+            if (elPres) elPres.innerText = totalRows - absRows;
+            if (elAbs) elAbs.innerText = absRows;
+        }
+    } catch (err) {
+        console.error("Lỗi cập nhật điểm danh:", err);
+        btn.innerHTML = oldHtml;
+        if (typeof window.show_toast === 'function') {
+            window.show_toast("❌ Lỗi điểm danh: " + err.message, true);
+        }
+    } finally {
+        btn.disabled = false;
     }
 };
 
@@ -10269,77 +10962,142 @@ window.addEventListener('beforeunload', function(e) {
 
 
 // =========================================================================
-// 🚪 HÀM XỬ LÝ KHI TỪ CHỐI CẢM BIẾN (CHỐNG VÒNG LẶP KHÓA QUYỀN CỦA SAFARI iOS)
+// 🛡️ ADMIN CẤP QUYỀN MIỄN CẢM BIẾN TỪ XA & KIỂM TRA TRÊN SUPABASE
 // =========================================================================
-window.show_cancel_sensor_signout_modal = function(isCachedDeny = false) {
+window.sensor_bypass_map = window.sensor_bypass_map || {};
+
+window.admin_toggle_sensor_bypass = async function(examCode, studentId, studentName) {
+    if (!examCode || !studentId) return;
+    const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+    let currentBypass = Boolean(window.sensor_bypass_map[studentId]);
+    let nextBypass = !currentBypass;
+
+    try {
+        const { data: existing } = await clientDb
+            .from('exam_results')
+            .select('draft_data, score, is_submitted, client_status')
+            .eq('exam_code', examCode)
+            .eq('student_id', studentId)
+            .maybeSingle();
+
+        let draftObj = (existing && existing.draft_data && typeof existing.draft_data === 'object') ? { ...existing.draft_data } : {};
+        draftObj.bypass_sensor = nextBypass;
+
+        let payload = {
+            exam_code: examCode,
+            student_id: studentId,
+            draft_data: draftObj,
+            client_status: (existing && existing.client_status) ? existing.client_status : 'ONLINE'
+        };
+        if (existing && existing.score !== undefined) payload.score = existing.score;
+        if (existing && existing.is_submitted !== undefined) payload.is_submitted = existing.is_submitted;
+
+        const { error } = await clientDb.from('exam_results').upsert(payload, { onConflict: 'exam_code,student_id' });
+        if (error) throw error;
+
+        window.sensor_bypass_map[studentId] = nextBypass;
+        if (window.current_troubleshoot_sync && window.current_troubleshoot_sync[studentId]) {
+            window.current_troubleshoot_sync[studentId].bypass_sensor = nextBypass;
+        }
+
+        let searchInput = document.getElementById('troubleshoot_search');
+        if (typeof window.render_troubleshoot_list === 'function') {
+            window.render_troubleshoot_list(searchInput ? searchInput.value : '');
+        }
+
+        if (nextBypass) {
+            window.show_toast(`🔓 Đã MIỄN cảm biến góc nghiêng cho SV: ${studentName}`);
+        } else {
+            window.show_toast(`🔒 Đã BẬT LẠI bắt buộc cảm biến cho SV: ${studentName}`);
+        }
+    } catch (err) {
+        console.error("Lỗi cấp quyền miễn cảm biến:", err);
+        window.show_toast("❌ Không thể cập nhật quyền cảm biến: " + err.message, true);
+    }
+};
+
+// 2. Hàm phía Sinh viên kiểm tra xem Giám thị đã bấm "Miễn CB" cho mình chưa
+window.check_student_sensor_bypass = async function(examCode, studentId) {
+    let targetExam = examCode || (window.proctoring_state && window.proctoring_state.exam_code);
+    let targetStd = studentId || window.current_student_id;
+    if (!targetExam || !targetStd) return false;
+
+    try {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        const { data } = await clientDb
+            .from('exam_results')
+            .select('draft_data')
+            .eq('exam_code', targetExam)
+            .eq('student_id', targetStd)
+            .maybeSingle();
+
+        if (data && data.draft_data && data.draft_data.bypass_sensor === true) {
+            window._studentSensorBypassed = true;
+            window.remove_hardware_sensor_lock();
+            return true;
+        }
+    } catch (e) {}
+    return false;
+};
+
+// 3. Nút cho sinh viên bấm trên bảng khóa sau khi đã báo Giám thị bấm "Miễn CB"
+window.verify_bypass_from_modal = async function(examCode) {
+    let btn = document.getElementById('btn_check_admin_bypass');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<span class="spinner-border spinner-border-sm me-1"></span> Đang kiểm tra lệnh từ Giám thị...`;
+    }
+    let isAllowed = await window.check_student_sensor_bypass(examCode, window.current_student_id);
+    if (isAllowed) {
+        window.remove_hardware_sensor_lock();
+        if (typeof window.show_toast === 'function') {
+            window.show_toast("✅ Giám thị đã cấp quyền miễn cảm biến! Hãy bấm vào đề thi để làm bài.");
+        }
+    } else {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = `<i class="bi bi-unlock-fill me-1"></i> GIÁM THỊ ĐÃ CẤP QUYỀN - BẤM ĐỂ VÀO THI`;
+        }
+        if (typeof window.show_toast === 'function') {
+            window.show_toast("⚠️ Chưa nhận được lệnh Miễn cảm biến từ Giám thị!", true);
+        }
+    }
+};
+
+// =========================================================================
+// 🚪 HÀM ĐĂNG XUẤT & THOÁT HOÀN TOÀN KHI BẤM "CANCEL" CẢM BIẾN TRÊN iOS
+// =========================================================================
+window.show_cancel_sensor_signout_modal = function(examCode = '') {
     let modalId = "sensor_cancel_signout_modal";
     let oldModal = document.getElementById(modalId);
     if (oldModal) oldModal.remove();
 
-    let isInApp = /Zalo|FBAN|FBAV|Messenger|Instagram/i.test(navigator.userAgent);
-
-    // Nội dung hướng dẫn tùy theo việc vừa bấm Cancel hay bị iOS lưu nhớ từ lần trước
-    let guideHtml = '';
-    if (!isCachedDeny) {
-        guideHtml = `
-            <p class="text-white-50 small mb-3" style="line-height:1.6;">
-                Bạn vừa bấm <b class="text-danger">Cancel (Từ chối)</b> quyền truy cập cảm biến góc nghiêng nên hệ thống không mở đề thi.<br><br>
-                Hệ thống sẽ <b>Đăng xuất và mở Tab mới</b> để làm mới quyền bảo mật. Khi vào lại, vui lòng chọn <b class="text-warning">"Allow" (Cho phép)</b>!
-            </p>
-            <button type="button" class="btn btn-danger w-100 fw-bold py-3 text-white shadow" style="border-radius:12px; font-size:0.95rem;" onclick="window.force_signout_after_sensor_cancel()">
-                <i class="bi bi-box-arrow-right me-1"></i> ĐÃ HIỂU & ĐĂNG XUẤT NGAY
-            </button>
-        `;
-    } else {
-        // Trường hợp đăng nhập lại nhưng vẫn trên Tab cũ nên iOS tự chặn ngầm không hiện câu hỏi Allow
-        let stepFix = isInApp
-            ? `1. Bấm dấu <b>"X" (Đóng)</b> ở góc trên cùng để thoát hẳn cửa sổ Zalo hiện tại.<br>2. Bấm lại vào đường link đề thi từ tin nhắn Zalo để mở phiên mới.<br>3. Khi bảng hỏi hiện ra, hãy chọn <b class="text-warning">"Allow" (Cho phép)</b>.`
-            : `1. Trên Safari, bấm vào biểu tượng <b>"aA"</b> (hoặc biểu tượng cài đặt cạnh thanh địa chỉ web) $\\rightarrow$ Chọn <b>Cài đặt cho trang web (Website Settings)</b> và bật quyền <b>Chuyển động & Hướng</b>.<br>2. Hoặc <b>Đóng hẳn Tab web này đi</b>, mở một <b>Tab mới (+)</b> và dán lại link thi để iPhone hỏi lại chữ <b class="text-warning">"Allow"</b>!`;
-
-        guideHtml = `
-            <div class="alert alert-warning text-start small py-2 px-3 mb-3" style="font-size:0.8rem; line-height:1.5; background:rgba(245, 158, 11, 0.15); color:#fde68a; border:1px solid #f59e0b; border-radius:12px;">
-                <div class="fw-bold text-warning mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i> Trình duyệt trên iPhone đã khóa hộp thoại "Allow" ở Tab này do lần trước bạn bấm Cancel!</div>
-                ${stepFix}
-            </div>
-            <button type="button" class="btn btn-info w-100 fw-bold py-3 text-dark shadow mb-2" style="border-radius:12px; font-size:0.9rem;" onclick="window.open_fresh_tab_for_ios_sensor()">
-                <i class="bi bi-plus-square-fill me-1"></i> MỞ SANG TAB MỚI ĐỂ HIỆN LẠI "ALLOW"
-            </button>
-            <button type="button" class="btn btn-outline-light w-100 py-2 small" style="border-radius:12px; font-size:0.8rem;" onclick="document.getElementById('sensor_cancel_signout_modal').remove()">
-                Đóng thông báo này (Giữ nguyên đăng nhập)
-            </button>
-        `;
-    }
+    let safeExam = (typeof examCode === 'string' && examCode) ? examCode : ((window.proctoring_state && window.proctoring_state.exam_code) || '');
 
     let modal = document.createElement('div');
     modal.id = modalId;
     modal.style.cssText = "position:fixed; inset:0; width:100vw; height:100vh; background:rgba(15, 23, 42, 0.98); color:#fff; z-index:9999999; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px; user-select:none;";
     modal.innerHTML = `
-        <div class="animate__animated animate__zoomIn" style="background:#1e293b; border:2px solid #ef4444; border-radius:20px; padding:26px 20px; max-width:410px; width:100%; box-shadow:0 20px 50px rgba(239, 68, 68, 0.4);">
-            <i class="bi bi-shield-x text-danger" style="font-size:3.6rem;"></i>
-            <h5 class="fw-bold text-white mt-2 mb-2 text-uppercase">CHƯA BẬT CẢM BIẾN PHÒNG THI!</h5>
-            ${guideHtml}
+        <div class="animate__animated animate__zoomIn" style="background:#1e293b; border:2px solid #ef4444; border-radius:20px; padding:26px 20px; max-width:395px; width:100%; box-shadow:0 20px 50px rgba(239, 68, 68, 0.4);">
+            <i class="bi bi-shield-x text-danger" style="font-size:3.8rem;"></i>
+            <h5 class="fw-bold text-white mt-2 mb-2 text-uppercase">CHƯA CẤP QUYỀN CẢM BIẾN!</h5>
+            <p class="text-white-50 small mb-3" style="line-height:1.6;">
+                Quyền cảm biến chuyển động đang bị tắt (<b class="text-danger">Cancel</b>) nên hệ thống không mở đề thi.<br><br>
+                1. Bấm <b>Thoát hoàn toàn</b>, đóng hẳn trình duyệt/Zalo rồi vào lại và chọn <b class="text-warning">"Allow"</b>.<br>
+                2. Nếu máy bị lỗi cảm biến, hãy báo Giám thị bấm nút <b class="text-info">"Miễn CB"</b> rồi bấm nút xanh bên dưới:
+            </p>
+            <button id="btn_check_admin_bypass" type="button" class="btn btn-info w-100 fw-bold py-2 text-dark shadow mb-2" style="border-radius:12px; font-size:0.85rem;" onclick="window.verify_bypass_from_modal('${safeExam}')">
+                <i class="bi bi-unlock-fill me-1"></i> GIÁM THỊ ĐÃ CẤP QUYỀN - BẤM ĐỂ VÀO THI
+            </button>
+            <button type="button" class="btn btn-danger w-100 fw-bold py-3 text-white shadow" style="border-radius:12px; font-size:0.95rem;" onclick="window.force_signout_after_sensor_cancel()">
+                <i class="bi bi-power me-1"></i> THOÁT HOÀN TOÀN
+            </button>
         </div>
     `;
     document.body.appendChild(modal);
 };
 
-// Hàm thử nhảy sang Tab mới tinh (_blank) để Safari xóa bộ nhớ đệm "Cancel" của Tab cũ
-window.open_fresh_tab_for_ios_sensor = function() {
-    let cleanUrl = window.location.origin + window.location.pathname + '?reset_sensor=' + Date.now();
-    let newWin = window.open(cleanUrl, '_blank');
-    if (!newWin) {
-        // Nếu trình duyệt chặn mở tab tự động -> Copy sẵn link cho sinh viên mở tab mới
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(window.location.href).catch(() => {});
-        }
-        alert("Vui lòng bấm nút đóng Tab hiện tại, mở một Tab mới (+) trên trình duyệt và truy cập lại trang thi để iPhone hiện lại câu hỏi Allow!");
-    } else {
-        let modal = document.getElementById("sensor_cancel_signout_modal");
-        if (modal) modal.remove();
-    }
-};
-
-// Hàm thực thi Đăng xuất (Sign Out) + Mở sang Tab mới khi vừa bấm Cancel lần đầu
+// Thực thi Đăng xuất sạch sẽ và đóng trang hoàn toàn
 window.force_signout_after_sensor_cancel = function() {
     window.remove_hardware_sensor_lock();
     window._iosSensorPermState = null;
@@ -10360,30 +11118,41 @@ window.force_signout_after_sensor_cancel = function() {
         else if (typeof window.sign_out === 'function') window.sign_out();
     } catch (e) {}
 
-    // Thử mở sang Tab mới hoàn toàn (Vì chỉ khi sang Tab mới thì Safari iOS mới chịu hỏi lại hộp thoại Allow!)
-    let freshUrl = window.location.origin + window.location.pathname + '?fresh_login=' + Date.now();
-    let newTab = window.open(freshUrl, '_blank');
-    if (newTab) {
-        // Làm trắng tab cũ đã bị nhiễm trạng thái Cancel để sinh viên dùng tab mới vừa bật lên
-        document.body.innerHTML = `
-            <div style="background:#0f172a; color:#fff; height:100vh; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:24px; font-family:sans-serif;">
-                <h4 style="color:#38bdf8;">Đã chuyển sang Tab mới!</h4>
-                <p style="color:#94a3b8; font-size:0.9rem;">Vui lòng đóng Tab cũ này lại và đăng nhập ở Tab vừa mới mở để chọn <b>Allow</b>.</p>
+    try { window.close(); } catch (e) {}
+
+    document.body.innerHTML = `
+        <div style="position:fixed; inset:0; background:#090d16; color:#fff; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; padding:28px; font-family:system-ui,-apple-system,sans-serif; user-select:none;">
+            <div style="background:#1e293b; border:1px solid #334155; border-radius:20px; padding:32px 22px; max-width:380px; width:100%; box-shadow:0 20px 40px rgba(0,0,0,0.7);">
+                <div style="font-size:3.5rem; margin-bottom:12px;">🛑</div>
+                <h4 style="color:#f87171; font-weight:800; margin-bottom:12px; text-transform:uppercase; font-size:1.15rem;">ĐÃ ĐĂNG XUẤT & ĐÓNG PHIÊN THI</h4>
+                <p style="color:#cbd5e1; font-size:0.9rem; line-height:1.6; margin-bottom:16px;">
+                    Do bạn đã bấm <b>Cancel</b>, iPhone sẽ tạm khóa hộp thoại cấp quyền cho đến khi bạn tắt hẳn ứng dụng hiện tại.
+                </p>
+                <div style="background:rgba(56, 189, 248, 0.1); border:1px solid #0284c7; border-radius:12px; padding:14px; text-align:left; font-size:0.85rem; color:#e0f2fe; line-height:1.6;">
+                    <b style="color:#38bdf8;">👉 Cách vào lại để hiện bảng "Allow":</b><br>
+                    1. Bấm dấu <b>X</b> góc trên (nếu dùng Zalo) hoặc <b>vuốt tắt hẳn ứng dụng Safari/Zalo</b> khỏi màn hình điện thoại.<br>
+                    2. Mở lại đường link thi và chọn <b style="color:#facc15;">Allow (Cho phép)</b>.
+                </div>
             </div>
-        `;
-    } else {
-        window.location.href = freshUrl;
-    }
+        </div>
+    `;
 };
 
 // =========================================================================
 // 📱 CẢM BIẾN VẬT LÝ: ÉP ĐẶT ĐIỆN THOẠI NẰM YÊN TRÊN BÀN KHI THI
+// (Tự động tắt khóa nếu Admin cấp quyền Miễn CB hoặc khi đã chọn Allow)
 // =========================================================================
-window.init_hardware_sensor_lock = function() {
+window.init_hardware_sensor_lock = async function() {
     let isMobile = /iPhone|iPad|iPod|Android|Mobi/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
     if (!isMobile || window.is_study_mode !== false) return;
 
     window.remove_hardware_sensor_lock();
+
+    // Nếu Giám thị đã cấp quyền miễn cảm biến cho sinh viên này -> Mở khóa hoàn toàn
+    if (window._studentSensorBypassed || await window.check_student_sensor_bypass()) {
+        return;
+    }
+
     window.is_exam_started = true;
     window._hasReceivedRealSensorEvent = false;
 
@@ -10408,17 +11177,16 @@ window.init_hardware_sensor_lock = function() {
     let isCurrentlyTilted = false;
     let maxTolerance = 18; // Độ nghiêng mặt bàn tối đa cho phép (18 độ)
 
-    window._sensorOrientationHandler = function(event) {
-        if (window.is_study_mode !== false) {
+    const handleAngleData = (beta, gamma) => {
+        if (window.is_study_mode !== false || window._studentSensorBypassed) {
             window.remove_hardware_sensor_lock();
             return;
         }
-
-        let beta = event.beta;
-        let gamma = event.gamma;
-        if (beta === null || gamma === null) return;
+        if (beta === null || gamma === null || isNaN(beta) || isNaN(gamma)) return;
 
         window._hasReceivedRealSensorEvent = true;
+        let blockModal = document.getElementById("sensor_cancel_signout_modal");
+        if (blockModal) blockModal.remove();
 
         let resultOverlay = document.getElementById('glass_result_overlay');
         if (resultOverlay) {
@@ -10445,16 +11213,28 @@ window.init_hardware_sensor_lock = function() {
         }
     };
 
-    window.addEventListener('deviceorientation', window._sensorOrientationHandler, true);
+    window._sensorOrientationHandler = function(event) {
+        handleAngleData(event.beta, event.gamma);
+    };
 
-    // Chốt bảo hiểm phụ: Nếu sau 1 giây vào phòng mà iOS vẫn không phát tín hiệu cảm biến -> Cũng bật bảng bắt Sign Out!
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-        window._sensorVerifyTimeout = setTimeout(() => {
-            if (!window._hasReceivedRealSensorEvent && window.is_study_mode === false) {
-                window.show_cancel_sensor_signout_modal();
-            }
-        }, 1000);
-    }
+    window._sensorMotionHandler = function(event) {
+        if (window._hasReceivedRealSensorEvent) return;
+        let ag = event.accelerationIncludingGravity;
+        if (!ag || ag.x === null || ag.y === null || ag.z === null) return;
+        let pitch = Math.atan2(ag.y, Math.sqrt(ag.x * ag.x + ag.z * ag.z)) * (180 / Math.PI);
+        let roll = Math.atan2(-ag.x, Math.sqrt(ag.y * ag.y + ag.z * ag.z)) * (180 / Math.PI);
+        handleAngleData(pitch, roll);
+    };
+
+    window.addEventListener('deviceorientation', window._sensorOrientationHandler, true);
+    window.addEventListener('devicemotion', window._sensorMotionHandler, true);
+
+    // 🌟 AUTO-FIX MẶC ĐỊNH: Một khi đã vượt qua Chốt chặn 1 (tức là đã bấm Allow) để vào tới màn hình câu hỏi,
+    // hệ thống tự động xóa mọi bảng thông báo kẹt và chỉ âm thầm lắng nghe góc nghiêng (không bao giờ bật bảng khóa đè lên đề thi!)
+    let strayModal = document.getElementById("sensor_cancel_signout_modal");
+    if (strayModal) strayModal.remove();
+    let strayGate = document.getElementById("ios_sensor_gate_modal");
+    if (strayGate) strayGate.remove();
 };
 
 window.remove_hardware_sensor_lock = function() {
@@ -10466,8 +11246,1038 @@ window.remove_hardware_sensor_lock = function() {
         window.removeEventListener('deviceorientation', window._sensorOrientationHandler, true);
         window._sensorOrientationHandler = null;
     }
+    if (window._sensorMotionHandler) {
+        window.removeEventListener('devicemotion', window._sensorMotionHandler, true);
+        window._sensorMotionHandler = null;
+    }
     let overlay = document.getElementById("anti_pickup_overlay");
     if (overlay) overlay.remove();
     let gate = document.getElementById("sensor_cancel_signout_modal");
     if (gate) gate.remove();
+    let fallbackGate = document.getElementById("ios_sensor_gate_modal");
+    if (fallbackGate) fallbackGate.remove();
 };
+
+// =========================================================================
+// 🩺 HỆ THỐNG CHẨN ĐOÁN & THU NHÁP CHẤM ĐIỂM THÔNG MINH (DARK GLASS UI)
+// - Chấm chính xác 100% bất kể đảo câu hỏi hay đảo đáp án A, B, C, D
+// - Hiển thị Điểm nháp thực tế + Điểm phần chưa làm + Cho phép Thầy tùy chỉnh điểm
+// =========================================================================
+
+// 1. Hàm chuẩn hóa chuỗi để so sánh đáp án chính xác tuyệt đối
+window.clean_exam_compare_str = function(s) {
+    if (s === undefined || s === null) return "";
+    return String(s)
+        .replace(/^[A-D][\.\)\:]\s*/i, '')
+        .replace(/\{\{(.*?)::.*?::.*?\}\}/g, '$1')
+        .replace(/<[^>]*>/g, '')
+        .toLowerCase()
+        .normalize('NFC')
+        .replace(/\\/g, '')
+        .replace(/\s+/g, '')
+        .replace(/["“”'‘’]/g, '');
+};
+
+// 2. Hàm kiểm tra 1 câu hỏi trên máy sinh viên (hoặc đối chiếu với câu gốc) xem đã làm chưa & đúng hay sai
+window.evaluate_single_exam_question = function(qItem, masterQ = null) {
+    if (!qItem) return { isDone: false, isCorrect: false };
+    const cleanTxt = window.clean_exam_compare_str;
+
+    let uAns = qItem.ans_user !== undefined ? qItem.ans_user : (qItem.user_ans !== undefined ? qItem.user_ans : qItem.val);
+    let cType = String(qItem.type || (masterQ && masterQ.type) || 'single').toLowerCase().trim();
+
+    let isDone = false;
+    if (Array.isArray(uAns)) {
+        isDone = uAns.some(x => x !== undefined && x !== null && String(x).trim() !== "");
+    } else if (uAns !== undefined && uAns !== null && String(uAns).trim() !== "") {
+        isDone = true;
+    } else if (qItem.done === true && uAns) {
+        isDone = true;
+    }
+
+    if (!isDone) return { isDone: false, isCorrect: false };
+
+    let rawAns = String(qItem.a || qItem.answer || "").trim();
+    let opts = Array.isArray(qItem.opts) && qItem.opts.length > 0 ? qItem.opts : [qItem.opta, qItem.optb, qItem.optc, qItem.optd].filter(Boolean);
+
+    let masterRawAns = masterQ ? String(masterQ.a || masterQ.answer || "").trim() : "";
+    let masterOpts = masterQ ? (Array.isArray(masterQ.opts) && masterQ.opts.length > 0 ? masterQ.opts : [masterQ.opta || masterQ.opt_a, masterQ.optb || masterQ.opt_b, masterQ.optc || masterQ.opt_c, masterQ.optd || masterQ.opt_d].filter(Boolean)) : [];
+
+    const resolveCorrectText = (ansStr, optArr) => {
+        if (/^[A-D]$/i.test(ansStr) && Array.isArray(optArr) && optArr.length > 0) {
+            let idx = ansStr.toUpperCase().charCodeAt(0) - 65;
+            if (optArr[idx] !== undefined && String(optArr[idx]).trim() !== "") {
+                return String(optArr[idx]).trim();
+            }
+        }
+        return ansStr;
+    };
+
+    let correctTextLocal = resolveCorrectText(rawAns, opts);
+    let correctTextMaster = masterQ ? resolveCorrectText(masterRawAns, masterOpts) : "";
+
+    if (cType === 'fill' || cType === 'short' || cType === 'điền khuyết') {
+        let targetAns = rawAns || masterRawAns;
+        let cParts = targetAns.split('|').map(x => cleanTxt(x));
+        let uArr = Array.isArray(uAns) ? uAns : [uAns];
+        let ok = cParts.length > 0 && cParts.every((val, idx) => cleanTxt(uArr[idx]) === val && val !== "");
+        return { isDone: true, isCorrect: ok };
+    }
+
+    if (cType === 'hotspot' && typeof window.check_hotspot_correct === 'function') {
+        let tempQ = { ...masterQ, ...qItem, ans_user: String(uAns), a: rawAns || masterRawAns };
+        return { isDone: true, isCorrect: Boolean(window.check_hotspot_correct(tempQ)) };
+    }
+
+    if (cType === 'arrange' || cType === 'sắp xếp') {
+        let uStr = (Array.isArray(uAns) ? uAns.join('') : String(uAns)).replace(/[\s\-\|,]/g, '').toLowerCase();
+        let cStr = (rawAns || masterRawAns).replace(/[\s\-\|,]/g, '').toLowerCase();
+        return { isDone: true, isCorrect: (uStr !== "" && uStr === cStr) };
+    }
+
+    let cleanUser = cleanTxt(uAns);
+    if (/^[a-d]$/i.test(String(uAns).trim()) && opts.length > 0) {
+        let uIdx = String(uAns).trim().toUpperCase().charCodeAt(0) - 65;
+        if (opts[uIdx]) cleanUser = cleanTxt(opts[uIdx]);
+    }
+
+    let isMatchLocal = (cleanUser !== "" && (cleanUser === cleanTxt(correctTextLocal) || cleanUser === cleanTxt(rawAns)));
+    let isMatchMaster = masterQ ? (cleanUser !== "" && (cleanUser === cleanTxt(correctTextMaster) || cleanUser === cleanTxt(masterRawAns))) : false;
+
+    if (!isMatchLocal && !isMatchMaster && /^[A-D]$/i.test(String(uAns).trim())) {
+        let uLetter = String(uAns).trim().toUpperCase();
+        if (uLetter === rawAns.toUpperCase() || (masterRawAns && uLetter === masterRawAns.toUpperCase())) {
+            return { isDone: true, isCorrect: true };
+        }
+    }
+
+    return { isDone: true, isCorrect: (isMatchLocal || isMatchMaster) };
+};
+
+// 3. Khóa an toàn không cho lưu nháp đè lên bài đã nộp & tự động đính kèm điểm chấm trực tiếp (live_score) vào draft_data
+(function setupExamSyncSafeguardsAndLiveStats() {
+    const patchDraftFn = () => {
+        if (typeof window.auto_save_exam_draft === 'function' && !window.auto_save_exam_draft._hasLiveStatsPatch) {
+            const _origAutoSave = window.auto_save_exam_draft;
+
+            const wrappedAutoSave = async function(forceCloud = false) {
+                if (window._is_exam_submitting_or_done || window.is_force_submitting || document.getElementById('glass_result_overlay')) {
+                    return;
+                }
+
+                let res = await _origAutoSave.apply(this, arguments);
+
+                try {
+                    if (window.is_study_mode === false && window.proctoring_state && window.proctoring_state.exam_code && Array.isArray(window.questions) && window.questions.length > 0) {
+                        let now = Date.now();
+                        if (forceCloud || !window._last_live_stats_sync || (now - window._last_live_stats_sync > 4000)) {
+                            window._last_live_stats_sync = now;
+
+                            let totalQ = window.questions.length;
+                            let doneQ = 0;
+                            let correctQ = 0;
+                            let snapshotItems = [];
+
+                            window.questions.forEach((q) => {
+                                let ev = window.evaluate_single_exam_question(q, null);
+                                if (ev.isDone) doneQ++;
+                                if (ev.isCorrect) correctQ++;
+                                snapshotItems.push({
+                                    id: q.id,
+                                    q: q.q ? String(q.q).substring(0, 120) : "",
+                                    type: q.type || 'single',
+                                    opts: q.opts || [],
+                                    a: q.a || q.answer || "",
+                                    ans_user: q.ans_user,
+                                    done: Boolean(ev.isDone),
+                                    is_correct: Boolean(ev.isCorrect)
+                                });
+                            });
+
+                            let earnedScore = totalQ > 0 ? parseFloat(((correctQ / totalQ) * 10).toFixed(2)) : 0;
+                            let remainingCount = Math.max(0, totalQ - doneQ);
+                            let remainingPotential = totalQ > 0 ? parseFloat(((remainingCount / totalQ) * 10).toFixed(2)) : 0;
+
+                            let enrichedDraft = {
+                                updated_at: new Date().toISOString(),
+                                time_left: window.time_left || 0,
+                                total_questions: totalQ,
+                                answered_count: doneQ,
+                                correct_count: correctQ,
+                                unanswered_count: remainingCount,
+                                live_score: earnedScore,
+                                potential_add_score: remainingPotential,
+                                max_possible_score: parseFloat((earnedScore + remainingPotential).toFixed(2)),
+                                questions: snapshotItems
+                            };
+
+                            const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+                            await clientDb.from('exam_results')
+                                .update({ draft_data: enrichedDraft })
+                                .eq('exam_code', window.proctoring_state.exam_code)
+                                .ilike('student_id', String(window.current_student_id || '').trim());
+                        }
+                    }
+                } catch (e) {}
+
+                return res;
+            };
+
+            wrappedAutoSave._hasLiveStatsPatch = true;
+            window.auto_save_exam_draft = wrappedAutoSave;
+        }
+    };
+
+    const _origStartExam = window.start_online_exam;
+    if (typeof _origStartExam === 'function' && !_origStartExam._hasResetPatch) {
+        const wrappedStart = async function(ex) {
+            window._is_exam_submitting_or_done = false;
+            window._captured_force_flag = false;
+            return await _origStartExam.apply(this, arguments);
+        };
+        wrappedStart._hasResetPatch = true;
+        window.start_online_exam = wrappedStart;
+    }
+
+    patchDraftFn();
+    window.addEventListener('load', patchDraftFn);
+    setTimeout(patchDraftFn, 600);
+})();
+
+// 4. HÀM PHÂN TÍCH BẢN NHÁP TOÀN DIỆN (Chấm chuẩn cả nháp mới lẫn nháp cũ trên Supabase)
+window.analyze_student_draft_score = function(resRow, masterQs) {
+    const cleanTxt = window.clean_exam_compare_str;
+    let draft = (resRow && resRow.draft_data) ? resRow.draft_data : {};
+    if (typeof draft === 'string') {
+        try { draft = JSON.parse(draft); } catch (e) { draft = {}; }
+    }
+
+    let totalCount = (Array.isArray(masterQs) && masterQs.length > 0) ? masterQs.length : (Number(draft.total_questions) || 0);
+
+    let rawList = [];
+    if (Array.isArray(draft)) rawList = draft;
+    else if (Array.isArray(draft.questions)) rawList = draft.questions;
+    else if (Array.isArray(draft.items)) rawList = draft.items;
+    else if (Array.isArray(draft.answers)) rawList = draft.answers;
+    else if (draft.answers && typeof draft.answers === 'object') {
+        rawList = Object.keys(draft.answers).map(k => {
+            let v = draft.answers[k];
+            if (v && typeof v === 'object') return { _key: k, ...v };
+            return { _key: k, ans_user: v, done: (v !== undefined && v !== null && String(v).trim() !== "") };
+        });
+    } else if (draft && typeof draft === 'object') {
+        let ignoreKeys = ['updated_at', 'time_left', 'total_questions', 'answered_count', 'correct_count', 'unanswered_count', 'live_score', 'potential_add_score', 'max_possible_score', 'questions', 'answers', 'exam_deadline_time'];
+        let possibleKeys = Object.keys(draft).filter(k => !ignoreKeys.includes(k));
+        if (possibleKeys.length > 0) {
+            rawList = possibleKeys.map(k => {
+                let v = draft[k];
+                if (v && typeof v === 'object') return { _key: k, ...v };
+                return { _key: k, ans_user: v, done: (v !== undefined && v !== null && String(v).trim() !== "") };
+            });
+        }
+    }
+
+    if (!totalCount && rawList.length > 0) totalCount = rawList.length;
+    if (!totalCount) totalCount = 1;
+
+    let answeredCount = 0;
+    let correctCount = 0;
+
+    if (rawList.length > 0) {
+        rawList.forEach((dq, idx) => {
+            if (!dq) return;
+
+            if (typeof dq.is_correct === 'boolean') {
+                let uAns = dq.ans_user;
+                let hasAns = Array.isArray(uAns) ? uAns.some(x => String(x || '').trim() !== '') : (uAns !== undefined && uAns !== null && String(uAns).trim() !== '');
+                if (dq.done || hasAns) {
+                    answeredCount++;
+                    if (dq.is_correct) correctCount++;
+                }
+                return;
+            }
+
+            let matchedMaster = null;
+            let uAns = dq.ans_user !== undefined ? dq.ans_user : (dq.user_ans !== undefined ? dq.user_ans : dq.val);
+            let cleanU = cleanTxt(uAns);
+
+            if (Array.isArray(masterQs) && masterQs.length > 0) {
+                if (dq.q) {
+                    let cleanDqText = cleanTxt(dq.q);
+                    matchedMaster = masterQs.find(mq => cleanTxt(mq.q || mq.question_text) === cleanDqText || cleanTxt(mq.q || '').includes(cleanDqText));
+                }
+                if (!matchedMaster && dq.id !== undefined) {
+                    matchedMaster = masterQs.find(mq => String(mq.id) === String(dq.id));
+                }
+                // Nếu bản nháp chỉ lưu nội dung đáp án uAns mà không lưu nội dung câu hỏi -> Quét tìm câu hỏi trong đề gốc có phương án trùng khớp!
+                if (!matchedMaster && cleanU !== "" && cleanU !== "đúng" && cleanU !== "sai" && !/^[a-d]$/i.test(cleanU)) {
+                    matchedMaster = masterQs.find(mq => {
+                        let mOpts = Array.isArray(mq.opts) && mq.opts.length > 0 ? mq.opts : [mq.opta || mq.opt_a, mq.optb || mq.opt_b, mq.optc || mq.opt_c, mq.optd || mq.opt_d];
+                        return mOpts.some(opt => cleanTxt(opt) === cleanU);
+                    });
+                }
+                if (!matchedMaster) {
+                    let kIdx = dq._key !== undefined && !isNaN(parseInt(dq._key)) ? parseInt(dq._key) : idx;
+                    if (masterQs[kIdx]) matchedMaster = masterQs[kIdx];
+                }
+            }
+
+            let ev = window.evaluate_single_exam_question(dq, matchedMaster);
+            if (ev.isDone) answeredCount++;
+            if (ev.isCorrect) correctCount++;
+        });
+    } else if (typeof draft.live_score === 'number') {
+        answeredCount = Number(draft.answered_count) || 0;
+        correctCount = Number(draft.correct_count) || 0;
+    }
+
+    let dbProgress = Number(resRow.progress) || 0;
+    if (answeredCount === 0 && dbProgress > 0 && totalCount > 0) {
+        answeredCount = Math.round((dbProgress / 100) * totalCount);
+    }
+
+    let unansweredCount = Math.max(0, totalCount - answeredCount);
+    let wrongCount = Math.max(0, answeredCount - correctCount);
+
+    let draftEarnedScore = totalCount > 0 ? parseFloat(((correctCount / totalCount) * 10).toFixed(2)) : 0;
+    let remainingMaxScore = totalCount > 0 ? parseFloat(((unansweredCount / totalCount) * 10).toFixed(2)) : 0;
+    let maxPossibleScore = parseFloat(Math.min(10, draftEarnedScore + remainingMaxScore).toFixed(2));
+    let halfPotentialScore = parseFloat(Math.min(10, draftEarnedScore + (remainingMaxScore * 0.5)).toFixed(2));
+
+    return {
+        totalCount,
+        answeredCount,
+        correctCount,
+        wrongCount,
+        unansweredCount,
+        draftEarnedScore,
+        remainingMaxScore,
+        halfPotentialScore,
+        maxPossibleScore
+    };
+};
+
+// 5. GIAO DIỆN THU BÀI & CHẤM ĐIỂM TỪ NHÁP (CHUẨN SUPER APP TRÀN VIỀN - RÕ CHỮ & ĐỒNG BỘ THU BÀI TRÊN MÁY SV)
+window.admin_force_grade_student_draft = async function(examCode, studentId, studentName) {
+    if (!examCode || !studentId) return;
+
+    const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+    if (typeof window.show_toast === 'function') {
+        window.show_toast("⏳ Đang phân tích bản nháp của " + studentName + "...");
+    }
+
+    try {
+        const { data: resRow, error: resErr } = await clientDb
+            .from('exam_results')
+            .select('*')
+            .eq('exam_code', examCode)
+            .ilike('student_id', studentId)
+            .maybeSingle();
+
+        if (resErr) throw resErr;
+        if (!resRow) return window.show_toast("⚠️ Sinh viên này chưa có dữ liệu vào phòng thi trên máy chủ!", true);
+
+        const { data: examRow } = await clientDb
+            .from('online_exams')
+            .select('*')
+            .eq('exam_code', examCode)
+            .maybeSingle();
+
+        let masterQs = [];
+        if (examRow) {
+            let rawQ = examRow.questions_json || examRow.questionsJSON || examRow.questions;
+            if (rawQ) {
+                try { masterQs = typeof rawQ === 'string' ? JSON.parse(rawQ) : rawQ; } catch (e) {}
+            }
+        }
+
+        let stats = window.analyze_student_draft_score(resRow, masterQs);
+
+        let modalId = 'admin_draft_grade_modal';
+        let oldModal = document.getElementById(modalId);
+        if (oldModal) oldModal.remove();
+
+        let modalHtml = `
+        <style>
+            @media (max-width: 767.98px) {
+                .mobile-px-half { padding-left: 0.5px !important; padding-right: 0.5px !important; }
+                .mobile-margin-0 { margin-left: 0 !important; margin-right: 0 !important; }
+            }
+            .unified-input {
+                padding: 10px 15px !important;
+                border-radius: 12px !important;
+                font-size: 0.95rem !important;
+                height: 52px !important;
+                line-height: 1.5 !important;
+                box-shadow: 0 2px 5px rgba(0,0,0,0.1) !important;
+                background: #1a1d20 !important;
+                border: 1px solid #2b3035 !important;
+                color: #fff !important;
+            }
+            .unified-input:focus { border-color: #0ea5e9 !important; box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.15) !important; outline: none; }
+            .preset-score-btn {
+                background: rgba(255, 255, 255, 0.03) !important;
+                border: 1px solid rgba(255, 255, 255, 0.25) !important;
+                color: #e2e8f0 !important;
+                border-radius: 10px !important;
+                padding: 8px 6px !important;
+                font-size: 0.78rem !important;
+                transition: 0.15s ease;
+            }
+            .preset-score-btn:hover, .preset-score-btn:active {
+                border-color: #38bdf8 !important;
+                background: rgba(56, 189, 248, 0.12) !important;
+                color: #fff !important;
+            }
+        </style>
+
+        <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column animate__animated animate__fadeInUp" style="background: #212529; z-index: 999999; height: 100dvh; overflow: hidden;">
+            
+            <!-- HEADER ĐỒNG BỘ SUPER APP TRÀN VIỀN -->
+            <div class="d-flex justify-content-between align-items-center p-3 border-bottom border-secondary bg-dark flex-shrink-0" style="margin-left: -0.5px; margin-right: -0.5px;">
+                <button class="btn btn-sm text-light fw-bold d-flex align-items-center p-1 shadow-none bg-transparent border-0" onclick="document.getElementById('${modalId}').remove()">
+                    <i class="bi bi-chevron-left fs-4"></i><span class="ms-1">Thoát</span>
+                </button>
+                <h6 class="fw-bold text-white mb-0 text-center flex-grow-1 text-truncate" style="font-size: 1.05rem; letter-spacing: 0.5px;">
+                    THU BÀI & CHẤM ĐIỂM TỪ NHÁP
+                </h6>
+                <div style="width: 65px;"></div>
+            </div>
+
+            <!-- BODY TRƯỢT TỰ DO CĂN GIỮA -->
+            <div class="flex-grow-1 overflow-auto d-flex flex-column justify-content-center p-2 p-md-3" style="background: transparent; min-height: 0;">
+                <div class="mx-auto w-100 mobile-px-half px-2 px-md-3" style="max-width: 500px;">
+                    
+                    <!-- THÔNG TIN SINH VIÊN -->
+                    <div class="text-center mb-3">
+                        <div class="fw-bold text-info" style="font-size: 1.15rem;">${studentName}</div>
+                        <div class="text-white-50 small font-monospace">Mã SV: <b class="text-warning">${String(studentId).toUpperCase()}</b> | Mã đề: ${examCode}</div>
+                    </div>
+
+                    <!-- 3 Ô THỐNG KÊ SỐ CÂU TRÊN NHÁP -->
+                    <div class="row g-2 mb-3 text-center mobile-margin-0">
+                        <div class="col-4">
+                            <div class="p-2 rounded-3" style="background: #1a1d20; border: 1px solid rgba(16, 185, 129, 0.35);">
+                                <div class="text-success fw-bold" style="font-size: 1.2rem;">${stats.correctCount}/${stats.totalCount}</div>
+                                <div class="text-white-50" style="font-size: 0.72rem;">Câu ĐÚNG</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 rounded-3" style="background: #1a1d20; border: 1px solid rgba(239, 68, 68, 0.35);">
+                                <div class="text-danger fw-bold" style="font-size: 1.2rem;">${stats.wrongCount}/${stats.totalCount}</div>
+                                <div class="text-white-50" style="font-size: 0.72rem;">Câu SAI</div>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 rounded-3" style="background: #1a1d20; border: 1px solid rgba(245, 158, 11, 0.35);">
+                                <div class="text-warning fw-bold" style="font-size: 1.2rem;">${stats.unansweredCount}/${stats.totalCount}</div>
+                                <div class="text-white-50" style="font-size: 0.72rem;">CHƯA LÀM</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- BẢNG CHI TIẾT ĐIỂM NHÁP + ĐIỂM DỰ KIẾN PHẦN CHƯA LÀM -->
+                    <div class="p-3 rounded-3 mb-3" style="background: #1a1d20; border: 1px solid #2b3035; font-size: 0.9rem;">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="text-white-50"><i class="bi bi-check-circle text-success me-1"></i>Điểm đã làm trên nháp:</span>
+                            <strong class="text-success fs-6">${stats.draftEarnedScore} đ</strong>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="text-white-50"><i class="bi bi-hourglass-split text-warning me-1"></i>Điểm tối đa phần chưa làm (${stats.unansweredCount} câu):</span>
+                            <strong class="text-warning">+${stats.remainingMaxScore} đ</strong>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center pt-2 border-top border-secondary border-opacity-25">
+                            <span class="text-info fw-bold"><i class="bi bi-stars me-1"></i>Điểm tối đa có thể đạt:</span>
+                            <strong class="text-info fs-5">${stats.maxPossibleScore} đ</strong>
+                        </div>
+                    </div>
+
+                    <!-- 3 NÚT CHỌN NHANH MỨC ĐIỂM (CÓ CHỮ RÕ RÀNG) -->
+                    <div class="mb-2">
+                        <label class="text-white-50 small fw-bold mb-2 d-block text-uppercase" style="font-size: 0.75rem;">
+                            Chọn nhanh mức điểm gợi ý hoặc nhập trực tiếp:
+                        </label>
+                        <div class="d-flex gap-2 mb-3">
+                            <button type="button" class="btn preset-score-btn flex-grow-1 fw-bold" onclick="document.getElementById('admin_final_draft_score_input').value = '${stats.draftEarnedScore}'">
+                                <i class="bi bi-check2 text-success me-1"></i>Nháp (${stats.draftEarnedScore}đ)
+                            </button>
+                            <button type="button" class="btn preset-score-btn flex-grow-1 fw-bold" onclick="document.getElementById('admin_final_draft_score_input').value = '${stats.halfPotentialScore}'">
+                                <i class="bi bi-lightning text-warning me-1"></i>+50% (${stats.halfPotentialScore}đ)
+                            </button>
+                            <button type="button" class="btn preset-score-btn flex-grow-1 fw-bold" onclick="document.getElementById('admin_final_draft_score_input').value = '${stats.maxPossibleScore}'">
+                                <i class="bi bi-stars text-info me-1"></i>Tối đa (${stats.maxPossibleScore}đ)
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Ô NHẬP ĐIỂM CHỐT -->
+                    <div class="mb-2">
+                        <label class="text-info small fw-bold mb-1 d-block text-uppercase" style="font-size: 0.75rem;">
+                            Điểm quyết định của Giảng viên (Thang điểm 10):
+                        </label>
+                        <input type="number" id="admin_final_draft_score_input" class="form-control unified-input fw-bold text-warning text-center fs-3" step="0.1" min="0" max="10" value="${stats.draftEarnedScore}" onfocus="this.select()">
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- FOOTER NÚT TRÀN VIỀN ĐÁY MÀN HÌNH (KÈM CHỮ RÕ RÀNG) -->
+            <div class="border-top border-secondary bg-dark flex-shrink-0 d-flex w-100 mt-auto" style="margin-left: -0.5px; margin-right: -0.5px;">
+                <button type="button" class="btn fw-bold py-3 flex-grow-1 d-flex justify-content-center align-items-center text-danger bg-transparent border-0 border-end border-secondary" style="border-radius: 0;" onclick="document.getElementById('${modalId}').remove()">
+                    <i class="bi bi-x-lg fs-5 me-2"></i><span>HỦY BỎ</span>
+                </button>
+                <button type="button" id="btn_confirm_save_draft_grade" class="btn fw-bold py-3 flex-grow-1 d-flex justify-content-center align-items-center text-info bg-transparent border-0" style="border-radius: 0;">
+                    <i class="bi bi-check2-circle fs-5 me-2"></i><span>XÁC NHẬN THU BÀI</span>
+                </button>
+            </div>
+        </div>`;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+
+        document.getElementById('btn_confirm_save_draft_grade').onclick = async function() {
+            let inputEl = document.getElementById('admin_final_draft_score_input');
+            let finalScore = parseFloat(inputEl ? inputEl.value : stats.draftEarnedScore);
+            if (isNaN(finalScore) || finalScore < 0) finalScore = 0;
+            if (finalScore > 10) finalScore = 10;
+            finalScore = parseFloat(finalScore.toFixed(2));
+
+            let btn = this;
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2"></span><span>ĐANG THU BÀI...</span>`;
+
+            let submitLabel = `Đã thu bài: ${finalScore}đ`;
+
+            try {
+                const { error: updErr } = await clientDb
+                    .from('exam_results')
+                    .update({
+                        score: finalScore,
+                        is_submitted: true,
+                        progress: 100,
+                        client_status: submitLabel,
+                        submitted_at: new Date().toISOString()
+                    })
+                    .eq('exam_code', examCode)
+                    .ilike('student_id', studentId);
+
+                if (updErr) throw updErr;
+
+                let cleanId = String(studentId).toLowerCase();
+                if (window.current_troubleshoot_submitted) {
+                    window.current_troubleshoot_submitted[cleanId] = finalScore;
+                    window.current_troubleshoot_submitted[studentId] = finalScore;
+                }
+                if (window.current_troubleshoot_sync) {
+                    if (window.current_troubleshoot_sync[cleanId]) window.current_troubleshoot_sync[cleanId].client_status = submitLabel;
+                    if (window.current_troubleshoot_sync[studentId]) window.current_troubleshoot_sync[studentId].client_status = submitLabel;
+                }
+
+                let m = document.getElementById(modalId);
+                if (m) m.remove();
+
+                let searchInput = document.getElementById('troubleshoot_search');
+                if (typeof window.render_troubleshoot_list === 'function') {
+                    window.render_troubleshoot_list(searchInput ? searchInput.value : '');
+                }
+
+                window.show_toast(`✅ Đã thu bài & chốt điểm cho ${studentName}: ${finalScore} điểm!`);
+            } catch (err) {
+                btn.disabled = false;
+                btn.innerHTML = `<i class="bi bi-check2-circle fs-5 me-2"></i><span>XÁC NHẬN THU BÀI</span>`;
+                window.show_toast("❌ Lỗi lưu điểm: " + err.message, true);
+            }
+        };
+
+    } catch (err) {
+        console.error("Lỗi phân tích bản nháp:", err);
+        window.show_toast("❌ Lỗi khi đọc bản nháp: " + err.message, true);
+    }
+};
+
+// 6. HIỂN THỊ SỐ QUÀ ÔN TẬP (🎁) NGAY SAU HỌ TÊN, GIỮ NGUYÊN CÁC NÚT BÊN PHẢI
+(function enhanceTroubleshootDiagnosticUI() {
+    const _origRenderList = window.render_troubleshoot_list;
+    if (typeof _origRenderList !== 'function' || window._isDiagEnhanced) return;
+    window._isDiagEnhanced = true;
+
+    window.troubleshoot_gift_map = window.troubleshoot_gift_map || {};
+    window._lastFetchedGiftExam = null;
+
+    // Hàm tải ngầm số quà tích lũy của sinh viên từ bảng users trên Supabase
+    window.load_troubleshoot_student_gifts = async function() {
+        let curExam = window.current_troubleshoot_exam || 'DEFAULT';
+        if (window._isFetchingGifts || window._lastFetchedGiftExam === curExam) return;
+        window._isFetchingGifts = true;
+
+        try {
+            const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+            if (!clientDb) return;
+
+            const { data, error } = await clientDb.from('users').select('*');
+            if (!error && Array.isArray(data)) {
+                data.forEach(u => {
+                    if (!u.student_id) return;
+                    let cleanId = String(u.student_id).trim().toLowerCase();
+                    let giftVal = u.inventory ?? u.inventory_count ?? u.gift_count ?? u.gifts ?? u.coins ?? 0;
+                    window.troubleshoot_gift_map[cleanId] = parseInt(giftVal) || 0;
+                });
+                window._lastFetchedGiftExam = curExam;
+
+                let searchInput = document.getElementById('troubleshoot_search');
+                if (typeof window.render_troubleshoot_list === 'function') {
+                    window.render_troubleshoot_list(searchInput ? searchInput.value : '');
+                }
+            }
+        } catch (e) {
+            console.warn("Không tải được số quà sinh viên:", e);
+        } finally {
+            window._isFetchingGifts = false;
+        }
+    };
+
+    window.render_troubleshoot_list = function(searchQuery) {
+        _origRenderList(searchQuery);
+
+        if (window._lastFetchedGiftExam !== (window.current_troubleshoot_exam || 'DEFAULT')) {
+            window.load_troubleshoot_student_gifts();
+        }
+
+        let listContainer = document.getElementById('troubleshoot_student_list');
+        if (!listContainer || !window.current_troubleshoot_users) return;
+
+        let safeExamCode = window.current_troubleshoot_exam || '';
+        let cards = listContainer.querySelectorAll('.compact-student-card');
+
+        cards.forEach(card => {
+            let chk = card.querySelector('.troubleshoot-chk');
+            if (!chk) return;
+            let rawId = chk.value;
+            let uid = String(rawId || '').trim().toLowerCase();
+
+            let uObj = window.current_troubleshoot_users.find(x => String(x.rawId).toLowerCase() === uid) || { name: rawId };
+
+            // =================================================================
+            // 🌟 A. CHÈN HUY HIỆU SỐ QUÀ (🎁) NGAY SAU HỌ VÀ TÊN SINH VIÊN
+            // =================================================================
+            let giftCount = window.troubleshoot_gift_map[uid] ?? uObj.inventory ?? uObj.gift_count ?? 0;
+            giftCount = parseInt(giftCount) || 0;
+
+            // Xóa thẻ quà cũ nếu có để tránh bị sinh ra nhiều lần khi render lại
+            let oldGiftBadge = card.querySelector('.student-gift-badge');
+            if (oldGiftBadge) oldGiftBadge.remove();
+
+            let giftBadge = document.createElement('span');
+            giftBadge.className = 'student-gift-badge ms-1.5 d-inline-flex align-items-center flex-shrink-0';
+            
+            let bgStyle = giftCount >= 50 
+                ? 'background: rgba(250, 204, 21, 0.16); border: 1px solid rgba(250, 204, 21, 0.45); color: #facc15;' 
+                : (giftCount >= 10 
+                    ? 'background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.4); color: #38bdf8;' 
+                    : (giftCount > 0 
+                        ? 'background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.2); color: #e2e8f0;' 
+                        : 'background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); color: #64748b;'));
+
+            giftBadge.style.cssText = `${bgStyle} font-size: 0.68rem; font-weight: 700; padding: 1px 6px; border-radius: 999px; line-height: 1.2; vertical-align: middle;`;
+            giftBadge.title = `Số quà tích lũy từ tự học/ôn tập: ${giftCount} 🎁`;
+            giftBadge.innerHTML = `🎁 <span class="ms-1">${giftCount}</span>`;
+
+            // Tìm chính xác vị trí hiển thị Họ tên trong thẻ sinh viên để chèn sát đằng sau
+            let innerFlex = card.querySelector('.flex-grow-1');
+            if (innerFlex) {
+                // Thường tên sinh viên nằm trong thẻ có class fw-bold hoặc text-white/light chứa chuỗi tên
+                let nameEls = innerFlex.querySelectorAll('.fw-bold, .text-white, .text-light, span, div');
+                let targetEl = null;
+                for (let el of nameEls) {
+                    let txt = el.innerText || '';
+                    if (txt.includes(uObj.name) || txt.includes(rawId) || el.classList.contains('fw-bold')) {
+                        // Tránh chọn nhầm các thẻ cha quá lớn, ưu tiên thẻ chứa trực tiếp tên
+                        if (el.children.length === 0 || el.classList.contains('fw-bold')) {
+                            targetEl = el;
+                            break;
+                        }
+                    }
+                }
+                if (targetEl) {
+                    targetEl.after(giftBadge);
+                } else {
+                    innerFlex.prepend(giftBadge);
+                }
+            }
+
+            // =================================================================
+            // 🌟 B. HIỂN THỊ DÒNG CHẨN ĐOÁN & NÚT "THU NHÁP" CHO SV ĐANG THI
+            // =================================================================
+            let scoreVal = window.current_troubleshoot_submitted ? (window.current_troubleshoot_submitted[uid] ?? window.current_troubleshoot_submitted[rawId]) : undefined;
+            let isSub = scoreVal !== undefined;
+            let isPunished = window.current_troubleshoot_punished && window.current_troubleshoot_punished.some(p => String(p.id).toLowerCase() === uid);
+            let isStarted = window.current_troubleshoot_started && (window.current_troubleshoot_started.includes(uid) || window.current_troubleshoot_started.includes(rawId));
+
+            if (isSub || isPunished || !isStarted) return;
+
+            let sync = (window.current_troubleshoot_sync && (window.current_troubleshoot_sync[uid] || window.current_troubleshoot_sync[rawId])) || {};
+            let prog = Number(sync.progress) || 0;
+            let safeName = String(uObj.name || rawId).replace(/'/g, "\\'");
+
+            let diagText = "";
+            let diagColor = "#38bdf8";
+
+            if (prog >= 100) {
+                diagText = `⚠️ Đã chọn 100% câu (Chưa bấm Nộp)`;
+                diagColor = "#f59e0b";
+            } else if (prog === 0) {
+                diagText = `⏳ Đang đọc đề (0%)`;
+                diagColor = "#94a3b8";
+            } else if (sync.client_status === 'OFFLINE') {
+                diagText = `🔌 Mất kết nối tại ${prog}%`;
+                diagColor = "#f87171";
+            } else if (sync.client_status === 'AWAY') {
+                diagText = `👀 Rời màn hình tại ${prog}%`;
+                diagColor = "#fbbf24";
+            } else {
+                diagText = `📝 Đang làm (${prog}%)`;
+                diagColor = "#34d399";
+            }
+
+            if (!card.querySelector('.admin-diag-line')) {
+                let diagDiv = document.createElement('div');
+                diagDiv.className = 'admin-diag-line mt-1 pt-1 border-top border-secondary border-opacity-25 d-flex justify-content-between align-items-center gap-2';
+                diagDiv.style.fontSize = '0.68rem';
+                diagDiv.innerHTML = `
+                    <span class="text-truncate" style="color: ${diagColor}; font-weight: 600;">${diagText}</span>
+                    <button type="button" 
+                        class="btn btn-sm py-0 px-2 d-inline-flex align-items-center gap-1 flex-shrink-0"
+                        style="height: 24px; border-radius: 999px; background: transparent !important; border: 1px solid rgba(255,255,255,0.45); color: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.35); font-size: 0.68rem;" 
+                        onclick="event.preventDefault(); event.stopPropagation(); window.admin_force_grade_student_draft('${safeExamCode}', '${uid}', '${safeName}')" 
+                        title="Thu nháp & Chấm điểm">
+                        <i class="bi bi-cloud-arrow-down" style="font-size: 0.8rem;"></i>
+                        <span class="d-none d-sm-inline fw-bold">Thu nháp</span>
+                    </button>
+                `;
+                let innerFlex = card.querySelector('.flex-grow-1');
+                if (innerFlex) innerFlex.appendChild(diagDiv);
+            }
+        });
+    };
+})();
+
+// 7. CƠ CHẾ PHÍA SINH VIÊN: PHÁT HIỆN THẦY THU BÀI TỪ XA, TẮT GIÁM SÁT & THOÁT FULL-SCREEN
+window.cleanup_proctoring_and_fullscreen = function() {
+    // 1. Khóa cờ kết thúc thi để chặn mọi bộ lắng nghe vi phạm và lưu nháp
+    window._is_exam_submitting_or_done = true;
+    window.is_force_submitting = false;
+    window.is_study_mode = true; // Đưa về chế độ thường để các hàm kiểm tra vi phạm tự ngừng
+
+    // 2. Gọi hàm tắt giám sát gốc của hệ thống (nếu có)
+    if (typeof window.stop_proctoring === 'function') {
+        try { window.stop_proctoring(); } catch (e) {}
+    }
+    if (typeof window.disable_proctoring === 'function') {
+        try { window.disable_proctoring(); } catch (e) {}
+    }
+
+    // 3. Vô hiệu hóa triệt để biến trạng thái giám sát (Chặn đứng thông báo "Cảnh báo vi phạm lần thứ...")
+    if (window.proctoring_state) {
+        window.proctoring_state.is_active = false;
+        window.proctoring_state.active = false;
+        window.proctoring_state.exam_code = null;
+        window.proctoring_state.warnings = 0;
+    }
+
+    // 4. Ngắt toàn bộ các bộ đếm thời gian và cảm biến góc nghiêng
+    if (window.timer_interval) { clearInterval(window.timer_interval); window.timer_interval = null; }
+    if (window.realtime_exam_monitor) { clearInterval(window.realtime_exam_monitor); window.realtime_exam_monitor = null; }
+    if (window.proctor_heartbeat_interval) { clearInterval(window.proctor_heartbeat_interval); window.proctor_heartbeat_interval = null; }
+    if (window.orientation_handler) {
+        window.removeEventListener('deviceorientation', window.orientation_handler, true);
+        window.removeEventListener('deviceorientation', window.orientation_handler, false);
+    }
+
+    // 5. Xóa các bảng cảnh báo vi phạm hoặc màn hình khóa cảm biến nếu đang hiện trên màn hình
+    document.querySelectorAll('#violation_warning_modal, #proctor_warning_overlay, #sensor_lock_overlay, .violation-toast, .proctor-alert').forEach(el => el.remove());
+
+    // 6. Tự động thoát chế độ Toàn màn hình (Full-screen)
+    try {
+        if (document.fullscreenElement || document.webkitFullscreenElement || document.mozFullScreenElement || document.msFullscreenElement) {
+            if (document.exitFullscreen) {
+                document.exitFullscreen().catch(() => {});
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.mozCancelFullScreen) {
+                document.mozCancelFullScreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+        }
+    } catch (e) {}
+
+    // 7. Mở khóa lại thanh cuộn cho màn hình chính
+    document.documentElement.style.overflow = '';
+    document.body.style.overflow = '';
+    document.body.classList.remove('no-scroll', 'exam-locked', 'fullscreen-active');
+};
+
+// Bọc thêm vào hàm exit_quiz_to_menu() để khi bấm "QUAY VỀ TRANG CHỦ" luôn thoát sạch Fullscreen & Giám sát
+(function hookExitQuizCleanup() {
+    const patchExit = () => {
+        if (typeof window.exit_quiz_to_menu === 'function' && !window.exit_quiz_to_menu._hasCleanupPatch) {
+            const _origExit = window.exit_quiz_to_menu;
+            const wrappedExit = function(...args) {
+                window.cleanup_proctoring_and_fullscreen();
+                return _origExit.apply(this, args);
+            };
+            wrappedExit._hasCleanupPatch = true;
+            window.exit_quiz_to_menu = wrappedExit;
+        }
+    };
+    patchExit();
+    window.addEventListener('load', patchExit);
+    setTimeout(patchExit, 600);
+})();
+
+// =========================================================================
+// 🌟 MÀN HÌNH THÔNG BÁO THU BÀI SINH VIÊN (CHUẨN "SUPER APP TRÀN VIỀN")
+// =========================================================================
+window.show_remote_admin_collected_overlay = function(reasonText) {
+    // 1. Lưu cờ đã nộp vào bộ nhớ máy trước khi xóa exam_code
+    if (window.proctoring_state && window.proctoring_state.exam_code && window.current_student_id) {
+        localStorage.setItem('submitted_' + window.proctoring_state.exam_code + '_' + window.current_student_id, 'true');
+        localStorage.removeItem('exam_draft_' + window.proctoring_state.exam_code + '_' + window.current_student_id);
+    }
+
+    // 2. Ngắt ngay lập tức mọi cảnh báo vi phạm, cảm biến & thoát chế độ Full-screen
+    if (typeof window.cleanup_proctoring_and_fullscreen === 'function') {
+        window.cleanup_proctoring_and_fullscreen();
+    }
+
+    let overlayId = 'glass_result_overlay';
+    let existingOverlay = document.getElementById(overlayId);
+    if (existingOverlay) existingOverlay.remove();
+
+    let submitBtn = document.getElementById('submit_btn');
+    if (submitBtn) submitBtn.style.display = 'none';
+
+    let finalReason = reasonText || "Giảng viên / Cán bộ coi thi đã thu bài và chốt điểm trên hệ thống.";
+    let isSuspended = finalReason.toUpperCase().includes("ĐÌNH CHỈ");
+    let themeColor = isSuspended ? "#ef4444" : "#f59e0b";
+    let iconClass = isSuspended ? "bi-slash-circle-fill text-danger" : "bi-clipboard2-check-fill text-warning";
+    let titleHeader = isSuspended ? "ĐÌNH CHỈ THI" : "THÔNG BÁO THU BÀI";
+
+    // 3. Giao diện chuẩn "Super App Tràn Viền" (Full 100dvh - Header - Body căn giữa - Footer neo đáy)
+    let overlayHtml = `
+    <div id="${overlayId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column animate__animated animate__fadeInUp" style="background: #212529; z-index: 9999999; height: 100dvh; max-height: 100dvh; overflow: hidden; user-select: none;">
+        
+        <!-- NGUYÊN TẮC 1: HEADER ĐỒNG BỘ SUPER APP TRÀN VIỀN -->
+        <div class="d-flex justify-content-between align-items-center p-3 border-bottom border-secondary bg-dark flex-shrink-0" style="margin-left: -0.5px; margin-right: -0.5px;">
+            <button type="button" class="btn btn-sm text-light fw-bold d-flex align-items-center p-1 shadow-none bg-transparent border-0" onclick="window.cleanup_proctoring_and_fullscreen(); exit_quiz_to_menu();">
+                <i class="bi bi-chevron-left fs-4"></i><span class="ms-1">Thoát</span>
+            </button>
+            <h6 class="fw-bold text-white mb-0 text-center flex-grow-1 text-truncate text-uppercase" style="font-size: 1.05rem; letter-spacing: 0.5px;">
+                ${titleHeader}
+            </h6>
+            <div style="width: 65px;"></div>
+        </div>
+
+        <!-- NGUYÊN TẮC 2: BODY TỰ CUỘN CĂN GIỮA MÀN HÌNH -->
+        <div class="flex-grow-1 overflow-auto d-flex flex-column justify-content-center align-items-center p-3" style="background: transparent; min-height: 0;">
+            <div class="mx-auto w-100 text-center" style="max-width: 480px;">
+                
+                <!-- Icon trung tâm -->
+                <div class="mb-3">
+                    <i class="bi ${iconClass}" style="font-size: 4.8rem; filter: drop-shadow(0 0 18px ${themeColor}55);"></i>
+                </div>
+
+                <!-- Tiêu đề chính -->
+                <h4 class="fw-bold text-white mb-3 text-uppercase" style="letter-spacing: 0.5px;">
+                    HỆ THỐNG ĐÃ THU BÀI THI
+                </h4>
+
+                <!-- Khối thông tin chi tiết chuẩn #1a1d20 -->
+                <div class="p-3 rounded-3 mb-3 text-start" style="background: #1a1d20; border: 1px solid #2b3035;">
+                    <div class="d-flex align-items-start gap-2 mb-2 pb-2 border-bottom border-secondary border-opacity-25">
+                        <i class="bi bi-info-circle-fill text-warning mt-1"></i>
+                        <div>
+                            <div class="text-white-50 small">Lý do kết thúc ca thi:</div>
+                            <div class="fw-bold text-warning" style="font-size: 0.95rem;">${finalReason}</div>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-start gap-2">
+                        <i class="bi bi-shield-check text-success mt-1"></i>
+                        <div class="text-white-50" style="font-size: 0.88rem; line-height: 1.5;">
+                            Hệ thống máy chủ đã ghi nhận và bảo toàn 100% kết quả bài làm của bạn. Giảng viên sẽ công bố điểm sau khi hoàn tất rà soát.
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- NGUYÊN TẮC 3: FOOTER NEO ĐÁY TRÀN VIỀN 100% -->
+        <div class="border-top border-secondary bg-dark flex-shrink-0 d-flex w-100 mt-auto" style="margin-left: -0.5px; margin-right: -0.5px;">
+            <button type="button" class="btn fw-bold py-3 flex-grow-1 d-flex justify-content-center align-items-center text-info bg-transparent border-0" style="border-radius: 0; font-size: 1rem;" onclick="window.cleanup_proctoring_and_fullscreen(); exit_quiz_to_menu();">
+                <i class="bi bi-house-door-fill fs-5 me-2"></i><span>QUAY VỀ TRANG CHỦ</span>
+            </button>
+        </div>
+
+    </div>`;
+
+    document.body.insertAdjacentHTML('beforeend', overlayHtml);
+};
+
+// Bộ canh gác ngầm trên máy sinh viên (kiểm tra mỗi 4 giây trong lúc đang thi thật)
+(function startStudentRemoteCollectWatcher() {
+    if (window._remote_collect_watcher_started) return;
+    window._remote_collect_watcher_started = true;
+
+    setInterval(async () => {
+        try {
+            if (window.is_study_mode !== false || window._is_exam_submitting_or_done) return;
+            if (!window.proctoring_state || !window.proctoring_state.exam_code || !window.current_student_id) return;
+            if (document.getElementById('glass_result_overlay')) return;
+
+            const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+            const { data: myRow } = await clientDb
+                .from('exam_results')
+                .select('is_submitted, score, client_status')
+                .eq('exam_code', window.proctoring_state.exam_code)
+                .ilike('student_id', String(window.current_student_id).trim())
+                .maybeSingle();
+
+            if (!myRow) return;
+
+            if (Number(myRow.score) === -1) {
+                window.show_remote_admin_collected_overlay("BẠN ĐÃ BỊ ĐÌNH CHỈ THI TRÊN HỆ THỐNG!");
+            } else if (myRow.is_submitted === true) {
+                window.show_remote_admin_collected_overlay("Lý do: Giảng viên / Cán bộ coi thi đã thu bài trên hệ thống.");
+            }
+        } catch (e) {}
+    }, 4000);
+})();
+
+// =========================================================================
+// 🧭 SMART SCROLL MEMORY: NHỚ CHÍNH XÁC VỊ TRÍ PHÒNG THI VỪA THAO TÁC
+// - Từ Sảnh chính bước vào Phòng thi Online -> Lên đầu trang (0px)
+// - Từ trong 1 phòng thi (Sửa đề / Giám sát / Điểm danh) thoát ra -> Đứng đúng ngay vị trí phòng thi đó!
+// =========================================================================
+(function setupSmartExamListScrollMemory() {
+    window._saved_exam_list_scroll_y = 0;
+    window._should_restore_exam_scroll = false;
+
+    // Hàm đọc tọa độ cuộn hiện tại của danh sách
+    window.capture_exam_list_scroll = function() {
+        let y = window.scrollY || window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+        let dashContainer = document.getElementById('dash_subject_cards_container');
+        let dashY = dashContainer ? dashContainer.scrollTop : 0;
+
+        window._saved_exam_list_scroll_y = y;
+        window._saved_exam_dash_scroll_y = dashY;
+        window._should_restore_exam_scroll = true;
+    };
+
+    // Hàm khôi phục đúng vị trí cuộn đã lưu (hoặc về 0 nếu mới từ Sảnh chính vào)
+    window.apply_exam_list_scroll = function(targetY = 0, targetDashY = 0) {
+        try {
+            document.documentElement.style.overflow = '';
+            document.body.style.overflow = '';
+            document.body.classList.remove('no-scroll', 'modal-open');
+
+            window.scrollTo({ top: targetY, left: 0, behavior: 'instant' });
+            document.documentElement.scrollTop = targetY;
+            document.body.scrollTop = targetY;
+
+            let dashContainer = document.getElementById('dash_subject_cards_container');
+            if (dashContainer && targetDashY > 0) {
+                dashContainer.scrollTop = targetDashY;
+            }
+        } catch (e) {}
+    };
+
+    // 1. Tự động ghi nhớ vị trí ngay khoảnh khắc thầy bấm vào bất kỳ nút nào trên thẻ Phòng thi
+    // (Sửa đề, Giám sát, Điểm danh, Bật/Tắt trạng thái phòng...)
+    document.addEventListener('click', function(e) {
+        let btn = e.target.closest('button, a, [onclick]');
+        if (!btn) return;
+        let oc = btn.getAttribute('onclick') || '';
+
+        // Nếu đang bấm mở các cửa sổ con của 1 phòng thi -> Chụp lại vị trí cuộn ngay lập tức!
+        if (
+            oc.includes('open_edit_exam_modal') ||
+            oc.includes('open_roll_call_modal') ||
+            oc.includes('troubleshoot') ||
+            oc.includes('toggle_exam_status') ||
+            oc.includes('delete_online_exam')
+        ) {
+            // Chỉ chụp khi chưa có modal full-screen nào đang che màn hình
+            let hasOpenModal = document.querySelector('#edit_exam_modal, [id^="roll_call_modal_"], #troubleshoot_modal, #exam_troubleshoot_modal');
+            if (!hasOpenModal) {
+                window.capture_exam_list_scroll();
+            }
+        }
+
+        // Nếu bấm nút Đóng / Thoát từ trong Modal con ra (mà không gọi vẽ lại danh sách) -> Trả lại vị trí cuộn ngay
+        if (
+            oc.includes("getElementById('edit_exam_modal').remove") ||
+            oc.includes('roll_call_modal_') ||
+            oc.includes('close_troubleshoot') ||
+            oc.includes('troubleshoot_modal')
+        ) {
+            let savedY = window._saved_exam_list_scroll_y || 0;
+            let savedDashY = window._saved_exam_dash_scroll_y || 0;
+            setTimeout(() => {
+                window.apply_exam_list_scroll(savedY, savedDashY);
+            }, 30);
+        }
+    }, true);
+
+    // 2. Bọc hàm render_exam_management:
+    // - Nếu gọi lại sau khi Sửa đề / Xóa đề / Đổi trạng thái -> Giữ nguyên vị trí cuộn tại phòng thi đó!
+    // - Nếu mới từ Sảnh Admin Hub bước vào -> Đưa về đầu trang (0px)
+    const hookExamMngSmartScroll = () => {
+        if (typeof window.render_exam_management === 'function' && !window._isSmartExamScrollHooked) {
+            const _origRenderExamMng = window.render_exam_management;
+            window._isSmartExamScrollHooked = true;
+
+            window.render_exam_management = async function(...args) {
+                let restoreY = window._should_restore_exam_scroll ? (window._saved_exam_list_scroll_y || 0) : 0;
+                let restoreDashY = window._should_restore_exam_scroll ? (window._saved_exam_dash_scroll_y || 0) : 0;
+
+                const res = await _origRenderExamMng.apply(this, args);
+
+                // Đợi DOM danh sách phòng thi từ Supabase vẽ xong rồi đặt thanh cuộn về đúng chỗ cũ
+                window.apply_exam_list_scroll(restoreY, restoreDashY);
+                setTimeout(() => window.apply_exam_list_scroll(restoreY, restoreDashY), 60);
+                setTimeout(() => {
+                    window.apply_exam_list_scroll(restoreY, restoreDashY);
+                    window._should_restore_exam_scroll = false; // Reset cờ sau khi đã khôi phục xong
+                }, 200);
+
+                return res;
+            };
+        }
+    };
+
+    // 3. Khi quay ra Sảnh chính Admin Hub -> Xóa bộ nhớ vị trí cũ để lần sau vào mới sẽ ở đầu trang
+    const hookAdminHubResetScroll = () => {
+        if (typeof window.render_admin_hub === 'function' && !window._isSmartAdminHubHooked) {
+            const _origAdminHub = window.render_admin_hub;
+            window._isSmartAdminHubHooked = true;
+
+            window.render_admin_hub = function(...args) {
+                window._should_restore_exam_scroll = false;
+                window._saved_exam_list_scroll_y = 0;
+                window.apply_exam_list_scroll(0, 0);
+                return _origAdminHub.apply(this, args);
+            };
+        }
+    };
+
+    hookExamMngSmartScroll();
+    hookAdminHubResetScroll();
+    window.addEventListener('load', () => {
+        hookExamMngSmartScroll();
+        hookAdminHubResetScroll();
+    });
+    setTimeout(() => {
+        hookExamMngSmartScroll();
+        hookAdminHubResetScroll();
+    }, 500);
+})();
