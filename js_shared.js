@@ -1242,6 +1242,14 @@ window.render_admin_hub = function() {
         `<i class="bi bi-person-lines-fill"></i> Quản lý danh bạ & Lớp`, 
         'bi-people-fill', '#10b981', 'window.render_user_management()'
     );
+
+    // ➕ THÊM MỚI THẺ TRUNG TÂM PHÂN QUYỀN CHI TIẾT (RBAC STUDIO)
+    if (canManageUsers) html += renderAdminCard(
+        'PHÂN QUYỀN (RBAC)', 
+        'Cấp quyền chi tiết cho từng Giảng viên, Cán bộ coi thi, Sinh viên & Phân công môn học.', 
+        `<i class="bi bi-shield-lock-fill"></i> Ma trận Quyền & Học phần`, 
+        'bi-person-lock', '#38bdf8', 'window.open_rbac_permission_studio()'
+    );
     
     if (canManageAdmissions) html += renderAdminCard(
         'QL TUYỂN SINH', 
