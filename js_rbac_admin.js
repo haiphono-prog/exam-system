@@ -329,15 +329,41 @@ window.open_rbac_permission_studio = async function() {
 
     let html = `
     <style>
-        /* ẨN TUYỆT ĐỐI 100% THANH KÉO (SCROLLBAR) TRONG TOÀN BỘ RBAC STUDIO */
+        /* 1. ẨN TUYỆT ĐỐI 100% THANH KÉO & KÍCH HOẠT GIA TỐC CẢM ỨNG MƯỢT */
         #${modalId}, #${modalId} * {
             scrollbar-width: none !important;
             -ms-overflow-style: none !important;
+            -webkit-overflow-scrolling: touch !important;
         }
         #${modalId}::-webkit-scrollbar, #${modalId} *::-webkit-scrollbar {
             display: none !important;
             width: 0 !important;
             height: 0 !important;
+        }
+
+        /* 2. MỞ KHÓA CẢM ỨNG KHI VUỐT TRÚNG THẺ NGƯỜI DÙNG & CÔNG TẮC QUYỀN */
+        #rbac_users_list_box, #rbac_detail_editor_box, #rbac_role_templates_list_box, #rbac_role_template_editor_box, .rbac-subj-grid {
+            min-height: 0 !important;
+            overscroll-behavior-y: contain !important;
+            touch-action: pan-y !important;
+        }
+        .rbac-user-row, .rbac-user-row *, .rbac-perm-compact-card, .rbac-perm-compact-card *, .rbac-subj-pill, .rbac-subj-pill * {
+            touch-action: pan-y manipulation !important;
+        }
+
+        /* 3. TRÊN ĐIỆN THOẠI / IPAD DỌC (< 992px): GỘP VỀ 1 TRỤC CUỘN DUY NHẤT CHỐNG ĐƠ CẢM ỨNG */
+        @media (max-width: 991.98px) {
+            #rbac_view_users_container:not(.d-none), #rbac_view_roles_container:not(.d-none) {
+                height: auto !important;
+                display: block !important;
+            }
+            #rbac_users_list_box {
+                max-height: 35dvh !important;
+            }
+            #rbac_detail_editor_box, #rbac_role_template_editor_box, .rbac-subj-grid {
+                max-height: none !important;
+                overflow: visible !important;
+            }
         }
         .rbac-card {
             background: #181b1f;
