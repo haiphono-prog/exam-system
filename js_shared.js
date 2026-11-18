@@ -2057,71 +2057,30 @@ window.open_admin_history_modal = function() {
 
     let html = `
     <style>
-        .log-tab-btn {
-            background: #1a1d20;
-            border: 1px solid #2b3035;
-            color: #94a3b8;
-            border-radius: 10px;
-            font-size: 0.76rem;
-            font-weight: 700;
-            padding: 6px 10px;
-            transition: 0.2s;
-            white-space: nowrap;
-            flex-shrink: 0;
+        .log-tab-btn { background: #1a1d20; border: 1px solid #2b3035; color: #94a3b8; border-radius: 10px; font-size: 0.76rem; font-weight: 700; padding: 6px 10px; transition: 0.2s; white-space: nowrap; flex-shrink: 0; }
+        .log-tab-btn.active { background: rgba(14, 165, 233, 0.15) !important; border-color: #0ea5e9 !important; color: #38bdf8 !important; box-shadow: 0 0 10px rgba(14, 165, 233, 0.2); }
+        .log-date-btn { background: rgba(255, 255, 255, 0.03); border: 1px solid #2b3035; color: #cbd5e1; border-radius: 999px; font-size: 0.72rem; font-weight: 600; padding: 4px 11px; transition: 0.2s; white-space: nowrap; flex-shrink: 0; }
+        .log-date-btn.active { background: rgba(16, 185, 129, 0.18) !important; border-color: #10b981 !important; color: #4ade80 !important; font-weight: 700; }
+        .log-class-btn { background: rgba(255, 255, 255, 0.03); border: 1px solid #2b3035; color: #cbd5e1; border-radius: 999px; font-size: 0.72rem; font-weight: 600; padding: 4px 11px; transition: 0.2s; white-space: nowrap; flex-shrink: 0; }
+        .log-class-btn.active { background: rgba(245, 158, 11, 0.18) !important; border-color: #f59e0b !important; color: #fbbf24 !important; font-weight: 700; }
+        .log-item-card { background: #1a1d20; border: 1px solid #2b3035; border-radius: 12px; transition: 0.2s; }
+        .log-item-card:hover { border-color: rgba(56, 189, 248, 0.4); background: #1e242b; }
+
+        /* 🌟 CSS CỤC BỘ CHỐNG ĐƠ CẢM ỨNG RIÊNG CHO NHẬT KÝ */
+        #${modalId}, #${modalId} * {
+            scrollbar-width: none !important;
+            -ms-overflow-style: none !important;
+            -webkit-overflow-scrolling: touch !important;
         }
-        .log-tab-btn.active {
-            background: rgba(14, 165, 233, 0.15) !important;
-            border-color: #0ea5e9 !important;
-            color: #38bdf8 !important;
-            box-shadow: 0 0 10px rgba(14, 165, 233, 0.2);
+        #${modalId}::-webkit-scrollbar, #${modalId} *::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+        
+        .custom-scrollbar, .log-scroll-strip {
+            min-height: 0 !important;
+            overscroll-behavior: contain !important;
+            touch-action: pan-x pan-y !important;
         }
-        .log-date-btn {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid #2b3035;
-            color: #cbd5e1;
-            border-radius: 999px;
-            font-size: 0.72rem;
-            font-weight: 600;
-            padding: 4px 11px;
-            transition: 0.2s;
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
-        .log-date-btn.active {
-            background: rgba(16, 185, 129, 0.18) !important;
-            border-color: #10b981 !important;
-            color: #4ade80 !important;
-            font-weight: 700;
-        }
-        .log-class-btn {
-            background: rgba(255, 255, 255, 0.03);
-            border: 1px solid #2b3035;
-            color: #cbd5e1;
-            border-radius: 999px;
-            font-size: 0.72rem;
-            font-weight: 600;
-            padding: 4px 11px;
-            transition: 0.2s;
-            white-space: nowrap;
-            flex-shrink: 0;
-        }
-        .log-class-btn.active {
-            background: rgba(245, 158, 11, 0.18) !important;
-            border-color: #f59e0b !important;
-            color: #fbbf24 !important;
-            font-weight: 700;
-        }
-        .log-scroll-strip::-webkit-scrollbar { display: none; }
-        .log-scroll-strip { -ms-overflow-style: none; scrollbar-width: none; }
-        .log-item-card {
-            background: #1a1d20;
-            border: 1px solid #2b3035;
-            border-radius: 12px;
-            transition: 0.2s;
-        }
-        .log-item-card:hover {
-            border-color: rgba(56, 189, 248, 0.4);
-            background: #1e242b;
+        .log-item-card, .log-item-card * {
+            touch-action: pan-y manipulation !important;
         }
     </style>
 
@@ -7842,10 +7801,25 @@ window.open_student_control_modal = function(examCode) {
         }
         .tab-filter-btn { border-radius: 6px; font-weight: 600; font-size: 0.75rem; transition: 0.1s; border: 1px solid transparent; background: transparent; }
         .tab-filter-btn.active { background: #343a40; border-color: #495057; color: #fff !important; }
-        .hide-scroll::-webkit-scrollbar { display: none; }
-        .hide-scroll { -ms-overflow-style: none; scrollbar-width: none; }
         .compact-student-card { transition: 0.1s; border: 1px solid #343a40; }
         .compact-student-card:active { transform: scale(0.98); background: #343a40 !important; }
+
+        /* 🌟 CSS CỤC BỘ CHỐNG ĐƠ CẢM ỨNG RIÊNG CHO BẢNG GIÁM SÁT */
+        #${modalId}, #${modalId} * {
+            scrollbar-width: none !important;
+            -ms-overflow-style: none !important;
+            -webkit-overflow-scrolling: touch !important;
+        }
+        #${modalId}::-webkit-scrollbar, #${modalId} *::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+        
+        #troubleshoot_student_list, .hide-scroll {
+            min-height: 0 !important;
+            overscroll-behavior: contain !important;
+            touch-action: pan-x pan-y !important;
+        }
+        .compact-student-card, .compact-student-card * {
+            touch-action: pan-y manipulation !important;
+        }
     </style>
 
     <div id="${modalId}" class="position-fixed top-0 start-0 w-100 h-100 d-flex flex-column animate__animated animate__fadeIn" style="background: #212529; z-index: 99999; overflow: hidden;">
@@ -10320,7 +10294,25 @@ window.open_roll_call_modal = async function(examCode) {
         let presentCount = students.length - absentCount;
 
         let modalHtml = `
-        <div id="${modalId}" class="animate__animated animate__fadeInRight" style="position: fixed; inset: 0; width: 100vw; height: 100vh; background: #0f172a; z-index: 99999; display: flex; flex-direction: column;">
+        <style>
+            /* 🌟 CSS CỤC BỘ CHỐNG ĐƠ CẢM ỨNG RIÊNG CHO SỔ ĐIỂM DANH */
+            #${modalId}, #${modalId} * {
+                scrollbar-width: none !important;
+                -ms-overflow-style: none !important;
+                -webkit-overflow-scrolling: touch !important;
+            }
+            #${modalId}::-webkit-scrollbar, #${modalId} *::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+            
+            .custom-scrollbar {
+                min-height: 0 !important;
+                overscroll-behavior-y: contain !important;
+                touch-action: pan-y !important;
+            }
+            .rollcall-row, .rollcall-row * {
+                touch-action: pan-y manipulation !important;
+            }
+        </style>
+        <div id="${modalId}" class="animate__animated animate__fadeInRight" style="position: fixed; inset: 0; width: 100vw; height: 100dvh; max-height: 100dvh; background: #0f172a; z-index: 99999; display: flex; flex-direction: column; overflow: hidden;">
             
             <!-- HEADER TOÀN MÀN HÌNH -->
             <div class="p-3 border-bottom border-secondary d-flex justify-content-between align-items-center flex-shrink-0" style="background: #1e293b; box-shadow: 0 4px 12px rgba(0,0,0,0.4);">
