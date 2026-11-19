@@ -3774,12 +3774,15 @@ window.render_user_management = async function() {
         let delay = 0;
         let usersWithoutClass = [];
         let admins = [];
+        let staffMembers = [];
 
         let classGroups = {};
         classes.forEach(c => classGroups[c.class_code] = { info: c, users: [] });
 
         users.forEach(u => {
-            if (u.role === 'admin' || u.role === 'all') admins.push(u);
+            let rLow = String(u.role || '').toLowerCase();
+            if (rLow === 'admin' || rLow === 'all') admins.push(u);
+            else if (['ktyh_dean', 'ktyh_head', 'teacher', 'proctor', 'timekeeper'].includes(rLow)) staffMembers.push(u);
             else if (u.class_code && classGroups[u.class_code]) classGroups[u.class_code].users.push(u);
             else usersWithoutClass.push(u);
         });
@@ -3868,6 +3871,7 @@ window.render_user_management = async function() {
         };
 
         renderExtraGroup('QUẢN TRỊ VIÊN (ADMIN)', admins, 'bi-shield-lock-fill', 'danger', 'group_admins');
+        renderExtraGroup('ĐỘI NGŨ GIẢNG VIÊN / CÁN BỘ', staffMembers, 'bi-mortarboard-fill', 'info', 'group_staff_members');
         renderExtraGroup('SINH VIÊN TỰ DO (CHƯA CÓ LỚP)', usersWithoutClass, 'bi-person-lines-fill', 'warning', 'group_free_users');
 
         html += `</div>`;
@@ -4910,10 +4914,13 @@ window.open_data_manager = function(activeTab = 'tab_user', uname='', pwd='', ro
                     <div class="col-6">
                         <label class="text-white-50 small fw-bold px-1 mb-1">Nhóm Role</label>
                         <select id="modal_u_role" class="form-select bg-dark text-white border-secondary unified-input fw-bold shadow-sm">
-                            <option value="medical" ${role==='medical'?'selected':''}>medical</option>
-                            <option value="k12" ${role==='k12'?'selected':''}>k12</option>
-                            <option value="admin" ${role==='admin'?'selected':''}>admin</option>
-                            ${(role !== 'medical' && role !== 'k12' && role !== 'admin' && role !== 'all') ? `<option value="${role}" selected>${role}</option>` : ''}
+                            <option value="medical" ${role==='medical'?'selected':''}>medical (Sinh viên Y)</option>
+                            <option value="k12" ${role==='k12'?'selected':''}>k12 (Sinh viên)</option>
+                            <option value="teacher" ${role==='teacher'?'selected':''}>teacher (Giảng viên)</option>
+                            <option value="ktyh_head" ${role==='ktyh_head'?'selected':''}>ktyh_head (Lãnh đạo Bộ môn)</option>
+                            <option value="ktyh_dean" ${role==='ktyh_dean'?'selected':''}>ktyh_dean (Lãnh đạo Khoa)</option>
+                            <option value="admin" ${role==='admin'?'selected':''}>admin (Quản trị viên)</option>
+                            ${(!['medical', 'k12', 'teacher', 'ktyh_head', 'ktyh_dean', 'admin', 'all'].includes(role)) ? `<option value="${role}" selected>${role}</option>` : ''}
                         </select>
                     </div>
                     <div class="col-6">
@@ -7510,36 +7517,35 @@ window.fetch_troubleshoot_data = async function(examCode, isSilent = false) {
     try {
         const clientDb = typeof db !== 'undefined' ? db : window._supabase;
         
-        const { data: examData } = await clientDb.from('online_exams').select('allowed_users').eq('exam_code', examCode).single();
-        let allowedArr = examData ? (examData.allowed_users || "").split(',').map(s => s.trim().toLowerCase()).filter(s => s !== "") : [];
-        let isAllAllowed = allowedArr.includes('all'); 
+        // Chỉ kéo danh sách lớp (online_exams + users) ở lần mở đầu tiên; khi cập nhật Realtime (isSilent) thì dùng lại cache -> Giảm 80% tải
+        if (!isSilent || !Array.isArray(window.current_troubleshoot_users) || window.current_troubleshoot_users.length === 0 || window._cached_ts_exam !== examCode) {
+            const { data: examData } = await clientDb.from('online_exams').select('allowed_users').eq('exam_code', examCode).single();
+            let allowedArr = examData ? (examData.allowed_users || "").split(',').map(s => s.trim().toLowerCase()).filter(s => s !== "") : [];
+            let isAllAllowed = allowedArr.includes('all'); 
 
-        const { data: allUsers } = await clientDb.from('users').select('student_id, full_name, role, class_code, inventory');
-        
-        // 🌟 SỬA TẠI ĐÂY: Thêm chữ 'progress' vào lệnh select để máy chủ trả về % làm bài
+            const { data: allUsers } = await clientDb.from('users').select('student_id, full_name, role, class_code, inventory');
+
+            let filteredClassUsers = [];
+            let sttCounter = 1; 
+            (allUsers || []).forEach(u => {
+                let uCls = (u.class_code || u.role || '').toLowerCase();
+                let uId = u.student_id.toLowerCase();
+                if (isAllAllowed || allowedArr.includes(uCls) || allowedArr.includes(uId)) {
+                    filteredClassUsers.push({ 
+                        rawId: u.student_id, id: uId, name: u.full_name || 'Chưa cập nhật', 
+                        cls: u.class_code || u.role || '', inv: u.inventory || 0, stt: sttCounter++
+                    });
+                }
+            });
+            window.current_troubleshoot_users = filteredClassUsers;
+            window._cached_ts_exam = examCode;
+        }
+
         const { data: results, error: errResults } = await clientDb.from('exam_results')
             .select('student_id, score, is_submitted, is_absent, is_locked, client_status, offense_count, away_time, progress')
             .eq('exam_code', examCode);
             
-        if (errResults) throw errResults;
-
-        let filteredClassUsers = [];
-        let sttCounter = 1; 
-
-        allUsers.forEach(u => {
-            let uCls = (u.class_code || u.role || '').toLowerCase();
-            let uId = u.student_id.toLowerCase();
-            let isAllowed = isAllAllowed || allowedArr.includes(uCls) || allowedArr.includes(uId);
-
-            if (isAllowed) {
-                filteredClassUsers.push({ 
-                    rawId: u.student_id, id: uId, name: u.full_name || 'Chưa cập nhật', 
-                    cls: u.class_code || u.role || '', inv: u.inventory || 0, stt: sttCounter++
-                });
-            }
-        });
-
-        window.current_troubleshoot_users = filteredClassUsers; 
+        if (errResults) throw errResults; 
         window.current_troubleshoot_submitted = {}; window.current_troubleshoot_started = []; window.current_troubleshoot_punished = []; window.current_troubleshoot_sync = {}; 
         
         if (results) {
@@ -7672,7 +7678,7 @@ window.render_troubleshoot_list = function(searchQuery) {
             progressHtml = `
             <div class="mt-2 d-flex align-items-center gap-2 w-100">
                 <div class="progress flex-grow-1" style="height: 4px; background: #343a40; border-radius: 4px; overflow: hidden;">
-                    <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: ${progressPct}%; background-color: ${pColor};"></div>
+                    <div class="progress-bar" style="width: ${progressPct}%; background-color: ${pColor};"></div>
                 </div>
                 <span class="fw-bold" style="font-size: 0.65rem; color: ${pColor}; width: 32px; text-align: right;">${progressPct}%</span>
             </div>`;
@@ -7764,7 +7770,9 @@ window.render_troubleshoot_list = function(searchQuery) {
     });
 
     if (html === '') html = `<div class="text-center p-4"><i class="bi bi-inbox fs-3 text-white-50"></i><div class="text-white-50 small mt-1">Không có sinh viên nào khớp.</div></div>`;
-    listContainer.innerHTML = html;
+    let prevScroll = listContainer.scrollTop;
+listContainer.innerHTML = html;
+listContainer.scrollTop = prevScroll;
 };
 
 // 🌟 ĂNG-TEN LẮNG NGHE SỰ KIỆN: Khi sinh viên đổi trạng thái, Admin tự cập nhật
@@ -7777,12 +7785,16 @@ window.enable_realtime_troubleshoot = function(examCode) {
         clientDb.removeChannel(window.active_troubleshoot_subscription);
     }
     
+    window._tsDebounceTimer = null;
     window.active_troubleshoot_subscription = clientDb.channel('troubleshoot-' + examCode)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'exam_results', filter: 'exam_code=eq.' + examCode }, (payload) => {
-            // Khi có sinh viên rời tab hoặc nộp bài, tự động làm mới màn hình một cách âm thầm (isSilent = true)
-            if(typeof window.fetch_troubleshoot_data === 'function') {
-                window.fetch_troubleshoot_data(examCode, true); 
-            }
+            // Gom tất cả tín hiệu trong 2.5 giây thành 1 lần cập nhật duy nhất -> Không bao giờ giật khi vuốt
+            if (window._tsDebounceTimer) clearTimeout(window._tsDebounceTimer);
+            window._tsDebounceTimer = setTimeout(() => {
+                if (typeof window.fetch_troubleshoot_data === 'function') {
+                    window.fetch_troubleshoot_data(examCode, true);
+                }
+            }, 2500);
         }).subscribe();
 };
 
