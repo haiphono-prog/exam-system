@@ -235,70 +235,66 @@ window.get_current_ktyh_profile = function() {
     let deptCode = matched ? (matched.dept_code || 'BM_KTXN') : 'BM_KTXN';
     let meta = window.KTYH_ROLE_META[activeRole] || window.KTYH_ROLE_META.teacher;
 
-    // Đọc công tắc quyền trực tiếp từ RBAC Studio (ưu tiên tinh chỉnh cá nhân -> mẫu Role -> mặc định)
-    let rbacPerms = (window.current_rbac_profile && window.current_rbac_profile.permissions)
+    // Luôn nạp bản mẫu Role mới nhất từ RBAC Studio (để chế độ Xem thử & Đăng nhập thật đều nhận ngay thay đổi)
+    if (typeof window.load_rbac_role_templates === 'function') window.load_rbac_role_templates();
+    let roleTplPerms = (window.RBAC_ROLE_PRESETS && window.RBAC_ROLE_PRESETS[activeRole] && window.RBAC_ROLE_PRESETS[activeRole].permissions)
+        ? window.RBAC_ROLE_PRESETS[activeRole].permissions : {};
+    let userPerms = (window.current_rbac_profile && window.current_rbac_profile.permissions)
         ? window.current_rbac_profile.permissions : {};
+    let userOverrides = (window.current_rbac_profile && window.current_rbac_profile.overrides)
+        ? window.current_rbac_profile.overrides : {};
 
     const checkPerm = (permKey, defaultBool) => {
         if (activeRole === 'admin') return true;
-        if (!window._ktyhState.previewRole && typeof rbacPerms[permKey] === 'boolean') {
-            return rbacPerms[permKey];
+        // 1. Khi Admin đang Xem thử góc nhìn -> Đọc trực tiếp công tắc của Role đó trong RBAC Studio
+        if (window._ktyhState.previewRole) {
+            if (typeof roleTplPerms[permKey] === 'boolean') return roleTplPerms[permKey];
+            return defaultBool;
         }
+        // 2. Khi đăng nhập thật -> Ưu tiên Tinh chỉnh riêng (Tab 2) -> Quyền đã lưu trên Supabase -> Mẫu Role -> Mặc định
+        if (typeof userOverrides[permKey] === 'boolean') return userOverrides[permKey];
+        if (typeof userPerms[permKey] === 'boolean') return userPerms[permKey];
+        if (typeof roleTplPerms[permKey] === 'boolean') return roleTplPerms[permKey];
         return defaultBool;
     };
 
+    const canPortalAccess = checkPerm('ktyh_portal_access', true);
     const canManageTs = checkPerm('ktyh_timesheet_manage', ['admin', 'ktyh_dean', 'ktyh_head', 'ktyh_academic'].includes(activeRole) || isTimekeeper);
+    const canViewAllDepts = checkPerm('ktyh_view_all_depts', ['admin', 'ktyh_dean', 'ktyh_academic'].includes(activeRole));
+    const canApproveTs = checkPerm('ktyh_timesheet_approve', ['admin', 'ktyh_dean', 'ktyh_head'].includes(activeRole));
+    const canEditRole = checkPerm('ktyh_hr_edit_role', ['admin', 'ktyh_dean'].includes(activeRole));
+    const canAccessAcademic = checkPerm('bank_view_questions', ['admin', 'ktyh_dean', 'ktyh_head', 'ktyh_academic', 'teacher'].includes(activeRole))
+        || checkPerm('exam_create_and_config', ['admin', 'ktyh_dean', 'ktyh_head', 'ktyh_academic', 'teacher'].includes(activeRole));
 
     // Ma trận quyền hạn chuẩn 6 tầng (điều khiển trực tiếp từ RBAC Studio)
     const perms = {
         isAdmin:             activeRole === 'admin',
+        canPortalAccess:     canPortalAccess,
         canImportExcel:      checkPerm('ktyh_hr_import_delete', activeRole === 'admin'),
         canDeleteStaff:      checkPerm('ktyh_hr_import_delete', activeRole === 'admin'),
         canOpenRBAC:         activeRole === 'admin',
-        canEditStaffRole:    checkPerm('ktyh_hr_edit_role', ['admin', 'ktyh_dean'].includes(activeRole)),
-        canViewAllDepts:     checkPerm('ktyh_view_all_depts', ['admin', 'ktyh_dean', 'ktyh_academic'].includes(activeRole)),
+        canEditStaffRole:    canEditRole,
+        canViewAllDepts:     canViewAllDepts,
         canViewSensitive:    checkPerm('ktyh_hr_view_sensitive', ['admin', 'ktyh_dean'].includes(activeRole)),
         canViewTimesheetAll: canManageTs,
-        canApproveTimesheet: checkPerm('ktyh_timesheet_approve', ['admin', 'ktyh_dean', 'ktyh_head'].includes(activeRole)),
+        canApproveTimesheet: canApproveTs,
         canExportFullC01:    checkPerm('ktyh_export_full_c01', ['admin', 'ktyh_dean', 'ktyh_head', 'ktyh_academic'].includes(activeRole) || isTimekeeper),
-        canAccessAcademic:   ['admin', 'ktyh_dean', 'ktyh_head', 'ktyh_academic', 'teacher'].includes(activeRole),
-        isPersonalOnly:      !canManageTs
+        canAccessAcademic:   canAccessAcademic,
+        isPersonalOnly:      !(canManageTs || canViewAllDepts || canEditRole)
     };
 
-    // Danh sách Tab phù hợp riêng cho từng cấp
+    // Dựng danh sách Tab ĐỘNG theo đúng công tắc RBAC đang bật (tắt quyền nào ẩn tab đó ngay)
     let tabs = [];
-    if (['admin', 'ktyh_dean'].includes(activeRole)) {
-        tabs = [
-            { id: 'overview',       label: '1. Tổng quan Khoa',      icon: 'bi-grid-1x2-fill' },
-            { id: 'timesheet',      label: '2. Chấm công (C01-HD)',  icon: 'bi-calendar2-check-fill' },
-            { id: 'profiles',       label: '3. Hồ sơ Nhân sự',       icon: 'bi-person-vcard-fill' },
-            { id: 'subjects_exams', label: '4. Học phần & Đề thi',   icon: 'bi-journal-check' }
-        ];
-    } else if (activeRole === 'ktyh_head') {
-        tabs = [
-            { id: 'overview',       label: '1. Dashboard Bộ môn',    icon: 'bi-pie-chart-fill' },
-            { id: 'timesheet',      label: '2. Chấm công Bộ môn',    icon: 'bi-calendar2-check-fill' },
-            { id: 'profiles',       label: '3. Nhân sự Bộ môn',      icon: 'bi-people-fill' },
-            { id: 'subjects_exams', label: '4. Học phần & Đề thi',   icon: 'bi-journal-check' }
-        ];
-    } else if (activeRole === 'ktyh_academic') {
-        tabs = [
-            { id: 'subjects_exams', label: '1. Học phần & Đề thi',   icon: 'bi-journal-check' },
-            { id: 'timesheet',      label: '2. Tổng hợp C01-HD',     icon: 'bi-calendar2-check-fill' },
-            { id: 'profiles',       label: '3. Danh bạ Giảng viên',  icon: 'bi-person-lines-fill' }
-        ];
-    } else if (activeRole === 'ktyh_specialist') {
-        tabs = [
-            { id: 'timesheet',      label: isTimekeeper ? '1. Chấm công Đơn vị (C01-HD)' : '1. Tự chấm công cá nhân', icon: 'bi-calendar2-check-fill' },
-            { id: 'profiles',       label: '2. Hồ sơ cá nhân',       icon: 'bi-person-vcard-fill' }
-        ];
-    } else {
-        // Giảng viên (teacher)
-        tabs = [
-            { id: 'timesheet',      label: '1. Lịch tự chấm công',   icon: 'bi-calendar2-check-fill' },
-            { id: 'subjects_exams', label: '2. Học phần & Đề thi',   icon: 'bi-journal-check' },
-            { id: 'profiles',       label: '3. Hồ sơ cá nhân',       icon: 'bi-person-vcard-fill' }
-        ];
+    if (perms.canPortalAccess) {
+        if (perms.isAdmin || perms.canViewAllDepts || perms.canApproveTimesheet) {
+            tabs.push({ id: 'overview', label: perms.canViewAllDepts ? 'Dashboard Khoa' : 'Dashboard Bộ môn', icon: 'bi-pie-chart-fill' });
+        }
+        tabs.push({ id: 'timesheet', label: perms.canViewTimesheetAll ? 'Chấm công (C01-HD)' : 'Lịch tự chấm công', icon: 'bi-calendar2-check-fill' });
+        tabs.push({ id: 'profiles', label: perms.isPersonalOnly ? 'Hồ sơ cá nhân' : 'Hồ sơ Nhân sự', icon: 'bi-person-vcard-fill' });
+        if (perms.canAccessAcademic) {
+            tabs.push({ id: 'subjects_exams', label: 'Học phần & Đề thi', icon: 'bi-journal-check' });
+        }
+        tabs.forEach((t, i) => { t.label = `${i + 1}. ${t.label}`; });
     }
 
     return {
@@ -406,10 +402,19 @@ window.load_ktyh_db_data = async function() {
         const clientDb = typeof db !== 'undefined' ? db : window._supabase;
         if (!clientDb) return;
 
-        const [profRes, tsRes] = await Promise.all([
+        let curUid = String(window.current_student_id || '').trim();
+        const [profRes, tsRes, curUserRes] = await Promise.all([
             clientDb.from('staff_profiles').select('*').order('first_name', { ascending: true }),
-            clientDb.from('staff_timesheets').select('*').eq('month_key', monthKey)
+            clientDb.from('staff_timesheets').select('*').eq('month_key', monthKey),
+            curUid ? clientDb.from('users').select('*').eq('student_id', curUid).maybeSingle() : Promise.resolve({ data: null })
         ]);
+
+        // Nạp quyền RBAC mới nhất từ Supabase cho tài khoản đang đăng nhập
+        if (curUserRes && curUserRes.data && typeof window.normalize_user_row_for_rbac === 'function') {
+            window.current_rbac_profile = window.normalize_user_row_for_rbac(curUserRes.data);
+        } else if (curUserRes && curUserRes.data && curUserRes.data.rbac_config) {
+            window.current_rbac_profile = curUserRes.data.rbac_config;
+        }
 
         if (!profRes.error && Array.isArray(profRes.data)) {
             window._ktyhState.profilesList = profRes.data;
@@ -733,7 +738,7 @@ window.render_ktyh_portal_shell = function() {
     let prof = window.get_current_ktyh_profile();
     window._ktyhState.selectedDept = prof.perms.canViewAllDepts ? 'ALL' : prof.deptCode;
     window._ktyhState.selectedPersonCode = prof.perms.canViewTimesheetAll ? 'ALL' : prof.staff_code;
-    window._ktyhState.activeTab = prof.tabs[0].id;
+    window._ktyhState.activeTab = (prof.tabs && prof.tabs.length > 0) ? prof.tabs[0].id : 'blocked';
 
     let modalId = 'ktyh_faculty_portal_modal';
     document.getElementById(modalId)?.remove();
@@ -880,6 +885,15 @@ window.render_ktyh_active_view = function() {
     let prof = window.get_current_ktyh_profile();
     let tab = window._ktyhState.activeTab;
 
+    if (!prof.perms.canPortalAccess || tab === 'blocked') {
+        box.innerHTML = `
+        <div class="ktyh-card text-center py-5">
+            <i class="bi bi-shield-lock-fill text-danger display-3 d-block mb-3"></i>
+            <h5 class="fw-bold text-white">Không có quyền truy cập Cổng Khoa KTYH</h5>
+            <p class="text-white-50 small mb-0">Công tắc <b>"Truy cập Cổng Khoa KTYH"</b> của vai trò này đang bị tắt trong RBAC Studio.</p>
+        </div>`;
+        return;
+    }
     if (tab === 'overview') window.render_ktyh_overview_tab(box, prof);
     else if (tab === 'timesheet') window.render_ktyh_timesheet_tab(box, prof);
     else if (tab === 'profiles') window.render_ktyh_profiles_tab(box, prof);
@@ -1045,12 +1059,13 @@ window.render_ktyh_overview_tab = function(box, prof) {
                 </div>
             </div>
             <div class="d-flex align-items-center gap-2 flex-wrap">
+                ${prof.perms.canExportFullC01 ? `
                 <button type="button" class="btn btn-sm btn-success fw-bold px-3" onclick="window.export_c01_excel_file()">
                     <i class="bi bi-file-earmark-excel-fill me-1"></i> Xuất Excel Chấm công (C01-HD)
                 </button>
                 <button type="button" class="btn btn-sm btn-info fw-bold text-dark px-3" onclick="window.export_ktyh_staff_profiles_excel()">
                     <i class="bi bi-file-earmark-spreadsheet-fill me-1"></i> Xuất Excel Danh sách Nhân sự
-                </button>
+                </button>` : ''}
                 ${prof.perms.canImportExcel && allList.length === 0 ? `
                 <button type="button" class="btn btn-sm btn-warning fw-bold text-dark px-3" onclick="window.open_ktyh_staff_import_modal()">
                     <i class="bi bi-cloud-upload-fill me-1"></i> Nhập Vien chuc.xlsx

@@ -312,7 +312,10 @@ window.normalize_user_row_for_rbac = function(row) {
     });
 
     let hasCustomOverrides = Object.keys(cleanOverrides).length > 0;
-    let finalPerms = Object.assign({}, baseRolePerms, cleanOverrides);
+    let savedCloudPerms = (parsedRbac.permissions && typeof parsedRbac.permissions === 'object') ? parsedRbac.permissions : null;
+    let finalPerms = savedCloudPerms
+        ? Object.assign({}, baseRolePerms, savedCloudPerms, cleanOverrides)
+        : Object.assign({}, baseRolePerms, cleanOverrides);
 
     let defaultSubjs = (normRole === 'admin') ? ['ALL'] : [];
     let rawSubjs = Array.isArray(row.assigned_subjects)
@@ -358,9 +361,9 @@ window.has_permission = function(permKey, subjectKey = null) {
         }
     }
 
-    // Luôn lấy Quyền gốc của Role + Quyền tinh chỉnh riêng (clean overrides)
+    // Ưu tiên bộ quyền đã lưu trên Supabase + tinh chỉnh riêng (không bị mặc định cục bộ ghi đè)
     let rolePreset = window.RBAC_ROLE_PRESETS[curUser.role] || window.RBAC_ROLE_PRESETS.k12;
-    let effectivePerms = Object.assign({}, rolePreset.permissions, curUser.overrides || {});
+    let effectivePerms = Object.assign({}, rolePreset.permissions, curUser.permissions || {}, curUser.overrides || {});
 
     if (effectivePerms[permKey] === false) {
         window.show_toast("⛔ Tài khoản của bạn chưa được cấp quyền thực hiện thao tác này!", true);
@@ -894,6 +897,30 @@ window.save_current_role_template = async function() {
         }
     });
 
+    // Đồng bộ thẳng bộ quyền mới của Role lên Supabase bảng public.users cho toàn bộ tài khoản thuộc Role này
+    try {
+        const clientDb = typeof db !== 'undefined' ? db : window._supabase;
+        let usersOfRole = (window._rbacUsersCache || []).filter(u => u.role === roleKey);
+        if (clientDb && usersOfRole.length > 0) {
+            await Promise.all(usersOfRole.map(u => {
+                let newCfg = {
+                    role: u.role,
+                    status: u.status || 'active',
+                    assigned_subjects: u.assigned_subjects || [],
+                    overrides: u.overrides || {},
+                    permissions: u.permissions || {},
+                    updated_at: new Date().toISOString()
+                };
+                return clientDb.from('users').update({
+                    permissions: roleKey === 'k12' ? '' : (u.permissions_text || r.legacyPermText || ''),
+                    rbac_config: newCfg
+                }).eq('student_id', u.student_id);
+            }));
+        }
+    } catch (syncErr) {
+        console.warn("Lỗi đồng bộ Role lên Supabase:", syncErr.message);
+    }
+
     // Nếu tài khoản đang chọn ở Tab 2 cũng thuộc Role này thì cập nhật luôn
     if (window._rbacSelectedUser && window._rbacSelectedUser.role === roleKey) {
         let found = window._rbacUsersCache.find(u => u.student_id === window._rbacSelectedUser.student_id);
@@ -901,7 +928,7 @@ window.save_current_role_template = async function() {
     }
 
     window.render_rbac_role_templates_list();
-    window.show_toast(`✅ Đã lưu chuẩn Role "${r.label}" và đồng bộ tức thì cho ${affectedCount} tài khoản!`);
+    window.show_toast(`✅ Đã lưu chuẩn Role "${r.label}" lên Supabase cho ${affectedCount} tài khoản!`);
 };
 
 window.prompt_create_new_role_template = function() {
