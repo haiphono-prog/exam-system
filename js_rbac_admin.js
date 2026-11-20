@@ -51,6 +51,21 @@ window.RBAC_PERMISSION_DEFINITIONS = {
             { key: 'sys_manage_inventory_gifts', icon: 'bi-gift-fill text-danger', title: 'Cấp / Thu hồi Quà tặng (🎁)', desc: 'Điều chỉnh hộp quà chăm chỉ (inventory)' }
         ]
     },
+    ktyh_group: {
+        title: '🏥 4. Quản trị Khoa KTYH & Chấm công (C01-HD)',
+        colorClass: 'text-info',
+        forRoles: ['admin', 'ktyh_dean', 'ktyh_head', 'ktyh_academic', 'ktyh_specialist', 'teacher', 'custom'],
+        items: [
+            { key: 'ktyh_portal_access', icon: 'bi-hospital-fill text-success', title: 'Truy cập Cổng Khoa KTYH', desc: 'Mở giao diện điều hành Khoa KTYH & Tự chấm công cá nhân' },
+            { key: 'ktyh_view_all_depts', icon: 'bi-diagram-3-fill text-info', title: 'Xem dữ liệu toàn Khoa (4 BM + VP)', desc: 'Bật: xem mọi Bộ môn; Tắt: khóa phạm vi trong Bộ môn phụ trách' },
+            { key: 'ktyh_timesheet_manage', icon: 'bi-calendar2-check-fill text-warning', title: 'Xem & Chấm thay bảng công C01-HD', desc: 'Xem lưới tổng hợp 31 ngày và chỉnh sửa công cho cán bộ trong đơn vị' },
+            { key: 'ktyh_timesheet_approve', icon: 'bi-patch-check-fill text-success', title: 'Phê duyệt bảng chấm công', desc: 'Hiển thị nút Bộ môn / Khoa duyệt công C01-HD' },
+            { key: 'ktyh_export_full_c01', icon: 'bi-file-earmark-excel-fill text-success', title: 'Xuất Excel 2 Sheet & In A4 toàn đơn vị', desc: 'Xuất bảng tổng hợp VC. / HĐLĐ chuẩn Thông tư 107/2017/TT-BTC' },
+            { key: 'ktyh_hr_view_sensitive', icon: 'bi-shield-lock-fill text-danger', title: 'Xem hồ sơ nhạy cảm (CCCD, STK, Lương)', desc: 'Xem đủ 27 trường hồ sơ nhân sự và cảnh báo nâng bậc lương' },
+            { key: 'ktyh_hr_edit_role', icon: 'bi-person-gear text-primary', title: 'Phân công Bộ môn, Chức vụ & Chấm công', desc: 'Điều chuyển Bộ môn, đổi cấp bậc Khoa và gắn cờ Người chấm công' },
+            { key: 'ktyh_hr_import_delete', icon: 'bi-cloud-upload-fill text-danger', title: 'Nhập Excel nhân sự & Xóa tài khoản', desc: 'Quyền tối cao: Nạp file Vien chuc.xlsx / HĐLĐ và xóa đồng bộ DB' }
+        ]
+    },
     student_group: {
         title: '🎓 4. Quyền Học tập & Dự thi (Sinh viên)',
         colorClass: 'text-success',
@@ -66,7 +81,7 @@ window.RBAC_PERMISSION_DEFINITIONS = {
     }
 };
 
-// 2. KHỞI TẠO KHUNG QUYỀN GỐC CHO TỪNG ROLE (MẶC ĐỊNH TẮT XEM ĐIỂM & ĐÁP ÁN KHI THI THẬT ĐỐI VỚI SINH VIÊN)
+// 2. KHỞI TẠO KHUNG QUYỀN GỐC CHO TỪNG ROLE (ĐÃ TÁCH BẠCH ADMIN VÀ 5 CẤP KHOA KTYH)
 window.DEFAULT_RBAC_ROLE_TEMPLATES = {
     admin: {
         roleKey: 'admin',
@@ -78,7 +93,64 @@ window.DEFAULT_RBAC_ROLE_TEMPLATES = {
             bank_view_questions: true, bank_add_edit_questions: true, bank_import_export_tsv: true, bank_delete_questions: true, bank_config_bloom: true,
             exam_create_and_config: true, exam_toggle_open_close: true, exam_monitor_live_radar: true, exam_force_submit_reset: true, exam_export_word_pdf: true, exam_quick_grade_paper: true, exam_export_score_excel: true,
             sys_manage_subjects: true, sys_manage_users_classes: true, sys_manage_rbac: true, sys_manage_admissions: true, sys_view_server_logs: true, sys_manage_inventory_gifts: true,
+            ktyh_portal_access: true, ktyh_view_all_depts: true, ktyh_timesheet_manage: true, ktyh_timesheet_approve: true, ktyh_export_full_c01: true, ktyh_hr_view_sensitive: true, ktyh_hr_edit_role: true, ktyh_hr_import_delete: true,
             student_can_practice: true, student_can_take_exam: true, student_view_exam_score: true, student_view_exam_explain: true, student_use_gift_shop: true, student_view_leaderboard: true
+        }
+    },
+    ktyh_dean: {
+        roleKey: 'ktyh_dean',
+        label: '🏛️ Lãnh đạo Khoa KTYH',
+        badgeClass: 'bg-danger text-white',
+        groupType: 'staff',
+        legacyPermText: 'banks,exams,subjects,stats',
+        permissions: {
+            bank_view_questions: true, bank_add_edit_questions: true, bank_import_export_tsv: true, bank_delete_questions: true, bank_config_bloom: true,
+            exam_create_and_config: true, exam_toggle_open_close: true, exam_monitor_live_radar: true, exam_force_submit_reset: true, exam_export_word_pdf: true, exam_quick_grade_paper: true, exam_export_score_excel: true,
+            sys_manage_subjects: true, sys_manage_users_classes: false, sys_manage_rbac: false, sys_manage_admissions: false, sys_view_server_logs: true, sys_manage_inventory_gifts: false,
+            ktyh_portal_access: true, ktyh_view_all_depts: true, ktyh_timesheet_manage: true, ktyh_timesheet_approve: true, ktyh_export_full_c01: true, ktyh_hr_view_sensitive: true, ktyh_hr_edit_role: true, ktyh_hr_import_delete: false,
+            student_can_practice: true, student_can_take_exam: true, student_view_exam_score: true, student_view_exam_explain: true, student_use_gift_shop: true, student_view_leaderboard: true
+        }
+    },
+    ktyh_head: {
+        roleKey: 'ktyh_head',
+        label: '🔬 Lãnh đạo Bộ môn (KTYH)',
+        badgeClass: 'bg-primary text-white',
+        groupType: 'staff',
+        legacyPermText: 'banks,exams,stats',
+        permissions: {
+            bank_view_questions: true, bank_add_edit_questions: true, bank_import_export_tsv: true, bank_delete_questions: true, bank_config_bloom: true,
+            exam_create_and_config: true, exam_toggle_open_close: true, exam_monitor_live_radar: true, exam_force_submit_reset: true, exam_export_word_pdf: true, exam_quick_grade_paper: true, exam_export_score_excel: true,
+            sys_manage_subjects: false, sys_manage_users_classes: false, sys_manage_rbac: false, sys_manage_admissions: false, sys_view_server_logs: true, sys_manage_inventory_gifts: false,
+            ktyh_portal_access: true, ktyh_view_all_depts: false, ktyh_timesheet_manage: true, ktyh_timesheet_approve: true, ktyh_export_full_c01: true, ktyh_hr_view_sensitive: false, ktyh_hr_edit_role: false, ktyh_hr_import_delete: false,
+            student_can_practice: true, student_can_take_exam: true, student_view_exam_score: true, student_view_exam_explain: true, student_use_gift_shop: true, student_view_leaderboard: true
+        }
+    },
+    ktyh_academic: {
+        roleKey: 'ktyh_academic',
+        label: '📚 Giáo vụ Khoa KTYH',
+        badgeClass: 'bg-info text-dark',
+        groupType: 'staff',
+        legacyPermText: 'exams,subjects,stats',
+        permissions: {
+            bank_view_questions: true, bank_add_edit_questions: false, bank_import_export_tsv: false, bank_delete_questions: false, bank_config_bloom: false,
+            exam_create_and_config: true, exam_toggle_open_close: true, exam_monitor_live_radar: true, exam_force_submit_reset: false, exam_export_word_pdf: true, exam_quick_grade_paper: false, exam_export_score_excel: true,
+            sys_manage_subjects: true, sys_manage_users_classes: false, sys_manage_rbac: false, sys_manage_admissions: false, sys_view_server_logs: true, sys_manage_inventory_gifts: false,
+            ktyh_portal_access: true, ktyh_view_all_depts: true, ktyh_timesheet_manage: true, ktyh_timesheet_approve: false, ktyh_export_full_c01: true, ktyh_hr_view_sensitive: false, ktyh_hr_edit_role: false, ktyh_hr_import_delete: false,
+            student_can_practice: false, student_can_take_exam: false, student_view_exam_score: false, student_view_exam_explain: false, student_use_gift_shop: false, student_view_leaderboard: false
+        }
+    },
+    ktyh_specialist: {
+        roleKey: 'ktyh_specialist',
+        label: '🗂️ Chuyên viên Khoa',
+        badgeClass: 'bg-warning text-dark',
+        groupType: 'staff',
+        legacyPermText: 'stats',
+        permissions: {
+            bank_view_questions: false, bank_add_edit_questions: false, bank_import_export_tsv: false, bank_delete_questions: false, bank_config_bloom: false,
+            exam_create_and_config: false, exam_toggle_open_close: false, exam_monitor_live_radar: false, exam_force_submit_reset: false, exam_export_word_pdf: false, exam_quick_grade_paper: false, exam_export_score_excel: false,
+            sys_manage_subjects: false, sys_manage_users_classes: false, sys_manage_rbac: false, sys_manage_admissions: false, sys_view_server_logs: false, sys_manage_inventory_gifts: false,
+            ktyh_portal_access: true, ktyh_view_all_depts: false, ktyh_timesheet_manage: false, ktyh_timesheet_approve: false, ktyh_export_full_c01: false, ktyh_hr_view_sensitive: false, ktyh_hr_edit_role: false, ktyh_hr_import_delete: false,
+            student_can_practice: false, student_can_take_exam: false, student_view_exam_score: false, student_view_exam_explain: false, student_use_gift_shop: false, student_view_leaderboard: false
         }
     },
     teacher: {
@@ -91,6 +163,7 @@ window.DEFAULT_RBAC_ROLE_TEMPLATES = {
             bank_view_questions: true, bank_add_edit_questions: true, bank_import_export_tsv: true, bank_delete_questions: false, bank_config_bloom: true,
             exam_create_and_config: true, exam_toggle_open_close: true, exam_monitor_live_radar: true, exam_force_submit_reset: true, exam_export_word_pdf: true, exam_quick_grade_paper: true, exam_export_score_excel: true,
             sys_manage_subjects: false, sys_manage_users_classes: false, sys_manage_rbac: false, sys_manage_admissions: false, sys_view_server_logs: true, sys_manage_inventory_gifts: false,
+            ktyh_portal_access: true, ktyh_view_all_depts: false, ktyh_timesheet_manage: false, ktyh_timesheet_approve: false, ktyh_export_full_c01: false, ktyh_hr_view_sensitive: false, ktyh_hr_edit_role: false, ktyh_hr_import_delete: false,
             student_can_practice: true, student_can_take_exam: true, student_view_exam_score: true, student_view_exam_explain: true, student_use_gift_shop: true, student_view_leaderboard: true
         }
     },
@@ -104,6 +177,7 @@ window.DEFAULT_RBAC_ROLE_TEMPLATES = {
             bank_view_questions: false, bank_add_edit_questions: false, bank_import_export_tsv: false, bank_delete_questions: false, bank_config_bloom: false,
             exam_create_and_config: false, exam_toggle_open_close: true, exam_monitor_live_radar: true, exam_force_submit_reset: true, exam_export_word_pdf: false, exam_quick_grade_paper: true, exam_export_score_excel: true,
             sys_manage_subjects: false, sys_manage_users_classes: false, sys_manage_rbac: false, sys_manage_admissions: false, sys_view_server_logs: true, sys_manage_inventory_gifts: false,
+            ktyh_portal_access: false, ktyh_view_all_depts: false, ktyh_timesheet_manage: false, ktyh_timesheet_approve: false, ktyh_export_full_c01: false, ktyh_hr_view_sensitive: false, ktyh_hr_edit_role: false, ktyh_hr_import_delete: false,
             student_can_practice: false, student_can_take_exam: false, student_view_exam_score: false, student_view_exam_explain: false, student_use_gift_shop: false, student_view_leaderboard: false
         }
     },
@@ -117,7 +191,7 @@ window.DEFAULT_RBAC_ROLE_TEMPLATES = {
             bank_view_questions: false, bank_add_edit_questions: false, bank_import_export_tsv: false, bank_delete_questions: false, bank_config_bloom: false,
             exam_create_and_config: false, exam_toggle_open_close: false, exam_monitor_live_radar: false, exam_force_submit_reset: false, exam_export_word_pdf: false, exam_quick_grade_paper: false, exam_export_score_excel: false,
             sys_manage_subjects: false, sys_manage_users_classes: false, sys_manage_rbac: false, sys_manage_admissions: false, sys_view_server_logs: false, sys_manage_inventory_gifts: false,
-            // CHUẨN AN TOÀN KHẢO THÍ: Ôn tập = true, Dự thi = true, nhưng Xem điểm Thi thật = false & Xem đáp án Thi thật = false
+            ktyh_portal_access: false, ktyh_view_all_depts: false, ktyh_timesheet_manage: false, ktyh_timesheet_approve: false, ktyh_export_full_c01: false, ktyh_hr_view_sensitive: false, ktyh_hr_edit_role: false, ktyh_hr_import_delete: false,
             student_can_practice: true,
             student_can_take_exam: true,
             student_view_exam_score: false,
@@ -668,6 +742,7 @@ window.render_rbac_role_templates_list = function() {
 
     let rolesObj = window.RBAC_ROLE_PRESETS || {};
     let keys = Object.keys(rolesObj);
+    let totalPerms = Object.values(window.RBAC_PERMISSION_DEFINITIONS || {}).reduce((acc, g) => acc + (g.items?.length || 0), 0);
 
     box.innerHTML = keys.map(rKey => {
         let r = rolesObj[rKey];
@@ -683,7 +758,7 @@ window.render_rbac_role_templates_list = function() {
             </div>
             <div class="d-flex justify-content-between align-items-center mt-1 small" style="font-size: 0.73rem;">
                 <span class="text-info"><i class="bi bi-people-fill me-1"></i><b>${countUsers}</b> tài khoản đang dùng</span>
-                <span class="text-warning"><i class="bi bi-check2-circle me-1"></i>Bật <b>${enabledCount}/24</b> quyền</span>
+                <span class="text-warning"><i class="bi bi-check2-circle me-1"></i>Bật <b>${enabledCount}/${totalPerms}</b> quyền</span>
             </div>
         </div>`;
     }).join('');
@@ -697,7 +772,7 @@ window.render_rbac_role_template_editor = function(roleKey) {
     let roleData = window.RBAC_ROLE_PRESETS[roleKey];
     if (!box || !roleData) return;
 
-    let isCoreRole = ['admin', 'teacher', 'proctor', 'k12'].includes(roleKey);
+    let isCoreRole = ['admin', 'ktyh_dean', 'ktyh_head', 'ktyh_academic', 'ktyh_specialist', 'teacher', 'proctor', 'k12'].includes(roleKey);
     let perms = roleData.permissions || {};
 
     // Hiển thị các phân hệ quyền phù hợp với Role
@@ -774,6 +849,7 @@ window.render_rbac_role_template_editor = function(roleKey) {
             </div>
         </div>
 
+        ${buildRoleGroupHtml('ktyh_group')}
         ${buildRoleGroupHtml('bank_group')}
         ${buildRoleGroupHtml('exam_group')}
         ${buildRoleGroupHtml('system_group')}
@@ -852,7 +928,7 @@ window.prompt_create_new_role_template = function() {
 };
 
 window.delete_custom_role_template = function(roleKey) {
-    if (['admin', 'teacher', 'proctor', 'k12'].includes(roleKey)) return;
+    if (['admin', 'ktyh_dean', 'ktyh_head', 'ktyh_academic', 'ktyh_specialist', 'teacher', 'proctor', 'k12'].includes(roleKey)) return;
     if (!confirm(`Xóa Role "${roleKey}"? Các tài khoản đang giữ Role này sẽ chuyển về Giảng viên.`)) return;
     delete window.RBAC_ROLE_PRESETS[roleKey];
     window.save_rbac_role_templates_to_storage();
@@ -868,7 +944,7 @@ window.load_rbac_users_from_db = async function() {
         const { data, error } = await clientDb.from('users').select('*').limit(3000);
         if (error) throw error;
 
-        const rolePriority = { admin: 1, teacher: 2, proctor: 3, k12: 9 };
+        const rolePriority = { admin: 1, ktyh_dean: 2, ktyh_head: 3, ktyh_academic: 4, ktyh_specialist: 5, teacher: 6, proctor: 7, k12: 9 };
         window._rbacUsersCache = (data || [])
             .map(row => window.normalize_user_row_for_rbac(row))
             .sort((a, b) => {
@@ -1180,6 +1256,7 @@ window.render_rbac_detail_editor = function() {
         </div>
 
         <!-- LƯỚI QUYỀN CHI TIẾT ĐƯA LÊN NGAY ĐẦU ĐỂ THAO TÁC TỨC THÌ -->
+        ${buildCompactGroupHtml('ktyh_group')}
         ${buildCompactGroupHtml('bank_group')}
         ${buildCompactGroupHtml('exam_group')}
         ${buildCompactGroupHtml('system_group')}
@@ -1329,10 +1406,22 @@ window.save_current_rbac_user = async function() {
             if (retry.error) throw retry.error;
         }
 
+        // Đồng bộ 2 chiều: Nếu đổi Role thuộc nhóm Khoa KTYH thì cập nhật luôn bảng public.staff_profiles
+        if (['ktyh_dean', 'ktyh_head', 'ktyh_academic', 'ktyh_specialist', 'teacher'].includes(role)) {
+            try {
+                await clientDb.from('staff_profiles').update({ ktyh_role: role }).eq('staff_code', studentId);
+            } catch (e) {}
+        }
+
         let normalized = window.normalize_user_row_for_rbac(dbRowPayload);
         let idx = window._rbacUsersCache.findIndex(u => u.student_id === studentId);
         if (idx !== -1) window._rbacUsersCache[idx] = normalized;
         else window._rbacUsersCache.unshift(normalized);
+
+        // Nếu đang chỉnh quyền cho chính tài khoản hiện hành thì áp dụng ngay lập tức
+        if (String(window.current_student_id || '').trim().toLowerCase() === studentId.toLowerCase()) {
+            window.current_rbac_profile = normalized;
+        }
 
         window._rbacSelectedUser = normalized;
         window.populate_tier_filter_dropdowns();

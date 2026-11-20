@@ -162,10 +162,41 @@ window.register_ktyh_roles_to_rbac = function() {
         ? window.DEFAULT_RBAC_ROLE_TEMPLATES.teacher.permissions : {};
 
     const defs = {
-        'ktyh_dean':       { label: '🏛️ Lãnh đạo Khoa KTYH',   badgeClass: 'bg-danger text-white',  legacyPermText: 'banks,exams,subjects,stats', extra: { bank_delete_questions: true, sys_manage_subjects: true } },
-        'ktyh_head':       { label: '🔬 Lãnh đạo Bộ môn',      badgeClass: 'bg-primary text-white', legacyPermText: 'banks,exams,stats',          extra: { bank_delete_questions: true } },
-        'ktyh_academic':   { label: '📚 Giáo vụ Khoa KTYH',    badgeClass: 'bg-info text-dark',     legacyPermText: 'exams,subjects,stats',       extra: { sys_manage_subjects: true } },
-        'ktyh_specialist': { label: '🗂️ Chuyên viên Khoa',     badgeClass: 'bg-warning text-dark',  legacyPermText: 'stats',                      extra: {} }
+        'ktyh_dean': {
+            label: '🏛️ Lãnh đạo Khoa KTYH', badgeClass: 'bg-danger text-white', legacyPermText: 'banks,exams,subjects,stats',
+            extra: {
+                bank_delete_questions: true, sys_manage_subjects: true,
+                ktyh_portal_access: true, ktyh_view_all_depts: true, ktyh_timesheet_manage: true,
+                ktyh_timesheet_approve: true, ktyh_export_full_c01: true, ktyh_hr_view_sensitive: true,
+                ktyh_hr_edit_role: true, ktyh_hr_import_delete: false
+            }
+        },
+        'ktyh_head': {
+            label: '🔬 Lãnh đạo Bộ môn', badgeClass: 'bg-primary text-white', legacyPermText: 'banks,exams,stats',
+            extra: {
+                bank_delete_questions: true,
+                ktyh_portal_access: true, ktyh_view_all_depts: false, ktyh_timesheet_manage: true,
+                ktyh_timesheet_approve: true, ktyh_export_full_c01: true, ktyh_hr_view_sensitive: false,
+                ktyh_hr_edit_role: false, ktyh_hr_import_delete: false
+            }
+        },
+        'ktyh_academic': {
+            label: '📚 Giáo vụ Khoa KTYH', badgeClass: 'bg-info text-dark', legacyPermText: 'exams,subjects,stats',
+            extra: {
+                sys_manage_subjects: true,
+                ktyh_portal_access: true, ktyh_view_all_depts: true, ktyh_timesheet_manage: true,
+                ktyh_timesheet_approve: false, ktyh_export_full_c01: true, ktyh_hr_view_sensitive: false,
+                ktyh_hr_edit_role: false, ktyh_hr_import_delete: false
+            }
+        },
+        'ktyh_specialist': {
+            label: '🗂️ Chuyên viên Khoa', badgeClass: 'bg-warning text-dark', legacyPermText: 'stats',
+            extra: {
+                ktyh_portal_access: true, ktyh_view_all_depts: false, ktyh_timesheet_manage: false,
+                ktyh_timesheet_approve: false, ktyh_export_full_c01: false, ktyh_hr_view_sensitive: false,
+                ktyh_hr_edit_role: false, ktyh_hr_import_delete: false
+            }
+        }
     };
 
     Object.keys(defs).forEach(k => {
@@ -204,20 +235,34 @@ window.get_current_ktyh_profile = function() {
     let deptCode = matched ? (matched.dept_code || 'BM_KTXN') : 'BM_KTXN';
     let meta = window.KTYH_ROLE_META[activeRole] || window.KTYH_ROLE_META.teacher;
 
-    // Ma trận quyền hạn chuẩn 6 tầng
+    // Đọc công tắc quyền trực tiếp từ RBAC Studio (ưu tiên tinh chỉnh cá nhân -> mẫu Role -> mặc định)
+    let rbacPerms = (window.current_rbac_profile && window.current_rbac_profile.permissions)
+        ? window.current_rbac_profile.permissions : {};
+
+    const checkPerm = (permKey, defaultBool) => {
+        if (activeRole === 'admin') return true;
+        if (!window._ktyhState.previewRole && typeof rbacPerms[permKey] === 'boolean') {
+            return rbacPerms[permKey];
+        }
+        return defaultBool;
+    };
+
+    const canManageTs = checkPerm('ktyh_timesheet_manage', ['admin', 'ktyh_dean', 'ktyh_head', 'ktyh_academic'].includes(activeRole) || isTimekeeper);
+
+    // Ma trận quyền hạn chuẩn 6 tầng (điều khiển trực tiếp từ RBAC Studio)
     const perms = {
-        isAdmin:            activeRole === 'admin',
-        canImportExcel:     activeRole === 'admin',                                                    // Chỉ Admin nhập đè DB
-        canDeleteStaff:     activeRole === 'admin',                                                    // Chỉ Admin xóa tài khoản
-        canOpenRBAC:        activeRole === 'admin',                                                    // Chỉ Admin mở RBAC Studio
-        canEditStaffRole:   activeRole === 'admin' || activeRole === 'ktyh_dean',                      // Admin & Lãnh đạo Khoa phân công đơn vị/chức vụ
-        canViewAllDepts:    ['admin', 'ktyh_dean', 'ktyh_academic'].includes(activeRole),              // Xem toàn Khoa
-        canViewSensitive:   ['admin', 'ktyh_dean'].includes(activeRole),                               // Xem CCCD, STK, Hệ số lương của người khác
-        canViewTimesheetAll:['admin', 'ktyh_dean', 'ktyh_head', 'ktyh_academic'].includes(activeRole) || isTimekeeper, // Xem bảng tổng hợp 31 ngày
-        canApproveTimesheet:['admin', 'ktyh_dean', 'ktyh_head'].includes(activeRole),                  // Nút Phê duyệt bảng công
-        canExportFullC01:   ['admin', 'ktyh_dean', 'ktyh_head', 'ktyh_academic'].includes(activeRole) || isTimekeeper,
-        canAccessAcademic:  ['admin', 'ktyh_dean', 'ktyh_head', 'ktyh_academic', 'teacher'].includes(activeRole), // Học phần & Đề thi
-        isPersonalOnly:     (['ktyh_specialist', 'teacher'].includes(activeRole) && !isTimekeeper)
+        isAdmin:             activeRole === 'admin',
+        canImportExcel:      checkPerm('ktyh_hr_import_delete', activeRole === 'admin'),
+        canDeleteStaff:      checkPerm('ktyh_hr_import_delete', activeRole === 'admin'),
+        canOpenRBAC:         activeRole === 'admin',
+        canEditStaffRole:    checkPerm('ktyh_hr_edit_role', ['admin', 'ktyh_dean'].includes(activeRole)),
+        canViewAllDepts:     checkPerm('ktyh_view_all_depts', ['admin', 'ktyh_dean', 'ktyh_academic'].includes(activeRole)),
+        canViewSensitive:    checkPerm('ktyh_hr_view_sensitive', ['admin', 'ktyh_dean'].includes(activeRole)),
+        canViewTimesheetAll: canManageTs,
+        canApproveTimesheet: checkPerm('ktyh_timesheet_approve', ['admin', 'ktyh_dean', 'ktyh_head'].includes(activeRole)),
+        canExportFullC01:    checkPerm('ktyh_export_full_c01', ['admin', 'ktyh_dean', 'ktyh_head', 'ktyh_academic'].includes(activeRole) || isTimekeeper),
+        canAccessAcademic:   ['admin', 'ktyh_dean', 'ktyh_head', 'ktyh_academic', 'teacher'].includes(activeRole),
+        isPersonalOnly:      !canManageTs
     };
 
     // Danh sách Tab phù hợp riêng cho từng cấp
@@ -231,9 +276,10 @@ window.get_current_ktyh_profile = function() {
         ];
     } else if (activeRole === 'ktyh_head') {
         tabs = [
-            { id: 'timesheet',      label: '1. Chấm công Bộ môn',    icon: 'bi-calendar2-check-fill' },
-            { id: 'profiles',       label: '2. Nhân sự Bộ môn',      icon: 'bi-people-fill' },
-            { id: 'subjects_exams', label: '3. Học phần & Đề thi',   icon: 'bi-journal-check' }
+            { id: 'overview',       label: '1. Dashboard Bộ môn',    icon: 'bi-pie-chart-fill' },
+            { id: 'timesheet',      label: '2. Chấm công Bộ môn',    icon: 'bi-calendar2-check-fill' },
+            { id: 'profiles',       label: '3. Nhân sự Bộ môn',      icon: 'bi-people-fill' },
+            { id: 'subjects_exams', label: '4. Học phần & Đề thi',   icon: 'bi-journal-check' }
         ];
     } else if (activeRole === 'ktyh_academic') {
         tabs = [
@@ -273,7 +319,12 @@ window.get_current_ktyh_profile = function() {
 
 window.can_access_ktyh_portal = function() {
     let r = String(window.current_user_role || '').toLowerCase();
-    return ['all', 'admin', 'ktyh_dean', 'ktyh_head', 'ktyh_academic', 'ktyh_specialist', 'teacher', 'timekeeper'].includes(r) || r.includes('gv');
+    if (r === 'all' || r === 'admin') return true;
+    let rbacPerms = window.current_rbac_profile && window.current_rbac_profile.permissions;
+    if (rbacPerms && typeof rbacPerms.ktyh_portal_access === 'boolean') {
+        return rbacPerms.ktyh_portal_access;
+    }
+    return ['ktyh_dean', 'ktyh_head', 'ktyh_academic', 'ktyh_specialist', 'teacher', 'timekeeper'].includes(r) || r.includes('gv');
 };
 
 // Tự động gắn thẻ vào Sảnh Quản trị (Admin Hub)
@@ -836,45 +887,130 @@ window.render_ktyh_active_view = function() {
 };
 
 // =========================================================================
-// 📊 6. TAB TỔNG QUAN (DÀNH RIÊNG CHO ADMIN & LÃNH ĐẠO KHOA)
+// 📊 6. DASHBOARD ĐIỀU HÀNH (BIỂU ĐỒ SVG + XUẤT EXCEL CHO LÃNH ĐẠO KHOA & BỘ MÔN)
 // =========================================================================
 window.render_ktyh_overview_tab = function(box, prof) {
-    let list = window._ktyhState.profilesList || [];
-    let vcCount = list.filter(x => x.contract_type === 'VC').length;
-    let hdCount = list.filter(x => x.contract_type === 'HDLD').length;
-    let upgradeDueCount = list.filter(x => window.check_salary_upgrade_status(x.salary_start_date)).length;
+    let allList = window._ktyhState.profilesList || [];
+    let isDeptScoped = !prof.perms.canViewAllDepts;
+    let scopeDept = isDeptScoped ? prof.deptCode : 'ALL';
+    let scopedList = isDeptScoped ? allList.filter(x => x.dept_code === prof.deptCode) : allList;
+
+    let totalStaff = scopedList.length;
+    let vcCount = scopedList.filter(x => x.contract_type === 'VC').length;
+    let hdCount = scopedList.filter(x => x.contract_type === 'HDLD').length;
+    let upgradeDueCount = prof.perms.canViewSensitive
+        ? scopedList.filter(x => window.check_salary_upgrade_status(x.salary_start_date)).length : 0;
 
     let m = window._ktyhState.selectedMonth, y = window._ktyhState.selectedYear;
     let monthKey = `${y}_${String(m).padStart(2, '0')}`;
     let monthMap = window._ktyhState.timesheetMap[monthKey] || {};
-    let approvedCount = Object.values(monthMap).filter(r => r.status === 'dean_approved' || r.status === 'head_approved').length;
 
-    box.innerHTML = `
-        <div class="ktyh-card mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2" style="background: linear-gradient(135deg, #111827 0%, #1e293b 100%); border-color: ${prof.badgeColor};">
-            <div>
-                <div class="fw-bold text-white">${prof.levelTitle} — <span class="text-warning">${prof.full_name}</span></div>
-                <div class="text-white-50 small mt-1">
-                    ${prof.perms.isAdmin
-                        ? 'Quyền Quản trị tối cao: Quản lý dữ liệu gốc Supabase, nhập Excel nhân sự, phân quyền RBAC và kiểm tra góc nhìn từng cấp.'
-                        : 'Quyền Lãnh đạo Khoa KTYH: Điều hành toàn bộ 4 Bộ môn & Văn phòng Khoa, duyệt bảng công C01-HD và theo dõi nhân sự/nâng bậc lương.'}
-                </div>
+    // Thống kê trạng thái chấm công tháng hiện tại trong phạm vi đang xem
+    let tsCounts = { dean_approved: 0, head_approved: 0, submitted: 0, draft: 0 };
+    scopedList.forEach(st => {
+        let s = monthMap[st.staff_code]?.status || 'draft';
+        if (tsCounts[s] !== undefined) tsCounts[s]++;
+        else tsCounts.draft++;
+    });
+    let approvedCount = tsCounts.dean_approved + tsCounts.head_approved;
+    let approvedPct = totalStaff > 0 ? Math.round((approvedCount / totalStaff) * 100) : 0;
+
+    // 1. TÍNH DỮ LIỆU BIỂU ĐỒ TRÒN (SVG DONUT): CƠ CẤU TRÌNH ĐỘ CHUYÊN MÔN
+    let degBuckets = [
+        { label: 'Tiến sĩ',          color: '#f43f5e', count: 0 },
+        { label: 'Thạc sĩ',          color: '#38bdf8', count: 0 },
+        { label: 'Chuyên khoa I',    color: '#a855f7', count: 0 },
+        { label: 'Đại học / Cử nhân',color: '#10b981', count: 0 },
+        { label: 'Khác / Chưa rõ',   color: '#64748b', count: 0 }
+    ];
+    scopedList.forEach(st => {
+        let d = window.clean_vn_str(st.highest_degree || '');
+        if (d.includes('tien s')) degBuckets[0].count++;
+        else if (d.includes('thac s')) degBuckets[1].count++;
+        else if (d.includes('ck')) degBuckets[2].count++;
+        else if (d.includes('dai hoc') || d.includes('cu nhan')) degBuckets[3].count++;
+        else degBuckets[4].count++;
+    });
+
+    // Vẽ các cung tròn SVG (chu vi = 100, r = 15.9155)
+    let cumPct = 0;
+    let donutSegmentsHtml = degBuckets.map(b => {
+        if (b.count === 0 || totalStaff === 0) return '';
+        let pct = (b.count / totalStaff) * 100;
+        let offset = 100 - cumPct + 25;
+        cumPct += pct;
+        return `<circle cx="21" cy="21" r="15.9155" fill="transparent" stroke="${b.color}" stroke-width="5.2" stroke-dasharray="${pct.toFixed(2)} ${(100 - pct).toFixed(2)}" stroke-dashoffset="${offset.toFixed(2)}"></circle>`;
+    }).join('');
+
+    let donutLegendHtml = degBuckets.map(b => {
+        let pct = totalStaff > 0 ? Math.round((b.count / totalStaff) * 100) : 0;
+        return `
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom border-secondary border-opacity-25" style="font-size:0.78rem;">
+            <div class="d-flex align-items-center gap-2">
+                <span style="width:10px; height:10px; border-radius:3px; background:${b.color}; display:inline-block;"></span>
+                <span class="text-light">${b.label}</span>
             </div>
-            ${prof.perms.canImportExcel && list.length === 0 ? `
-            <button class="btn btn-sm btn-success fw-bold px-3" onclick="window.open_ktyh_staff_import_modal()">
-                <i class="bi bi-cloud-upload-fill me-1"></i> Nhập file Vien chuc.xlsx ngay
-            </button>` : ''}
-        </div>
+            <div><b class="text-white">${b.count}</b> <span class="text-white-50">(${pct}%)</span></div>
+        </div>`;
+    }).join('');
 
-        <div class="row g-2 mb-3">
-            <div class="col-6 col-md-3"><div class="ktyh-card"><div class="text-white-50 small fw-bold">TỔNG NHÂN SỰ</div><div class="fs-4 fw-bold text-info mt-1">${list.length} người</div><div class="small text-white-50">VC: ${vcCount} • HĐLĐ: ${hdCount}</div></div></div>
-            <div class="col-6 col-md-3"><div class="ktyh-card"><div class="text-white-50 small fw-bold">CHẤM CÔNG T${String(m).padStart(2,'0')}/${y}</div><div class="fs-4 fw-bold text-success mt-1">${approvedCount}/${list.length}</div><div class="small text-white-50">Bản công đã duyệt</div></div></div>
-            <div class="col-6 col-md-3"><div class="ktyh-card"><div class="text-white-50 small fw-bold">NÂNG BẬC LƯƠNG</div><div class="fs-4 fw-bold text-warning mt-1">${upgradeDueCount} người</div><div class="small text-white-50">Sắp / Đến hạn 3 năm</div></div></div>
-            <div class="col-6 col-md-3"><div class="ktyh-card"><div class="text-white-50 small fw-bold">HỌC PHẦN KHOA</div><div class="fs-4 fw-bold text-danger mt-1">${Object.keys(window.subjectConfig || {}).length} môn</div><div class="small text-white-50">Ngân hàng câu hỏi &amp; Thi</div></div></div>
-        </div>
+    // 2. TÍNH DỮ LIỆU BIỂU ĐỒ CỘT NGANG:
+    // - Admin / Lãnh đạo Khoa: Phân bổ nhân sự & tiến độ duyệt công theo 6 Đơn vị
+    // - Lãnh đạo Bộ môn: Chi tiết tiến độ chấm công tháng hiện tại trong Bộ môn
+    let rightChartTitle = isDeptScoped
+        ? `TIẾN ĐỘ CHẤM CÔNG THÁNG ${String(m).padStart(2,'0')}/${y} (${window.KTYH_DEPARTMENTS[prof.deptCode]?.short || prof.deptCode})`
+        : `PHÂN BỔ NHÂN SỰ & DUYỆT CÔNG THEO BỘ MÔN (T${String(m).padStart(2,'0')}/${y})`;
 
+    let rightChartBarsHtml = '';
+    if (!isDeptScoped) {
+        let maxDept = Math.max(1, ...Object.keys(window.KTYH_DEPARTMENTS).map(k => allList.filter(x => x.dept_code === k).length));
+        rightChartBarsHtml = Object.values(window.KTYH_DEPARTMENTS).map(d => {
+            let dList = allList.filter(x => x.dept_code === d.code);
+            let dApproved = dList.filter(x => ['dean_approved', 'head_approved'].includes(monthMap[x.staff_code]?.status)).length;
+            let barW = Math.round((dList.length / maxDept) * 100);
+            let appW = dList.length > 0 ? Math.round((dApproved / dList.length) * 100) : 0;
+            return `
+            <div class="mb-2" style="cursor:pointer;" onclick="window._ktyhState.selectedDept='${d.code}'; window.switch_ktyh_tab('timesheet')" title="Bấm để mở chấm công ${d.name}">
+                <div class="d-flex justify-content-between align-items-center mb-1" style="font-size:0.76rem;">
+                    <span class="fw-bold text-white"><i class="bi ${d.icon} me-1" style="color:${d.color};"></i>${d.short}</span>
+                    <span class="text-white-50"><b class="text-white">${dList.length}</b> người • Đã duyệt: <b class="text-success">${dApproved}/${dList.length}</b> (${appW}%)</span>
+                </div>
+                <div style="height:10px; background:#0f172a; border-radius:999px; overflow:hidden; border:1px solid #262b31;">
+                    <div style="width:${barW}%; height:100%; background:linear-gradient(90deg, ${d.color}, #38bdf8); border-radius:999px; transition:width 0.4s ease;"></div>
+                </div>
+            </div>`;
+        }).join('');
+    } else {
+        const statusBars = [
+            { label: '🏛️ Khoa đã phê duyệt',  count: tsCounts.dean_approved, color: '#10b981' },
+            { label: '🔬 Bộ môn đã phê duyệt', count: tsCounts.head_approved, color: '#38bdf8' },
+            { label: '✍️ Giảng viên đã tự chấm', count: tsCounts.submitted,    color: '#f59e0b' },
+            { label: '⏳ Chưa lưu / Nháp',      count: tsCounts.draft,         color: '#64748b' }
+        ];
+        rightChartBarsHtml = statusBars.map(sb => {
+            let pct = totalStaff > 0 ? Math.round((sb.count / totalStaff) * 100) : 0;
+            return `
+            <div class="mb-2">
+                <div class="d-flex justify-content-between align-items-center mb-1" style="font-size:0.78rem;">
+                    <span class="fw-bold text-light">${sb.label}</span>
+                    <span class="text-white-50"><b class="text-white">${sb.count}</b> / ${totalStaff} (${pct}%)</span>
+                </div>
+                <div style="height:11px; background:#0f172a; border-radius:999px; overflow:hidden; border:1px solid #262b31;">
+                    <div style="width:${pct}%; height:100%; background:${sb.color}; border-radius:999px; transition:width 0.4s ease;"></div>
+                </div>
+            </div>`;
+        }).join('') + `
+        <div class="mt-3 pt-2 border-top border-secondary border-opacity-25 d-flex justify-content-between small text-white-50">
+            <span>Cơ cấu hợp đồng: <b class="text-info">Viên chức (${vcCount})</b> • <b class="text-warning">HĐLĐ (${hdCount})</b></span>
+            <button class="btn btn-sm py-0 px-2 btn-outline-success fw-bold" style="font-size:0.72rem;" onclick="window.switch_ktyh_tab('timesheet')">Mở lưới 31 ngày →</button>
+        </div>`;
+    }
+
+    // 3. KHỐI THẺ BỘ MÔN (LÃNH ĐẠO KHOA) HOẶC LỐI TẮT NHÂN SỰ (LÃNH ĐẠO BỘ MÔN)
+    let bottomGridHtml = !isDeptScoped ? `
         <div class="row g-2">
             ${Object.values(window.KTYH_DEPARTMENTS).map(d => {
-                let dList = list.filter(x => x.dept_code === d.code);
+                let dList = allList.filter(x => x.dept_code === d.code);
                 let head = dList.find(x => x.ktyh_role === 'ktyh_head');
                 return `
                 <div class="col-12 col-md-6 col-lg-4">
@@ -897,8 +1033,152 @@ window.render_ktyh_overview_tab = function(box, prof) {
                     </div>
                 </div>`;
             }).join('')}
+        </div>` : '';
+
+    box.innerHTML = `
+        <!-- Banner Chào + Cụm Nút Xuất Excel Nhanh -->
+        <div class="ktyh-card mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2" style="background: linear-gradient(135deg, #111827 0%, #1e293b 100%); border-color: ${prof.badgeColor};">
+            <div>
+                <div class="fw-bold text-white">${prof.levelTitle} — <span class="text-warning">${prof.full_name}</span></div>
+                <div class="text-white-50 small mt-1">
+                    Phạm vi điều hành: <b class="text-info">${isDeptScoped ? prof.deptName : 'Toàn Khoa Kỹ thuật Y học'}</b> • Kỳ báo cáo: <b>Tháng ${String(m).padStart(2,'0')}/${y}</b>
+                </div>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <button type="button" class="btn btn-sm btn-success fw-bold px-3" onclick="window.export_c01_excel_file()">
+                    <i class="bi bi-file-earmark-excel-fill me-1"></i> Xuất Excel Chấm công (C01-HD)
+                </button>
+                <button type="button" class="btn btn-sm btn-info fw-bold text-dark px-3" onclick="window.export_ktyh_staff_profiles_excel()">
+                    <i class="bi bi-file-earmark-spreadsheet-fill me-1"></i> Xuất Excel Danh sách Nhân sự
+                </button>
+                ${prof.perms.canImportExcel && allList.length === 0 ? `
+                <button type="button" class="btn btn-sm btn-warning fw-bold text-dark px-3" onclick="window.open_ktyh_staff_import_modal()">
+                    <i class="bi bi-cloud-upload-fill me-1"></i> Nhập Vien chuc.xlsx
+                </button>` : ''}
+            </div>
         </div>
+
+        <!-- 4 Thẻ KPI Tổng hợp -->
+        <div class="row g-2 mb-3">
+            <div class="col-6 col-md-3">
+                <div class="ktyh-card" style="border-top: 3px solid #38bdf8;">
+                    <div class="text-white-50 small fw-bold">TỔNG NHÂN SỰ</div>
+                    <div class="fs-4 fw-bold text-info mt-1">${totalStaff} người</div>
+                    <div class="small text-white-50">VC: ${vcCount} • HĐLĐ: ${hdCount}</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="ktyh-card" style="border-top: 3px solid #10b981;">
+                    <div class="text-white-50 small fw-bold">DUYỆT CÔNG T${String(m).padStart(2,'0')}/${y}</div>
+                    <div class="fs-4 fw-bold text-success mt-1">${approvedCount}/${totalStaff} <span class="fs-6">(${approvedPct}%)</span></div>
+                    <div class="small text-white-50">GV tự chấm: ${tsCounts.submitted} • Nháp: ${tsCounts.draft}</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="ktyh-card" style="border-top: 3px solid #f59e0b;">
+                    <div class="text-white-50 small fw-bold">${prof.perms.canViewSensitive ? 'NÂNG BẬC LƯƠNG' : 'SAU ĐẠI HỌC (TS/ThS/CKI)'}</div>
+                    <div class="fs-4 fw-bold text-warning mt-1">${prof.perms.canViewSensitive ? upgradeDueCount + ' người' : (degBuckets[0].count + degBuckets[1].count + degBuckets[2].count) + ' người'}</div>
+                    <div class="small text-white-50">${prof.perms.canViewSensitive ? 'Sắp / Đến hạn 3 năm' : `Chiếm ${totalStaff > 0 ? Math.round(((degBuckets[0].count + degBuckets[1].count + degBuckets[2].count)/totalStaff)*100) : 0}% nhân sự`}</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="ktyh-card" style="border-top: 3px solid #f43f5e;">
+                    <div class="text-white-50 small fw-bold">HỌC PHẦN CHUYÊN MÔN</div>
+                    <div class="fs-4 fw-bold text-danger mt-1">${Object.keys(window.subjectConfig || {}).length} môn</div>
+                    <div class="small text-white-50">Ngân hàng câu hỏi &amp; Đề thi</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Hàng 2 Biểu đồ Trực quan (SVG Donut + Thanh Tiến độ/Bộ môn) -->
+        <div class="row g-2 mb-3">
+            <div class="col-12 col-lg-5">
+                <div class="ktyh-card h-100">
+                    <div class="fw-bold text-info small text-uppercase mb-3">
+                        <i class="bi bi-pie-chart-fill me-1"></i> CƠ CẤU TRÌNH ĐỘ CHUYÊN MÔN
+                    </div>
+                    <div class="row align-items-center g-2">
+                        <div class="col-5 text-center">
+                            <svg viewBox="0 0 42 42" style="width: 145px; max-width: 100%; height: auto;">
+                                <circle cx="21" cy="21" r="15.9155" fill="transparent" stroke="#1e293b" stroke-width="5.2"></circle>
+                                ${donutSegmentsHtml}
+                                <text x="21" y="20.2" text-anchor="middle" fill="#ffffff" font-size="6.5" font-weight="bold">${totalStaff}</text>
+                                <text x="21" y="25.2" text-anchor="middle" fill="#94a3b8" font-size="2.7">NHÂN SỰ</text>
+                            </svg>
+                        </div>
+                        <div class="col-7">
+                            ${donutLegendHtml}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-7">
+                <div class="ktyh-card h-100">
+                    <div class="fw-bold text-warning small text-uppercase mb-3">
+                        <i class="bi bi-bar-chart-steps me-1"></i> ${rightChartTitle}
+                    </div>
+                    ${rightChartBarsHtml}
+                </div>
+            </div>
+        </div>
+
+        ${bottomGridHtml}
     `;
+};
+
+// Hàm Xuất Excel Danh sách Nhân sự (Tự động lọc theo quyền: Admin/Lãnh đạo Khoa xuất đủ 27 cột; Lãnh đạo BM xuất danh bạ chuẩn, ẩn CCCD/STK/Lương)
+window.export_ktyh_staff_profiles_excel = function() {
+    if (typeof XLSX === 'undefined') return window.show_toast("⚠️ Thư viện SheetJS chưa sẵn sàng!", true);
+    let allList = window._ktyhState.profilesList || [];
+    if (allList.length === 0) return window.show_toast("⚠️ Chưa có dữ liệu nhân sự để xuất!", true);
+
+    let prof = window.get_current_ktyh_profile();
+    let deptFilter = prof.perms.canViewAllDepts ? (window._ktyhState.selectedDept || 'ALL') : prof.deptCode;
+    let scoped = deptFilter === 'ALL' ? allList : allList.filter(x => x.dept_code === deptFilter);
+    if (scoped.length === 0) return window.show_toast("⚠️ Không có nhân sự nào trong đơn vị đang chọn!", true);
+
+    let includeSensitive = prof.perms.canViewSensitive;
+    let rows = scoped.map((st, idx) => {
+        let baseRow = {
+            "STT": idx + 1,
+            "Mã CB": st.staff_code,
+            "Họ và tên": st.full_name,
+            "Giới tính": st.gender || '',
+            "Ngày sinh": st.dob || '',
+            "Loại HĐ": st.contract_type || 'VC',
+            "Bộ môn / Đơn vị": window.KTYH_DEPARTMENTS[st.dept_code]?.name || st.dept_code,
+            "Chức vụ": st.job_position || '',
+            "Ngạch": st.rank_ngach || '',
+            "Trình độ cao nhất": st.highest_degree || '',
+            "Chuyên ngành": st.major_specialty || '',
+            "Năm TN": st.graduation_year || '',
+            "Ngoại ngữ": st.foreign_language || '',
+            "Tin học": st.it_level || '',
+            "Số điện thoại": st.phone_number || '',
+            "Đơn vị công tác đầy đủ": st.unit_full_name || ''
+        };
+        if (includeSensitive) {
+            baseRow["Số QĐ tuyển dụng"] = st.recruitment_decision || '';
+            baseRow["Số CCCD"] = st.cccd_number || '';
+            baseRow["Ngày cấp CCCD"] = st.cccd_issue_date || '';
+            baseRow["Nơi cấp CCCD"] = st.cccd_issue_place || '';
+            baseRow["Địa chỉ thường trú"] = st.permanent_address || '';
+            baseRow["Số tài khoản"] = st.bank_account || '';
+            baseRow["Ngân hàng"] = st.bank_name || '';
+            baseRow["Hệ số lương"] = st.salary_coefficient || '';
+            baseRow["Bậc lương"] = st.salary_step || '';
+            baseRow["Ngày bắt đầu hưởng lương"] = st.salary_start_date || '';
+        }
+        return baseRow;
+    });
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = Object.keys(rows[0]).map(k => ({ wch: k.includes('Họ và tên') || k.includes('Đơn vị') || k.includes('Địa chỉ') ? 28 : 16 }));
+    XLSX.utils.book_append_sheet(wb, ws, "DanhSach_NhanSu");
+    XLSX.writeFile(wb, `Nhan_Su_KTYH_${deptFilter}_${new Date().toISOString().slice(0,10)}.xlsx`);
+    window.show_toast(`✅ Đã xuất Excel danh sách ${rows.length} nhân sự (${includeSensitive ? 'Đầy đủ 26 cột' : 'Danh bạ Bộ môn'})!`);
 };
 
 // =========================================================================
@@ -1486,3 +1766,66 @@ window.render_ktyh_subjects_exams_tab = function(box) {
         </div>
     </div>`;
 };
+
+// =========================================================================
+// 🚀 TỰ ĐỘNG ĐIỀU HƯỚNG NGAY KHI ĐĂNG NHẬP (HỖ TRỢ SPA KHÔNG TẢI LẠI TRANG)
+// =========================================================================
+(function initKtyhAutoLoginRouter() {
+    if (window._ktyhLoginWatcherStarted) return;
+    window._ktyhLoginWatcherStarted = true;
+
+    let lastRoutedSignature = '';
+    const KTYH_AUTO_OPEN_ROLES = ['ktyh_dean', 'ktyh_head', 'ktyh_academic', 'ktyh_specialist'];
+    const KTYH_ALL_STAFF_ROLES = ['admin', 'all', 'ktyh_dean', 'ktyh_head', 'ktyh_academic', 'ktyh_specialist', 'teacher', 'timekeeper'];
+
+    const ensureFloatingLauncher = (show, roleKey) => {
+        let btn = document.getElementById('ktyh_floating_launcher_btn');
+        if (!show) {
+            if (btn) btn.remove();
+            return;
+        }
+        if (!btn) {
+            let meta = window.KTYH_ROLE_META[roleKey] || { short: 'Khoa KTYH', color: '#10b981' };
+            document.body.insertAdjacentHTML('beforeend', `
+                <button id="ktyh_floating_launcher_btn" type="button"
+                    onclick="window.open_ktyh_faculty_portal()"
+                    style="position: fixed; right: 14px; bottom: 18px; z-index: 99990; background: linear-gradient(135deg, #065f46, #10b981); color: #fff; border: 1px solid #6ee7b7; border-radius: 999px; padding: 8px 14px; font-size: 0.8rem; font-weight: 700; box-shadow: 0 6px 20px rgba(0,0,0,0.45); display: flex; align-items: center; gap: 6px;">
+                    <i class="bi bi-hospital-fill"></i>
+                    <span>Cổng Khoa KTYH (${meta.short})</span>
+                </button>
+            `);
+        }
+    };
+
+    setInterval(() => {
+        let uid = String(window.current_student_id || '').trim();
+        let role = String(window.current_user_role || '').trim().toLowerCase();
+
+        // Chưa đăng nhập hoặc đã đăng xuất
+        if (!uid || !role) {
+            lastRoutedSignature = '';
+            ensureFloatingLauncher(false);
+            return;
+        }
+
+        let isStaff = KTYH_ALL_STAFF_ROLES.includes(role) || role.includes('gv');
+        if (!isStaff) {
+            ensureFloatingLauncher(false);
+            return;
+        }
+
+        // Luôn hiện nút mở nhanh Cổng Khoa KTYH cho toàn bộ cán bộ/giảng viên (trừ Admin đã có thẻ trên Hub)
+        ensureFloatingLauncher(role !== 'admin' && role !== 'all', role);
+
+        // Nếu là Lãnh đạo Khoa / Bộ môn / Giáo vụ / Chuyên viên vừa đăng nhập -> Tự mở thẳng Cổng Khoa KTYH
+        let sig = `${uid}__${role}`;
+        if (KTYH_AUTO_OPEN_ROLES.includes(role) && lastRoutedSignature !== sig) {
+            lastRoutedSignature = sig;
+            setTimeout(() => {
+                if (!document.getElementById('ktyh_faculty_portal_modal') && typeof window.open_ktyh_faculty_portal === 'function') {
+                    window.open_ktyh_faculty_portal();
+                }
+            }, 350);
+        }
+    }, 500);
+})();
